@@ -1,33 +1,19 @@
-"use client";
-
 import Hero from "@/components/Hero";
-import ParticleBackground from "@/components/ParticleBackground";
-import FloatingTechIcons from "@/components/FloatingTechIcons";
-import WaveBackground from "@/components/WaveBackground";
-import InteractiveCodeTerminal from "@/components/InteractiveCodeTerminal";
-import InteractiveStats from "@/components/InteractiveStats";
-import { motion } from "framer-motion";
+import NowStrip from "@/components/NowStrip";
+import SelectedWork from "@/components/SelectedWork";
+import SelectedInterests from "@/components/SelectedInterests";
+import HomeFooter from "@/components/HomeFooter";
+import CursorSpotlight from "@/components/CursorSpotlight";
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
-      {/* Background layers */}
-      <WaveBackground />
-      <ParticleBackground />
-      <FloatingTechIcons />
-      
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10"
-      >
-        <Hero />
-        <InteractiveCodeTerminal />
-        <InteractiveStats />
-      </motion.div>
+    <main className="relative">
+      <CursorSpotlight />
+      <Hero />
+      <NowStrip />
+      <SelectedWork />
+      <SelectedInterests />
+      <HomeFooter />
     </main>
   );
 }
-
-

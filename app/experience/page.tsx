@@ -1,26 +1,15 @@
-"use client";
-
+import type { Metadata } from "next";
 import Experience from "@/components/Experience";
-import ParticleBackground from "@/components/ParticleBackground";
-import WaveBackground from "@/components/WaveBackground";
-import { motion } from "framer-motion";
+
+export const metadata: Metadata = {
+  title: "Experience",
+  description: "Where Rohin Patel has worked — WHOOP, SiPhox Health, Varidx.",
+};
 
 export default function ExperiencePage() {
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
-      <WaveBackground />
-      <ParticleBackground />
-      
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 pt-24"
-      >
-        <Experience />
-      </motion.div>
+    <main className="relative pt-24">
+      <Experience />
     </main>
   );
 }
-
-

@@ -1,144 +1,120 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Code2, Cpu, Smartphone } from "lucide-react";
-import { TypeAnimation } from "react-type-animation";
+import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+function useBostonClock() {
+  const [time, setTime] = useState<string | null>(null);
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date().toLocaleTimeString("en-US", {
+        timeZone: "America/New_York",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      setTime(d);
+    };
+    tick();
+    const id = setInterval(tick, 15000);
+    return () => clearInterval(id);
+  }, []);
+  return time;
+}
 
 export default function Hero() {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.2,
-        delayChildren: 0.3,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.6,
-        ease: "easeOut",
-      },
-    },
-  };
-
-  const floatingIcons = [
-    { Icon: Code2, delay: 0, position: "top-1/4 left-10" },
-    { Icon: Cpu, delay: 0.5, position: "top-1/3 right-10" },
-    { Icon: Smartphone, delay: 1, position: "bottom-1/3 left-1/4" },
-  ];
+  const time = useBostonClock();
+  const sectionRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end start"],
+  });
+  // As the hero leaves, drift it up and fade it.
+  const opacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const y = useTransform(scrollYProgress, [0, 1], [0, -80]);
 
   return (
-    <section className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
-      {/* Floating Icons */}
-      {floatingIcons.map(({ Icon, delay, position }, index) => (
-        <motion.div
-          key={index}
-          className={`absolute ${position} hidden lg:block`}
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 0.1, scale: 1 }}
-          transition={{
-            delay,
-            duration: 1,
-            repeat: Infinity,
-            repeatType: "reverse",
-            repeatDelay: 2,
-          }}
-        >
-          <Icon size={80} className="text-blue-500" />
-        </motion.div>
-      ))}
-
+    <section
+      ref={sectionRef}
+      className="min-h-[82vh] flex items-center px-6 md:px-10 relative"
+    >
       <motion.div
-        className="max-w-5xl mx-auto text-center"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
+        style={{ opacity, y }}
+        className="max-w-5xl w-full mx-auto"
       >
-        <motion.div variants={itemVariants}>
-          <motion.span
-            className="inline-block px-4 py-2 mb-6 text-sm font-semibold text-blue-400 bg-blue-500/10 rounded-full border border-blue-500/20"
-            whileHover={{ scale: 1.05 }}
-          >
-            👋 Welcome to my portfolio
-          </motion.span>
-        </motion.div>
-
-        <motion.h1
-          className="text-5xl md:text-7xl lg:text-8xl font-bold mb-6"
-          variants={itemVariants}
-        >
-          <span className="text-white">Hi, I'm </span>
-          <span className="gradient-text-blue">Rohin Patel</span>
-        </motion.h1>
-
         <motion.div
-          className="text-xl md:text-2xl lg:text-3xl text-gray-300 mb-8 max-w-3xl mx-auto h-10"
-          variants={itemVariants}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
         >
-          <TypeAnimation
-            sequence={[
-              "iOS Engineer & AI Developer",
-              3000,
-              "Building at WHOOP 💪",
-              3000,
-              "SwiftUI • PyTorch • YOLO",
-              3000,
-              "95% Accuracy. 15% Improvement.",
-              3000,
-            ]}
-            wrapper="span"
-            speed={50}
-            repeat={Infinity}
-            className="gradient-text-blue"
-          />
-        </motion.div>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] muted mb-6 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>Patel, Rohin — Boston, MA</span>
+            <span className="dim">·</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+              <span className="tabular-nums">{time ?? "—:—"}</span>
+            </span>
+          </p>
 
-        <motion.p
-          className="text-lg md:text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed"
-          variants={itemVariants}
-        >
-          Northeastern CS student specializing in{" "}
-          <span className="text-blue-400 font-semibold">AI</span> and{" "}
-          <span className="text-purple-400 font-semibold">iOS Development</span>.
-          Currently building health tech at{" "}
-          <span className="text-cyan-400 font-semibold">WHOOP</span>.
-          From real-time ML systems to SwiftUI apps that improve lives.
-        </motion.p>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance">
+            iOS Engineer at <span className="accent">WHOOP.</span>
+            <br />
+            <span className="muted">NEU CS '26 — </span>done.
+          </h1>
 
-        <motion.div
-          className="flex flex-wrap items-center justify-center gap-4"
-          variants={itemVariants}
-        >
-          <Link href="/projects">
-            <motion.div
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg font-semibold text-lg shadow-lg shadow-blue-500/50 cursor-pointer"
-              whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(59, 130, 246, 0.6)" }}
-              whileTap={{ scale: 0.95 }}
+          <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-3 text-pretty">
+            Just graduated. Heading to WHOOP full-time. Swift days, ML side quests.
+          </p>
+          <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-10 text-pretty">
+            Outside of work: skiing, watches, Barça, building keyboards, French horn (poorly).
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/projects"
+              className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
             >
-              View My Work
-            </motion.div>
-          </Link>
-
-          <Link href="/contact">
-            <motion.div
-              className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white rounded-lg font-semibold text-lg border border-white/20 cursor-pointer"
-              whileHover={{ scale: 1.05, backgroundColor: "rgba(255, 255, 255, 0.15)" }}
-              whileTap={{ scale: 0.95 }}
+              See the work
+              <span className="transition-transform group-hover:translate-x-0.5">→</span>
+            </Link>
+            <Link
+              href="/contact"
+              className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent transition-colors"
             >
-              Get In Touch
-            </motion.div>
-          </Link>
+              Get in touch
+            </Link>
+            <Link
+              href="/interests"
+              className="ml-1 link-underline font-mono text-sm uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
+            >
+              or just see what I'm into →
+            </Link>
+          </div>
         </motion.div>
+      </motion.div>
+
+      {/* Subtle scroll hint at the bottom */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.2, duration: 0.8 }}
+        style={{ opacity }}
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none"
+      >
+        <motion.span
+          className="font-mono text-[10px] uppercase tracking-[0.25em] dim"
+          animate={{ y: [0, 4, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          scroll
+        </motion.span>
+        <motion.span
+          className="w-px h-8 bg-[var(--border-strong)] origin-top"
+          animate={{ scaleY: [0.3, 1, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        />
       </motion.div>
     </section>
   );
 }
-

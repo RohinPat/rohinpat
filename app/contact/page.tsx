@@ -1,26 +1,15 @@
-"use client";
-
+import type { Metadata } from "next";
 import Contact from "@/components/Contact";
-import ParticleBackground from "@/components/ParticleBackground";
-import WaveBackground from "@/components/WaveBackground";
-import { motion } from "framer-motion";
+
+export const metadata: Metadata = {
+  title: "Contact",
+  description: "Get in touch with Rohin Patel.",
+};
 
 export default function ContactPage() {
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 overflow-hidden">
-      <WaveBackground />
-      <ParticleBackground />
-      
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 pt-24"
-      >
-        <Contact />
-      </motion.div>
+    <main className="relative pt-24">
+      <Contact />
     </main>
   );
 }
-
-

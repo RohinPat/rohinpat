@@ -1,33 +1,48 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
+import ScrollProgress from "@/components/ScrollProgress";
+import SiteEasterEggs from "@/components/SiteEasterEggs";
 
 export const metadata: Metadata = {
-  title: "Rohin Patel - iOS Engineer & AI Developer",
-  description: "Northeastern CS student specializing in iOS development and AI. Currently iOS Engineer at WHOOP. Building health tech, ML systems, and mobile apps.",
-  keywords: ["Rohin Patel", "iOS Engineer", "SwiftUI", "AI", "Machine Learning", "WHOOP", "Northeastern", "Software Engineer", "Computer Vision"],
+  metadataBase: new URL("https://rohinpatel.com"),
+  title: {
+    default: "Rohin Patel",
+    template: "%s — Rohin Patel",
+  },
+  description:
+    "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.",
   authors: [{ name: "Rohin Patel" }],
   openGraph: {
-    title: "Rohin Patel - iOS Engineer & AI Developer",
-    description: "Northeastern CS student | iOS Engineer at WHOOP | Building health tech and ML systems",
+    title: "Rohin Patel",
+    description:
+      "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.",
     type: "website",
   },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="antialiased">
-        {/* Global navigation */}
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+    >
+      <body className="bg-[var(--bg)] text-[var(--fg)] antialiased font-sans">
+        {/*
+          PSST — try ↑↑↓↓←→←→ba, or type "siu" / "barca" / "neymar" anywhere.
+          Source: https://github.com/RohinPat
+        */}
+        <div className="grain" />
+        <div className="vignette" />
+        <ScrollProgress />
         <Navigation />
-        
-        {children}
+        <div className="relative z-10">{children}</div>
+        <SiteEasterEggs />
       </body>
     </html>
   );
 }
-
