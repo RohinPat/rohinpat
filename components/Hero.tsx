@@ -3,19 +3,12 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { formatBostonTime } from "@/lib/clock";
 
 function useBostonClock() {
   const [time, setTime] = useState<string | null>(null);
   useEffect(() => {
-    const tick = () => {
-      const d = new Date().toLocaleTimeString("en-US", {
-        timeZone: "America/New_York",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-      setTime(d);
-    };
+    const tick = () => setTime(formatBostonTime());
     tick();
     const id = setInterval(tick, 15000);
     return () => clearInterval(id);

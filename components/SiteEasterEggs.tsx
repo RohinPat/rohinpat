@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const KONAMI = [
-  "ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown",
-  "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight",
-  "b", "a",
-];
-
-const WORD_TRIGGERS = ["siu", "barca", "barça", "neymar", "messi", "goal", "visca"];
+import {
+  KONAMI_SEQUENCE,
+  findWordTrigger,
+  isKonamiMatch,
+  isLetterKey,
+  pushKonamiKey,
+} from "@/lib/easter-eggs/matchers";
 
 const FLAVOR: Record<string, string> = {
   siu: "Messi style",
@@ -71,37 +70,24 @@ export default function SiteEasterEggs() {
         return;
       }
 
-      // Konami sequence (compare against last N keys)
-      keyBufRef.current.push(e.key);
-      if (keyBufRef.current.length > KONAMI.length) {
-        keyBufRef.current.shift();
-      }
-      if (
-        keyBufRef.current.length === KONAMI.length &&
-        keyBufRef.current.every(
-          (k, i) => k.toLowerCase() === KONAMI[i].toLowerCase(),
-        )
-      ) {
+      // Konami sequence
+      keyBufRef.current = pushKonamiKey(keyBufRef.current, e.key);
+      if (isKonamiMatch(keyBufRef.current)) {
         fire("konami");
         keyBufRef.current = [];
         return;
       }
 
       // Word triggers — accumulate letters only
-      if (e.key.length === 1) {
-        const ch = e.key.toLowerCase();
-        if (/[a-zçñ]/.test(ch)) {
-          wordBufRef.current = (wordBufRef.current + ch).slice(-16);
-          for (const w of WORD_TRIGGERS) {
-            if (wordBufRef.current.endsWith(w)) {
-              fire(w);
-              wordBufRef.current = "";
-              return;
-            }
-          }
-        } else {
+      if (isLetterKey(e.key)) {
+        wordBufRef.current = (wordBufRef.current + e.key.toLowerCase()).slice(-16);
+        const match = findWordTrigger(wordBufRef.current);
+        if (match) {
+          fire(match);
           wordBufRef.current = "";
         }
+      } else if (e.key.length === 1) {
+        wordBufRef.current = "";
       }
     };
 

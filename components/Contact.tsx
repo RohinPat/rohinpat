@@ -1,8 +1,35 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Mail, Linkedin, Github, Send } from "lucide-react";
+import { Mail, Linkedin, Github, ArrowUpRight } from "lucide-react";
 import { site } from "@/lib/site";
+
+const channels = [
+  {
+    icon: Mail,
+    label: "Email",
+    sub: "fastest reply, send anything.",
+    handle: site.email,
+    href: `mailto:${site.email}?subject=Hello%20from%20your%20site`,
+    badge: "best for actual conversations",
+  },
+  {
+    icon: Linkedin,
+    label: "LinkedIn",
+    sub: "the canonical CV — current job, prior co-ops, full work history.",
+    handle: "/in/rohinpat",
+    href: site.linkedin,
+    badge: "this is the resume",
+  },
+  {
+    icon: Github,
+    label: "GitHub",
+    sub: "shipped code, side projects, this site's source.",
+    handle: "@RohinPat",
+    href: site.github,
+    badge: null,
+  },
+];
 
 export default function Contact() {
   return (
@@ -16,141 +43,84 @@ export default function Contact() {
             / say hi
           </span>
         </div>
-        <h1 className="text-4xl md:text-6xl font-semibold tracking-tight mb-14">
-          Let's talk.
+        <h1 className="text-4xl md:text-6xl font-semibold tracking-tight mb-6 text-balance">
+          Easiest way? <span className="accent">Just email me.</span>
         </h1>
+        <p className="muted max-w-prose text-pretty text-base md:text-lg mb-14">
+          No contact form, no captcha, no auto-responder. The link below opens your mail
+          client. Subject line is pre-filled — say whatever.
+        </p>
 
-        <div className="grid md:grid-cols-2 gap-12 border-y border-[var(--border)] py-12">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.35 }}
-            className="space-y-2"
-          >
-            <h2 className="font-mono text-xs uppercase tracking-wider muted mb-6">
-              Direct
-            </h2>
-
-            <a
-              href={`mailto:${site.email}`}
-              className="group flex items-start gap-4 py-4 border-b border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
-            >
-              <Mail size={20} className="mt-1 muted group-hover:accent transition-colors" />
-              <div>
-                <div className="font-mono text-xs uppercase tracking-wider dim">
-                  Email
-                </div>
-                <div className="text-base md:text-lg group-hover:accent transition-colors">
-                  {site.email}
-                </div>
-              </div>
-            </a>
-
-            <a
-              href={site.linkedin}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-start gap-4 py-4 border-b border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
-            >
-              <Linkedin size={20} className="mt-1 muted group-hover:accent transition-colors" />
-              <div>
-                <div className="font-mono text-xs uppercase tracking-wider dim">
-                  LinkedIn
-                </div>
-                <div className="text-base md:text-lg group-hover:accent transition-colors">
-                  /in/rohinpat
-                </div>
-              </div>
-            </a>
-
-            <a
-              href={site.github}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-start gap-4 py-4 hover:bg-[var(--bg-elevated)] transition-colors"
-            >
-              <Github size={20} className="mt-1 muted group-hover:accent transition-colors" />
-              <div>
-                <div className="font-mono text-xs uppercase tracking-wider dim">
-                  GitHub
-                </div>
-                <div className="text-base md:text-lg group-hover:accent transition-colors">
-                  @RohinPat
-                </div>
-              </div>
-            </a>
-
-            <div className="pt-10">
-              <h3 className="font-mono text-xs uppercase tracking-wider muted mb-4">
-                Currently
-              </h3>
-              <ul className="space-y-2 muted">
-                <li className="flex gap-3"><span className="accent">—</span>Heading to WHOOP full-time, iOS</li>
-                <li className="flex gap-3"><span className="accent">—</span>Open to side projects + collaborations</li>
-                <li className="flex gap-3"><span className="accent">—</span>Always down to talk iOS / ML / weird ideas</li>
-                <li className="flex gap-3"><span className="accent">—</span>Or just say hi</li>
-              </ul>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.35, delay: 0.05 }}
-          >
-            <h2 className="font-mono text-xs uppercase tracking-wider muted mb-6">
-              Or drop a note
-            </h2>
-
-            <form className="space-y-5">
-              <div>
-                <label className="font-mono text-xs uppercase tracking-wider dim block mb-2">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-0 py-3 bg-transparent border-b border-[var(--border)] focus:border-accent focus:outline-none text-base transition-colors"
-                  placeholder="Your name"
-                />
-              </div>
-
-              <div>
-                <label className="font-mono text-xs uppercase tracking-wider dim block mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  className="w-full px-0 py-3 bg-transparent border-b border-[var(--border)] focus:border-accent focus:outline-none text-base transition-colors"
-                  placeholder="you@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="font-mono text-xs uppercase tracking-wider dim block mb-2">
-                  Message
-                </label>
-                <textarea
-                  rows={5}
-                  className="w-full px-0 py-3 bg-transparent border-b border-[var(--border)] focus:border-accent focus:outline-none text-base transition-colors resize-none"
-                  placeholder="What's up?"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
+        <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+          {channels.map((c, i) => {
+            const Icon = c.icon;
+            const isExternal = c.href.startsWith("http");
+            return (
+              <motion.li
+                key={c.label}
+                initial={{ opacity: 0, y: 8 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.35, delay: i * 0.05 }}
               >
-                <Send size={16} />
-                Send
-                <span className="transition-transform group-hover:translate-x-0.5">→</span>
-              </button>
-              <p className="font-mono text-xs dim">
-                Form is currently display-only — email me directly above for the fastest reply.
-              </p>
-            </form>
-          </motion.div>
+                <a
+                  href={c.href}
+                  target={isExternal ? "_blank" : undefined}
+                  rel={isExternal ? "noopener noreferrer" : undefined}
+                  className="group block py-7 md:py-9 grid grid-cols-12 gap-4 hover:bg-[var(--bg-elevated)] -mx-4 px-4 transition-colors"
+                >
+                  <div className="col-span-2 md:col-span-1 flex items-start">
+                    <Icon size={22} className="muted group-hover:accent transition-colors mt-1" />
+                  </div>
+                  <div className="col-span-10 md:col-span-7">
+                    <div className="flex items-baseline gap-3 mb-1">
+                      <span className="font-mono text-xs uppercase tracking-wider muted">
+                        {c.label}
+                      </span>
+                      {c.badge && (
+                        <span className="font-mono text-[10px] uppercase tracking-wider accent">
+                          {c.badge}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-semibold tracking-tight mb-2 group-hover:accent transition-colors">
+                      {c.handle}
+                    </h2>
+                    <p className="muted text-sm md:text-base text-pretty">{c.sub}</p>
+                  </div>
+                  <div className="col-span-12 md:col-span-4 md:text-right self-center">
+                    <span className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-wider muted group-hover:accent transition-colors">
+                      Open
+                      <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    </span>
+                  </div>
+                </a>
+              </motion.li>
+            );
+          })}
+        </ul>
+
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div className="md:col-span-7">
+            <h3 className="font-mono text-xs uppercase tracking-wider muted mb-4">
+              Currently
+            </h3>
+            <ul className="space-y-2 muted">
+              <li className="flex gap-3"><span className="accent">—</span>Heading to WHOOP full-time, iOS</li>
+              <li className="flex gap-3"><span className="accent">—</span>Open to side projects + collaborations</li>
+              <li className="flex gap-3"><span className="accent">—</span>Always down to talk iOS / ML / weird ideas</li>
+              <li className="flex gap-3"><span className="accent">—</span>Or just say hi</li>
+            </ul>
+          </div>
+          <div className="md:col-span-5">
+            <h3 className="font-mono text-xs uppercase tracking-wider muted mb-4">
+              Response time
+            </h3>
+            <p className="muted text-pretty">
+              Usually within a day on email or LinkedIn. If it&apos;s urgent, email is the
+              channel I check first.
+            </p>
+          </div>
         </div>
       </div>
     </section>

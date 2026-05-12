@@ -5,21 +5,54 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import ScrollProgress from "@/components/ScrollProgress";
 import SiteEasterEggs from "@/components/SiteEasterEggs";
+import PersonJsonLd from "@/components/PersonJsonLd";
+import { site } from "@/lib/site";
+
+const description =
+  "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rohinpatel.com"),
+  metadataBase: new URL(site.url),
   title: {
-    default: "Rohin Patel",
-    template: "%s — Rohin Patel",
+    default: site.name,
+    template: `%s — ${site.name}`,
   },
-  description:
-    "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.",
-  authors: [{ name: "Rohin Patel" }],
+  description,
+  authors: [{ name: site.name, url: site.url }],
+  creator: site.name,
+  applicationName: site.name,
+  category: "portfolio",
+  keywords: [
+    "Rohin Patel",
+    "iOS Engineer",
+    "SwiftUI",
+    "WHOOP",
+    "Northeastern University",
+    "Machine Learning",
+    "Computer Vision",
+    "TensorFlow",
+    "BLE",
+  ],
   openGraph: {
-    title: "Rohin Patel",
-    description:
-      "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.",
-    type: "website",
+    title: site.name,
+    description,
+    url: site.url,
+    siteName: site.name,
+    type: "profile",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: site.name,
+    description,
+  },
+  alternates: {
+    canonical: site.url,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
 };
 
@@ -36,6 +69,7 @@ export default function RootLayout({
           PSST — try ↑↑↓↓←→←→ba, or type "siu" / "barca" / "neymar" anywhere.
           Source: https://github.com/RohinPat
         */}
+        <PersonJsonLd />
         <div className="grain" />
         <div className="vignette" />
         <ScrollProgress />

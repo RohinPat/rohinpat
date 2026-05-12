@@ -5,6 +5,9 @@ export const site = {
   location: "Boston, MA",
   github: "https://github.com/RohinPat",
   linkedin: "https://www.linkedin.com/in/rohinpat/",
+  url:
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    "https://rohin-patel-portfolio.vercel.app",
 } as const;
 
 // "Now" strip on the homepage. Edit this freely — it's meant to feel current.
