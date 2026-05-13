@@ -7,7 +7,7 @@ export const site = {
   linkedin: "https://www.linkedin.com/in/rohinpat/",
   url:
     process.env.NEXT_PUBLIC_SITE_URL ??
-    "https://rohin-patel-portfolio.vercel.app",
+    "https://rohinpat.vercel.app",
 } as const;
 
 // "Now" strip on the homepage. Edit this freely — it's meant to feel current.
