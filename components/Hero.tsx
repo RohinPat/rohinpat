@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
+import HeroPond from "@/components/HeroPond";
 
 function useBostonClock() {
   const [time, setTime] = useState<string | null>(null);
@@ -16,97 +17,100 @@ function useBostonClock() {
   return time;
 }
 
+// Children fade up. Container holds the splash-synced delay + stagger.
+const container: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      delayChildren: 1.2,      // wait for the pond splash impact
+      staggerChildren: 0.15,
+    },
+  },
+};
+
+const item: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.55, ease: [0.2, 0.65, 0.3, 1] },
+  },
+};
+
 export default function Hero() {
   const time = useBostonClock();
-  const sectionRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end start"],
-  });
-  // As the hero leaves, drift it up and fade it.
-  const opacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
-  const y = useTransform(scrollYProgress, [0, 1], [0, -80]);
 
   return (
-    <section
-      ref={sectionRef}
-      className="min-h-[82vh] flex items-center px-6 md:px-10 relative"
-    >
-      <motion.div
-        style={{ opacity, y }}
-        className="max-w-5xl w-full mx-auto"
+    <section className="min-h-screen flex items-center px-6 md:px-10 relative overflow-hidden">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
       >
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+        <HeroPond />
+      </div>
+
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={container}
+        className="max-w-5xl w-full mx-auto relative z-10"
+      >
+        <motion.p
+          variants={item}
+          className="font-mono text-xs uppercase tracking-[0.2em] muted mb-6 flex flex-wrap items-center gap-x-3 gap-y-1"
         >
-          <p className="font-mono text-xs uppercase tracking-[0.2em] muted mb-6 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Patel, Rohin — Boston, MA</span>
-            <span className="dim">·</span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-              <span className="tabular-nums">{time ?? "—:—"}</span>
-            </span>
-          </p>
+          <span>Patel, Rohin — Boston, MA</span>
+          <span className="dim">·</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+            <span className="tabular-nums">{time ?? "—:—"}</span>
+          </span>
+        </motion.p>
 
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance">
-            Incoming iOS at <span className="accent">WHOOP.</span>
-            <br />
-            <span className="muted">NEU CS '26 — </span>done.
-          </h1>
+        <motion.h1
+          variants={item}
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance"
+        >
+          Incoming iOS at <span className="accent">WHOOP.</span>
+          <br />
+          <span className="muted">NEU CS '26 — </span>done.
+        </motion.h1>
 
-          <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-3 text-pretty">
-            Just graduated. Back at WHOOP full-time in July. Building solo until then.
-          </p>
-          <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-10 text-pretty">
-            Outside of work: skiing, watches, Barça, building keyboards, French horn (poorly).
-          </p>
+        <motion.p
+          variants={item}
+          className="text-base md:text-lg muted max-w-xl leading-relaxed mb-3 text-pretty"
+        >
+          Just graduated. Back at WHOOP full-time in July. Building solo until then.
+        </motion.p>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/projects"
-              className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
-            >
-              See the projects
-              <span className="transition-transform group-hover:translate-x-0.5">→</span>
-            </Link>
-            <Link
-              href="/contact"
-              className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent transition-colors"
-            >
-              Get in touch
-            </Link>
-            <Link
-              href="/interests"
-              className="ml-1 link-underline font-mono text-sm uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
-            >
-              or just see what I'm into →
-            </Link>
-          </div>
+        <motion.p
+          variants={item}
+          className="text-base md:text-lg muted max-w-xl leading-relaxed mb-10 text-pretty"
+        >
+          Outside of work: skiing, watches, Barça, building keyboards.
+        </motion.p>
+
+        <motion.div variants={item} className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/projects"
+            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
+          >
+            See the projects
+            <span className="transition-transform group-hover:translate-x-0.5">→</span>
+          </Link>
+          <Link
+            href="/contact"
+            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent transition-colors"
+          >
+            Get in touch
+          </Link>
+          <Link
+            href="/interests"
+            className="ml-1 link-underline font-mono text-sm uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
+          >
+            or just see what I'm into →
+          </Link>
         </motion.div>
-      </motion.div>
-
-      {/* Subtle scroll hint at the bottom */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2, duration: 0.8 }}
-        style={{ opacity }}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none"
-      >
-        <motion.span
-          className="font-mono text-[10px] uppercase tracking-[0.25em] dim"
-          animate={{ y: [0, 4, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        >
-          scroll
-        </motion.span>
-        <motion.span
-          className="w-px h-8 bg-[var(--border-strong)] origin-top"
-          animate={{ scaleY: [0.3, 1, 0.3] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        />
       </motion.div>
     </section>
   );
