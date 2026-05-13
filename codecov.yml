@@ -1,0 +1,35 @@
+# Codecov config — keep coverage gates non-blocking for a small portfolio project,
+# but still publish reports so trends are visible.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto      # compare against base; don't fail CI on coverage dips
+        threshold: 2%     # allow small downward drift
+        informational: true
+    patch:
+      default:
+        target: auto
+        informational: true
+
+  precision: 2
+  round: down
+
+comment:
+  layout: "header, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "**/*.d.ts"
+  - "tests/**"
+  - "e2e/**"
+  - "node_modules/**"
+  - ".next/**"
+  - "coverage/**"
+  - "playwright-report/**"
+  - "public/**"
+  - "components/HeroPond.tsx"      # canvas animation — no meaningful units
+  - "components/CursorSpotlight.tsx"
+  - "components/ScrollProgress.tsx"

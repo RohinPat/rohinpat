@@ -8,12 +8,12 @@ const routes: Array<{
   titleContains: string;
   visibleText: RegExp;
 }> = [
-  { path: "/",            titleContains: "Rohin Patel",     visibleText: /iOS Engineer at WHOOP/ },
+  { path: "/",            titleContains: "Rohin Patel",     visibleText: /Incoming iOS at WHOOP/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /What I've built/ },
   { path: "/experience",  titleContains: "Experience",      visibleText: /Where I've worked/ },
-  { path: "/skills",      titleContains: "Skills",          visibleText: /What I reach for/ },
+  { path: "/skills",      titleContains: "Skills",          visibleText: /I mostly live in/ },
   { path: "/interests",   titleContains: "Interests",       visibleText: /What I'm into/ },
-  { path: "/contact",     titleContains: "Contact",         visibleText: /Let's talk/ },
+  { path: "/contact",     titleContains: "Contact",         visibleText: /Just email me/ },
 ];
 
 for (const { path, titleContains, visibleText } of routes) {
@@ -48,13 +48,17 @@ test("homepage has scroll progress bar", async ({ page }) => {
 test("Spotify embed iframe is present on /interests (quiet mode)", async ({ page }) => {
   await page.goto("/interests");
   // Quiet mode (fun mode off) renders the Spotify playlist iframe in the Music cell.
-  const toggle = page.getByRole("switch", { name: /fun mode|mute/i }).first();
-  if (await toggle.isVisible().catch(() => false)) {
-    // Try toggling fun mode off if it's currently on
-    const checked = await toggle.getAttribute("aria-checked");
-    if (checked === "true") await toggle.click();
+  // Wait for hydration so the toggle is interactive.
+  const toggle = page.getByRole("switch", { name: /fun mode/i }).first();
+  await expect(toggle).toBeVisible({ timeout: 10_000 });
+
+  // If fun mode is on, click to switch to quiet mode.
+  if ((await toggle.getAttribute("aria-checked")) === "true") {
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
   }
+
   await expect(
     page.locator('iframe[src*="open.spotify.com/embed/playlist"]'),
-  ).toBeAttached();
+  ).toBeAttached({ timeout: 5_000 });
 });

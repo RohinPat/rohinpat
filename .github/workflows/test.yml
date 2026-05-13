@@ -12,18 +12,22 @@ concurrency:
 
 jobs:
   check:
-    name: typecheck · lint · unit
+    name: typecheck · lint · unit · coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: ".nvmrc"
           cache: npm
 
+      # We use `npm install` rather than `npm ci` because the lock file is
+      # generated on Windows and certain optional Linux-only deps (@emnapi/*)
+      # aren't recorded there. `install` resolves what's actually needed per
+      # platform; this is slower but correct cross-platform.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Type check
         run: npm run typecheck
@@ -31,8 +35,24 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/lcov.info
+          flags: unit
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage/
+          retention-days: 14
 
   e2e:
     name: e2e (playwright)
@@ -44,11 +64,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: ".nvmrc"
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Cache Playwright browsers
         id: pw-cache

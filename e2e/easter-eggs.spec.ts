@@ -51,8 +51,11 @@ test("console signature is printed on page load", async ({ page }) => {
   page.on("console", (msg) => messages.push(msg.text()));
 
   await page.goto("/");
-  // Give the script a moment to flush its console.log calls
-  await page.waitForTimeout(300);
+  // Wait until hydration has actually happened — SiteEasterEggs logs in a
+  // useEffect, so we need the client bundle to be running. networkidle is
+  // a good proxy on first compile.
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
 
   const joined = messages.join("\n");
   expect(joined).toContain("rohin here");

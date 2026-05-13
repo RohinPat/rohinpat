@@ -15,13 +15,23 @@ export default defineConfig({
     globals: false,
     include: ["tests/**/*.test.{ts,tsx}"],
     coverage: {
-      reporter: ["text", "html"],
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      reportsDirectory: "./coverage",
       include: [
         "lib/**/*.ts",
         "app/api/**/*.ts",
         "components/**/*.tsx",
       ],
-      exclude: ["**/*.d.ts", "node_modules/**"],
+      // Canvas-heavy / animation components don't carry meaningful unit
+      // assertions; pages are e2e-tested. Coverage focuses on pure logic.
+      exclude: [
+        "**/*.d.ts",
+        "node_modules/**",
+        "components/HeroPond.tsx",
+        "components/CursorSpotlight.tsx",
+        "components/ScrollProgress.tsx",
+      ],
     },
   },
 });
