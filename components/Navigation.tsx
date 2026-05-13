@@ -6,11 +6,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { name: "Work",       href: "/projects" },
+  { name: "Projects",   href: "/projects" },
   { name: "Experience", href: "/experience" },
   { name: "Skills",     href: "/skills" },
   { name: "Interests",  href: "/interests" },
-  { name: "Play",       href: "/play" },
   { name: "Contact",    href: "/contact" },
 ];
 

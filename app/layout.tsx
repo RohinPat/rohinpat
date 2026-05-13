@@ -9,7 +9,7 @@ import PersonJsonLd from "@/components/PersonJsonLd";
 import { site } from "@/lib/site";
 
 const description =
-  "iOS Engineer at WHOOP. NEU CS '26, full-time inbound. Building software, then going skiing.";
+  "Incoming iOS Engineer at WHOOP (July 2026). NEU CS '26. Building solo projects in the meantime.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),

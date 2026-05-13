@@ -7,7 +7,6 @@ const ROUTES = [
   "/experience",
   "/skills",
   "/interests",
-  "/play",
   "/contact",
 ];
 

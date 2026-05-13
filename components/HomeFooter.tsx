@@ -12,7 +12,7 @@ export default function HomeFooter() {
         </div>
 
         <h2 className="text-4xl md:text-6xl font-semibold tracking-tight leading-tight mb-10">
-          Heading to WHOOP full-time.
+          WHOOP full-time in July.
           <br />
           Always down to chat anyway.
         </h2>

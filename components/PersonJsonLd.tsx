@@ -8,9 +8,9 @@ export default function PersonJsonLd() {
     name: site.name,
     url: site.url,
     email: `mailto:${site.email}`,
-    jobTitle: "iOS Engineer",
+    jobTitle: "iOS Engineer (Incoming, WHOOP, July 2026)",
     description:
-      "iOS Engineer at WHOOP. Northeastern CS '26. Building software, then going skiing.",
+      "Incoming iOS Engineer at WHOOP (July 2026). Northeastern CS '26. Building solo projects in the meantime.",
     worksFor: {
       "@type": "Organization",
       name: "WHOOP",

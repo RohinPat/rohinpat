@@ -11,10 +11,10 @@ export default function SelectedWork() {
         <div className="flex items-baseline justify-between mb-12">
           <div className="flex items-baseline gap-4">
             <span className="font-mono text-xs uppercase tracking-[0.2em] accent">
-              Selected work
+              Selected projects
             </span>
             <span className="font-mono text-xs uppercase tracking-[0.2em] dim">
-              / 2024 — 2025
+              / built solo
             </span>
           </div>
           <Link

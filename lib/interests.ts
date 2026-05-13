@@ -101,9 +101,7 @@ export const barca = {
 } as const;
 
 export const music = {
-  // Fallback when Spotify env vars aren't configured. When wired up, the live
-  // /api/spotify/top-tracks endpoint takes over both on /play and /interests.
-  // These are real long-term top 5 (replace with whatever you want shown when offline).
+  // Long-term top 5 — shown if you ever wire a live data source back in.
   rotation: [
     { artist: "Travis Scott",        track: "CAN'T SAY" },
     { artist: "Drake, Future, Young Thug", track: "Way 2 Sexy" },
@@ -126,16 +124,18 @@ export const music = {
   spotifyEmbed: "https://open.spotify.com/embed/playlist/364G4Hr4KtJzhWpoHz4MFf" as string | null,
 } as const;
 
+// Reference data for non-spotlight interests. Now rendered as MinorCards
+// inline in components/Interests.tsx — this stays as a backup / data source.
 export const alsoInto = [
   {
     label: "Basketball",
-    detail: "Celtics first. NBA League Pass on game nights.",
-    hint: "Tatum era.",
+    detail: "Charlotte Hornets. Through whatever.",
+    hint: "LaMelo era.",
   },
   {
     label: "Golf",
-    detail: "Mid-handicap, working it down. Bag is mostly Callaway right now.",
-    hint: "Home course: George Wright.",
+    detail: "Mid-handicap, working it down. Public courses.",
+    hint: "Bag mostly Callaway.",
   },
   {
     label: "Gaming",
@@ -151,10 +151,5 @@ export const alsoInto = [
     label: "Mech keyboards",
     detail: "Hand-built. Lubed switches, FR4 plates, the whole rabbit hole.",
     hint: "Current daily: 65% layout.",
-  },
-  {
-    label: "Chinese",
-    detail: "Six years of study. 普通话 conversational, working on reading.",
-    hint: "Mostly forgot 老外 by now.",
   },
 ] as const;

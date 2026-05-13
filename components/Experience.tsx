@@ -5,14 +5,14 @@ import { motion } from "framer-motion";
 const experiences = [
   {
     company: "WHOOP",
-    role: "iOS Engineer · Co-op → Full-time",
-    period: "Jul 2025 — Present · Full-time inbound",
+    role: "iOS Engineer · Co-op",
+    period: "Jul 2025 — Dec 2025 · Returning full-time Jul 2026",
     location: "Boston, MA",
     bullets: [
       "Improved onboarding completion by 15% with live BLE heart-rate streaming in SwiftUI.",
       "Boosted Daily Active Members by 10% via interactive onboarding visuals and haptic feedback.",
       "Lifted PR throughput 25%/release by building a DInject mock generator for 20+ iOS engineers.",
-      "Returning full-time after graduation.",
+      "Returning full-time as a SWE in July 2026.",
     ],
     tech: ["SwiftUI", "BLE", "iOS", "Dependency Injection", "DevTools"],
   },

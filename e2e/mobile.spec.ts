@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // Mobile-specific checks. Runs only under the "mobile" project (iPhone 13 viewport).
 // Catches the worst mobile failure mode: horizontal scroll / clipped content.
 
-const routes = ["/", "/projects", "/experience", "/skills", "/interests", "/play", "/contact"];
+const routes = ["/", "/projects", "/experience", "/skills", "/interests", "/contact"];
 
 for (const path of routes) {
   test(`${path} has no horizontal overflow on mobile`, async ({ page }) => {
@@ -27,6 +27,6 @@ test("mobile nav opens and closes", async ({ page }) => {
   const toggle = page.getByRole("button", { name: /toggle menu/i });
   await toggle.click();
   await expect(page.getByRole("link", { name: /^Interests$/ })).toBeVisible();
-  await page.getByRole("link", { name: /^Work$/ }).click();
+  await page.getByRole("link", { name: /^Projects$/ }).click();
   await expect(page).toHaveURL(/\/projects$/);
 });

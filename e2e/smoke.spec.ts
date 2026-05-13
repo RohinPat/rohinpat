@@ -9,11 +9,10 @@ const routes: Array<{
   visibleText: RegExp;
 }> = [
   { path: "/",            titleContains: "Rohin Patel",     visibleText: /iOS Engineer at WHOOP/ },
-  { path: "/projects",    titleContains: "Work",            visibleText: /What I've shipped/ },
+  { path: "/projects",    titleContains: "Work",            visibleText: /What I've built/ },
   { path: "/experience",  titleContains: "Experience",      visibleText: /Where I've worked/ },
   { path: "/skills",      titleContains: "Skills",          visibleText: /What I reach for/ },
   { path: "/interests",   titleContains: "Interests",       visibleText: /What I'm into/ },
-  { path: "/play",        titleContains: "Play",            visibleText: /The Lab|Two things/ },
   { path: "/contact",     titleContains: "Contact",         visibleText: /Let's talk/ },
 ];
 
@@ -27,8 +26,8 @@ for (const { path, titleContains, visibleText } of routes) {
   });
 }
 
-test("/playground returns 404 (route was renamed to /play)", async ({ page }) => {
-  const response = await page.goto("/playground");
+test("/play returns 404 (route removed)", async ({ page }) => {
+  const response = await page.goto("/play");
   expect(response?.status()).toBe(404);
 });
 
@@ -46,8 +45,15 @@ test("homepage has scroll progress bar", async ({ page }) => {
   await expect(bar).toBeAttached();
 });
 
-test("Spotify embed iframe is present on /play", async ({ page }) => {
-  await page.goto("/play");
+test("Spotify embed iframe is present on /interests (quiet mode)", async ({ page }) => {
+  await page.goto("/interests");
+  // Quiet mode (fun mode off) renders the Spotify playlist iframe in the Music cell.
+  const toggle = page.getByRole("switch", { name: /fun mode|mute/i }).first();
+  if (await toggle.isVisible().catch(() => false)) {
+    // Try toggling fun mode off if it's currently on
+    const checked = await toggle.getAttribute("aria-checked");
+    if (checked === "true") await toggle.click();
+  }
   await expect(
     page.locator('iframe[src*="open.spotify.com/embed/playlist"]'),
   ).toBeAttached();

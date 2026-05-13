@@ -3,11 +3,8 @@ const nextConfig = {
   reactStrictMode: true,
   images: {
     remotePatterns: [
-      // Spotify CDN — album art for /play and /interests Music block.
-      { protocol: "https", hostname: "i.scdn.co" },
-      { protocol: "https", hostname: "mosaic.scdn.co" },
-      { protocol: "https", hostname: "image-cdn-ak.spotifycdn.com" },
-      { protocol: "https", hostname: "image-cdn-fa.spotifycdn.com" },
+      // Unsplash — placeholder images for the /interests quiet-mode list.
+      { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
 };

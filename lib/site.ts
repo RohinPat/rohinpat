@@ -12,40 +12,41 @@ export const site = {
 
 // "Now" strip on the homepage. Edit this freely — it's meant to feel current.
 export const now = [
-  { label: "Status",        value: "Heading to WHOOP full-time" },
+  { label: "Status",        value: "Graduated · WHOOP full-time starts July 2026" },
+  { label: "Building",      value: "Solo projects in the gap (see /projects)" },
   { label: "Wrist today",   value: "Omega × Swatch Mission to the Moon" },
   { label: "Driving",       value: "Lexus RX350 (dreaming: a W124 E-Class)" },
   { label: "On rotation",   value: "Travis Scott — CAN'T SAY" },
   { label: "Watching",      value: "Barça, like always" },
 ] as const;
 
-// Featured projects for the homepage. Pulled from the broader projects list.
+// Featured projects for the homepage. Leans on personal / solo work first.
 export const featuredProjects = [
   {
-    slug: "whoop-onboarding",
-    title: "WHOOP — Heart-rate Onboarding",
+    slug: "closet-organizer",
+    title: "Closet Organizer — End-to-end AI Wardrobe",
     summary:
-      "Live BLE streaming onboarding in SwiftUI. Lifted completion 15%, DAM 10%.",
-    role: "iOS Engineer",
+      "Full-stack solo build. ResNet50 + color-theory recommender. One FastAPI backend powering a React Native app and a web UI.",
+    role: "Solo",
     year: "2025",
     href: "/projects",
   },
   {
-    slug: "siphox-bodyscan",
-    title: "SiPhox — 3D Body Scan iOS App",
+    slug: "aimessage",
+    title: "AiMessage — Mental-health Messaging",
     summary:
-      "First iOS app generating 3D body models from video. ±3.9% median error vs. clinical.",
-    role: "Software Developer",
+      "Real-time messaging with NLP sentiment + emotional-state tracking. Public demo + GitHub.",
+    role: "Solo",
     year: "2024",
     href: "/projects",
   },
   {
-    slug: "varidx-traffic",
-    title: "Varidx — Edge Traffic Analytics",
+    slug: "bluebikes",
+    title: "BlueBikes Data Visualization",
     summary:
-      "YOLO at the edge tracking 50k+ vehicles/day at 95% accuracy across city dashboards.",
-    role: "SWE Intern",
-    year: "2024",
+      "Six visualization types over years of Boston bike-share data. Flask + Plotly + D3.",
+    role: "Solo",
+    year: "2023",
     href: "/projects",
   },
 ] as const;

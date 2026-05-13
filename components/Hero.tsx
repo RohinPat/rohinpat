@@ -51,13 +51,13 @@ export default function Hero() {
           </p>
 
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance">
-            iOS Engineer at <span className="accent">WHOOP.</span>
+            Incoming iOS at <span className="accent">WHOOP.</span>
             <br />
             <span className="muted">NEU CS '26 — </span>done.
           </h1>
 
           <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-3 text-pretty">
-            Just graduated. Heading to WHOOP full-time. Swift days, ML side quests.
+            Just graduated. Back at WHOOP full-time in July. Building solo until then.
           </p>
           <p className="text-base md:text-lg muted max-w-xl leading-relaxed mb-10 text-pretty">
             Outside of work: skiing, watches, Barça, building keyboards, French horn (poorly).
@@ -68,7 +68,7 @@ export default function Hero() {
               href="/projects"
               className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
             >
-              See the work
+              See the projects
               <span className="transition-transform group-hover:translate-x-0.5">→</span>
             </Link>
             <Link
