@@ -71,7 +71,7 @@ export default function Hero() {
           variants={item}
           className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance"
         >
-          Incoming iOS at <span className="accent">WHOOP.</span>
+          Incoming Software Engineer at <span className="accent">WHOOP.</span>
           <br />
           <span className="muted">NEU CS '26 — </span>done.
         </motion.h1>

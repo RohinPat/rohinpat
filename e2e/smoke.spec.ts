@@ -8,7 +8,7 @@ const routes: Array<{
   titleContains: string;
   visibleText: RegExp;
 }> = [
-  { path: "/",            titleContains: "Rohin Patel",     visibleText: /Incoming iOS at WHOOP/ },
+  { path: "/",            titleContains: "Rohin Patel",     visibleText: /Incoming Software Engineer at WHOOP/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /What I've built/ },
   { path: "/experience",  titleContains: "Experience",      visibleText: /Where I've worked/ },
   { path: "/skills",      titleContains: "Skills",          visibleText: /I mostly live in/ },
