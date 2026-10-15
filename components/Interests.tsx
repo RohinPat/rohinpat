@@ -26,7 +26,7 @@ export default function Interests() {
           <Tile index={1} label="Watches" line="A little useless, a little perfect." hint="Hold" className="md:col-span-6 lg:col-span-5 md:row-span-2">
             <Watch />
           </Tile>
-          <Tile index={2} label="Cars" line="Long exposure, late drive." hint="Move" touchHint="Drag" className="md:col-span-6 lg:col-span-7">
+          <Tile index={2} label="Cars" line="Long exposure, late drive." hint="Move · Hold" touchHint="Hold" className="md:col-span-6 lg:col-span-7">
             <Trails />
           </Tile>
           <Tile index={3} label="Barça" line="Més que un club." hint="Move" touchHint="Drag" className="md:col-span-3 lg:col-span-4">
