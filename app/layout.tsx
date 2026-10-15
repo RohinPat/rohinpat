@@ -6,6 +6,8 @@ import Navigation from "@/components/Navigation";
 import ScrollProgress from "@/components/ScrollProgress";
 import SiteEasterEggs from "@/components/SiteEasterEggs";
 import PersonJsonLd from "@/components/PersonJsonLd";
+import SiteFooter from "@/components/SiteFooter";
+import MotionProvider from "@/components/MotionProvider";
 import { site } from "@/lib/site";
 
 const description =
@@ -69,13 +71,21 @@ export default function RootLayout({
           PSST — try ↑↑↓↓←→←→ba, or type "siu" / "barca" / "neymar" anywhere.
           Source: https://github.com/RohinPat
         */}
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
         <PersonJsonLd />
         <div className="grain" />
         <div className="vignette" />
-        <ScrollProgress />
-        <Navigation />
-        <div className="relative z-10">{children}</div>
-        <SiteEasterEggs />
+        <MotionProvider>
+          <ScrollProgress />
+          <Navigation />
+          <div id="main" tabIndex={-1} className="relative z-10 outline-none">
+            {children}
+          </div>
+          <SiteFooter />
+          <SiteEasterEggs />
+        </MotionProvider>
       </body>
     </html>
   );

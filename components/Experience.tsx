@@ -22,7 +22,7 @@ const experiences = [
     period: "Jul 2024 — Dec 2024",
     location: "Boston, MA",
     bullets: [
-      "Launched first iOS app in SwiftUI generating 3D body models with ±3.9% median error vs. clinical.",
+      "Launched SiPhox's first iOS app in SwiftUI, generating 3D body models with ±3.9% median error vs. clinical.",
       "Automated blood-test parsing via AWS Lambda at 95% accuracy using OpenAI, Textract, and Comprehend.",
       "Shipped fixes across CMS, backend services, and web portal — improved data quality and reliability.",
     ],

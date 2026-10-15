@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import WatchesBlock from "./interests/WatchesBlock";
 import CarsBlock from "./interests/CarsBlock";
@@ -15,86 +16,67 @@ import KeycapPress from "./interests/toys/KeycapPress";
 import { SoundProvider } from "./interests/SoundContext";
 import SoundToggle from "./interests/fx/SoundToggle";
 
-// Image-led quiet view. Each entry's `image` is currently a generic Unsplash
-// placeholder — swap it for a real photo by:
-//   1. Dropping a file into /public/interests/<name>.jpg
-//   2. Changing `image:` below to "/interests/<name>.jpg"
-// Or paste any URL (whitelist the hostname in next.config.mjs).
+// Quiet view (fun mode off). Text tiles by default.
 //
-// Spotify is special-cased — Music renders the live playlist embed instead.
-const UNSPLASH = "https://images.unsplash.com";
-const IMG = (id: string) => `${UNSPLASH}/${id}?w=800&auto=format&q=70`;
-
+// Photos: only use images you took yourself or that carry a licence allowing
+// reuse (and credit them if the licence asks). To add one, drop it in
+// /public/interests/ and set `image` + `alt` on the entry below.
+//
+// Spotify is click-to-load: the iframe sets Spotify cookies, so it only
+// loads after the visitor asks for it. See /cookies.
 type QuietEntry = {
   label: string;
-  line?: string;
+  line: string;
   image?: string;
-  imageFallback?: string;
+  alt?: string;
   imageFit?: "cover" | "contain";
   spotifyEmbed?: string;
+  spotifyUrl?: string;
 };
 
+const SPOTIFY_PLAYLIST = "364G4Hr4KtJzhWpoHz4MFf";
+
 const QUIET_LIST: QuietEntry[] = [
-  {
-    label: "Watches",
-    image: "/interests/watches.jpg",
-    imageFallback: IMG("photo-1524805444758-089113d48a6d"),
-  },
-  {
-    label: "Cars",
-    image: "/interests/cars.jpg",
-    imageFallback: IMG("photo-1503376780353-7e6692767b70"),
-  },
-  {
-    label: "Barça",
-    image: "/interests/soccer.jpg",
-    imageFallback: IMG("photo-1431324155629-1a6deb1dec8d"),
-  },
+  { label: "Watches", line: "A little useless and a little perfect." },
+  { label: "Cars", line: "Specs are boring. The noise isn't." },
+  { label: "Barça", line: "Més que un club." },
   {
     label: "Music",
-    spotifyEmbed: "https://open.spotify.com/embed/playlist/364G4Hr4KtJzhWpoHz4MFf",
+    line: "Headphones on most of the day.",
+    spotifyEmbed: `https://open.spotify.com/embed/playlist/${SPOTIFY_PLAYLIST}`,
+    spotifyUrl: `https://open.spotify.com/playlist/${SPOTIFY_PLAYLIST}`,
   },
-  {
-    label: "Basketball",
-    image: "/interests/bball.jpg",
-    imageFit: "contain",
-    imageFallback: IMG("photo-1546519638-68e109498ffc"),
-  },
-  {
-    label: "Golf",
-    // TODO swap for a real photo: /public/interests/golf.jpg
-    image: IMG("photo-1535131749006-b7f58c99034b"),
-  },
-  {
-    label: "Gaming",
-    image: "/interests/games.jpg",
-    imageFallback: IMG("photo-1612287230202-1ff1d85d1bdf"),
-  },
-  {
-    label: "Skiing",
-    image: "/interests/ski.jpeg",
-    imageFallback: IMG("photo-1551524559-8af4e6624178"),
-  },
-  {
-    label: "Keyboards",
-    image: "/interests/keyboard.webp",
-    imageFallback: IMG("photo-1587829741301-dc798b83add3"),
-  },
+  { label: "Basketball", line: "Hornets. Through whatever." },
+  { label: "Golf", line: "Mid-handicap, working it down." },
+  { label: "Gaming", line: "Arc Raiders · Forza · EA FC · NBA 2K." },
+  { label: "Skiing", line: "Vermont weekends. NU Downhill Skiers." },
+  { label: "Keyboards", line: "Hand-built. Lubed switches. 65%." },
 ];
 
 export default function Interests() {
   const [fun, setFun] = useState<boolean | null>(null);
 
+  // Only remembered once the visitor flips the switch — nothing is written to
+  // their browser on a plain visit. See /cookies.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("fun-mode");
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem("fun-mode");
+    } catch {
+      /* storage blocked — default on */
+    }
     setFun(stored === null ? true : stored === "1");
   }, []);
 
-  useEffect(() => {
-    if (fun === null) return;
-    window.localStorage.setItem("fun-mode", fun ? "1" : "0");
-  }, [fun]);
+  const toggleFun = () => {
+    const next = !(fun ?? true);
+    setFun(next);
+    try {
+      window.localStorage.setItem("fun-mode", next ? "1" : "0");
+    } catch {
+      /* no-op */
+    }
+  };
 
   const funMode = fun ?? true;
 
@@ -125,7 +107,7 @@ export default function Interests() {
           {/* Fun-mode + sound toggles */}
           <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-[var(--border)] py-4">
             <button
-              onClick={() => setFun((v) => (v === null ? false : !v))}
+              onClick={toggleFun}
               role="switch"
               aria-checked={funMode}
               className="flex items-center gap-3 group"
@@ -312,44 +294,37 @@ export default function Interests() {
                         }`}
                       >
                         {isMusic ? (
-                          <>
-                            <iframe
-                              src={item.spotifyEmbed}
-                              width="100%"
-                              height="100%"
-                              frameBorder="0"
-                              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                              loading="lazy"
-                              className="absolute inset-0 block"
-                            />
-                            <div className="absolute top-3 left-3 pointer-events-none">
-                              <span className="font-mono text-[10px] md:text-xs uppercase tracking-[0.25em] accent bg-black/70 backdrop-blur px-2 py-1">
-                                {item.label}
-                              </span>
-                            </div>
-                          </>
+                          <SpotifyFacade
+                            label={item.label}
+                            line={item.line}
+                            embed={item.spotifyEmbed!}
+                            url={item.spotifyUrl!}
+                          />
                         ) : item.image ? (
                           <>
-                            <QuietImage
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
                               src={item.image}
-                              alt={item.label}
-                              fallback={item.imageFallback}
-                              fit={item.imageFit}
+                              alt={item.alt ?? ""}
+                              className={`absolute inset-0 w-full h-full transition-transform duration-700 ease-out group-hover:scale-[1.08] ${
+                                item.imageFit === "contain" ? "object-contain" : "object-cover"
+                              }`}
                             />
-                            {/* Bottom gradient + label */}
                             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none" />
-                            <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
-                              <motion.span
-                                initial={{ y: 0 }}
-                                className="block font-mono text-xs md:text-sm uppercase tracking-[0.25em] text-white group-hover:accent transition-colors duration-300"
-                              >
-                                {item.label}
-                              </motion.span>
-                            </div>
-                            {/* Hover accent corner indicator */}
-                            <div className="absolute top-2 right-2 w-2 h-2 bg-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                            <h3 className="absolute bottom-3 left-3 right-3 font-mono text-xs md:text-sm uppercase tracking-[0.25em] text-white">
+                              {item.label}
+                            </h3>
                           </>
-                        ) : null}
+                        ) : (
+                          <div className="absolute inset-0 p-4 md:p-6 flex flex-col justify-between">
+                            <h3 className="font-mono text-xs md:text-sm uppercase tracking-[0.25em] group-hover:accent transition-colors duration-300">
+                              {item.label}
+                            </h3>
+                            <p className="text-base md:text-xl leading-snug text-balance">
+                              {item.line}
+                            </p>
+                          </div>
+                        )}
                       </motion.article>
                     );
                   })}
@@ -363,37 +338,65 @@ export default function Interests() {
   );
 }
 
-// Wrapped image with onError fallback. Local /interests/* files will use that
-// path if present; if the file 404s, we fall back to the Unsplash placeholder
-// so the page never shows a broken image during the swap-in period.
-function QuietImage({
-  src,
-  alt,
-  fallback,
-  fit = "cover",
+// Spotify embed behind a click. Nothing is requested from Spotify (and no
+// Spotify cookies are set) until the visitor presses the button.
+function SpotifyFacade({
+  label,
+  line,
+  embed,
+  url,
 }: {
-  src: string;
-  alt: string;
-  fallback?: string;
-  fit?: "cover" | "contain";
+  label: string;
+  line: string;
+  embed: string;
+  url: string;
 }) {
-  const [currentSrc, setCurrentSrc] = useState(src);
-  const [usingFallback, setUsingFallback] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  if (loaded) {
+    return (
+      <iframe
+        src={embed}
+        title={`${label}: Spotify playlist player`}
+        width="100%"
+        height="100%"
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        className="absolute inset-0 block border-0"
+      />
+    );
+  }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={currentSrc}
-      alt={alt}
-      onError={() => {
-        if (!usingFallback && fallback) {
-          setCurrentSrc(fallback);
-          setUsingFallback(true);
-        }
-      }}
-      className={`absolute inset-0 w-full h-full transition-transform duration-700 ease-out group-hover:scale-[1.08] ${
-        fit === "contain" ? "object-contain" : "object-cover"
-      }`}
-    />
+    <div className="absolute inset-0 p-4 md:p-6 flex flex-col justify-between">
+      <h3 className="font-mono text-xs md:text-sm uppercase tracking-[0.25em] accent">
+        {label}
+      </h3>
+      <div>
+        <p className="text-xl md:text-3xl leading-snug text-balance mb-6">{line}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setLoaded(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
+          >
+            Load Spotify player
+          </button>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link-underline font-mono text-xs uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
+          >
+            Open playlist on Spotify ↗
+          </a>
+        </div>
+        <p className="mt-4 font-mono text-[10px] uppercase tracking-wider dim max-w-sm">
+          Loading the player connects to Spotify, which sets its own cookies.{" "}
+          <Link href="/cookies" className="underline hover:text-[var(--fg)]">
+            Cookie policy
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }

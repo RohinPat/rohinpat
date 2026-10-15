@@ -1,12 +1,3 @@
-Drop interest photos here, then reference them as "/interests/watch.jpg" etc.
-in components/Interests.tsx → QUIET_LIST.
-
-Suggested filenames (matching the TODO comments):
-  watch.jpg       - Rolex Submariner Starbucks
-  car.jpg         - Lamborghini Sesto Elemento
-  barca.jpg       - MSN (Messi / Suárez / Neymar)
-  basketball.jpg  - LaMelo / Brandon Miller / Miles Bridges
-  golf.jpg        - Pinehurst or any NC course
-  gaming.jpg      - Your PC setup
-  skiing.jpg      - Vail (or any actual skiing shot)
-  keyboard.jpg    - Your Keychron V1
+Put your own photos here (ones you took, or that are licensed for reuse),
+then reference them from QUIET_LIST in components/Interests.tsx with
+`image: "/interests/<file>"` and a descriptive `alt`.

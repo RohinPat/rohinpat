@@ -15,6 +15,7 @@ const config: Config = {
         muted: "var(--fg-muted)",
         dim: "var(--fg-dim)",
         accent: "var(--accent)",
+        "accent-text": "var(--accent-text)",
         hairline: "var(--border)",
       },
       fontFamily: {
