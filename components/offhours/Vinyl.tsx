@@ -55,7 +55,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
         <div className="absolute inset-0 rounded-full bg-[#2a2927] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.05)]" />
         {/* disc */}
         <div
-          className="absolute inset-[3%] rounded-full touch-none cursor-grab active:cursor-grabbing"
+          className="absolute inset-[3%] rounded-full touch-none cursor-grab active:cursor-grabbing [container-type:inline-size]"
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
@@ -73,8 +73,8 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
             {/* label */}
             <div className="absolute inset-[33%] rounded-full bg-[var(--signal)] grid place-items-center text-[var(--ink)]">
               <div className="text-center leading-none">
-                <p className="display text-[clamp(1rem,3.4vw,1.6rem)]">RP</p>
-                <p className="font-mono text-[7px] tracking-[0.2em] mt-1">SIDE A · 33⅓</p>
+                <p className="display text-[9cqw]">RP</p>
+                <p className="font-mono text-[2.6cqw] tracking-[0.15em] mt-[1cqw] whitespace-nowrap">SIDE A · 33⅓</p>
               </div>
               <span className="absolute w-[9%] aspect-square rounded-full bg-[#1a1918]" />
             </div>
@@ -117,7 +117,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
         href={playlistUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="absolute top-3 left-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c9c5bc] hover:text-[var(--paper)] underline underline-offset-4"
+        className="absolute top-2 left-2 px-1 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c9c5bc] hover:text-[var(--paper)] underline underline-offset-4"
       >
         Playlist ↗<span className="sr-only"> on Spotify (opens in a new tab)</span>
       </a>

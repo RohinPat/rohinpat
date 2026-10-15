@@ -23,31 +23,31 @@ export default function Interests() {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 auto-rows-[300px] gap-3 md:gap-4">
-          <Tile index={1} label="Watches" line="A little useless, a little perfect." hint="Hold" className="md:col-span-6 lg:col-span-5 row-span-2">
+          <Tile index={1} label="Watches" line="A little useless, a little perfect." hint="Hold" className="md:col-span-6 lg:col-span-5 md:row-span-2">
             <Watch />
           </Tile>
-          <Tile index={2} label="Cars" line="Long exposure, late drive." hint="Move" className="md:col-span-6 lg:col-span-7">
+          <Tile index={2} label="Cars" line="Long exposure, late drive." hint="Move" touchHint="Drag" className="md:col-span-6 lg:col-span-7">
             <Trails />
           </Tile>
-          <Tile index={3} label="Barça" line="Més que un club." hint="Move" className="md:col-span-3 lg:col-span-4">
+          <Tile index={3} label="Barça" line="Més que un club." hint="Move" touchHint="Drag" className="md:col-span-3 lg:col-span-4">
             <Blaugrana />
           </Tile>
           <Tile index={4} label="Music" line="Headphones on, most of the day." hint="Spin" className="md:col-span-3 lg:col-span-3">
             <Vinyl playlistUrl={PLAYLIST} />
           </Tile>
-          <Tile index={5} label="Skiing" line="Vermont weekends." hint="Move" className="md:col-span-6 lg:col-span-6">
+          <Tile index={5} label="Skiing" line="Vermont weekends." hint="Move" touchHint="Drag" className="md:col-span-6 lg:col-span-6">
             <Ridgelines />
           </Tile>
-          <Tile index={6} label="Gaming" line="1-bit, forever." hint="Move" className="md:col-span-3 lg:col-span-3">
+          <Tile index={6} label="Gaming" line="1-bit, forever." hint="Move" touchHint="Drag" className="md:col-span-3 lg:col-span-3">
             <Dither />
           </Tile>
-          <Tile index={7} label="Basketball" line="Hornets. Through whatever." hint="Shoot" className="md:col-span-3 lg:col-span-3">
+          <Tile index={7} label="Basketball" line="Hornets. Through whatever." hint="Shoot" touchHint="Tap" className="md:col-span-3 lg:col-span-3">
             <ShotChart />
           </Tile>
-          <Tile index={8} label="Golf" line="Read the break." hint="Click" className="md:col-span-6 lg:col-span-4">
+          <Tile index={8} label="Golf" line="Read the break." hint="Click" touchHint="Tap" className="md:col-span-6 lg:col-span-4">
             <Contours />
           </Tile>
-          <Tile index={9} label="Keyboards" line="Hand-built, 65%, lubed." hint="Type" className="md:col-span-6 lg:col-span-8">
+          <Tile index={9} label="Keyboards" line="Hand-built, 65%, lubed." hint="Type" touchHint="Tap" className="md:col-span-6 lg:col-span-8">
             <Keyboard />
           </Tile>
         </div>

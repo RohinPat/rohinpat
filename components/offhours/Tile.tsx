@@ -6,6 +6,7 @@ export default function Tile({
   label,
   line,
   hint,
+  touchHint,
   className = "",
   artClassName = "",
   children,
@@ -14,6 +15,8 @@ export default function Tile({
   label: string;
   line: string;
   hint: string;
+  /** wording for touchscreens, when "Move"/"Click" wouldn't make sense */
+  touchHint?: string;
   className?: string;
   artClassName?: string;
   children: React.ReactNode;
@@ -31,9 +34,12 @@ export default function Tile({
             <span className="muted">{String(index).padStart(2, "0")} — </span>
             {label}
           </h2>
-          <p className="text-sm muted mt-0.5 truncate">{line}</p>
+          <p className="text-sm muted mt-0.5 leading-snug">{line}</p>
         </div>
-        <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] accent">{hint}</p>
+        <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] accent">
+          <span className={touchHint ? "[@media(pointer:coarse)]:hidden" : ""}>{hint}</span>
+          {touchHint && <span className="hidden [@media(pointer:coarse)]:inline">{touchHint}</span>}
+        </p>
       </div>
     </article>
   );

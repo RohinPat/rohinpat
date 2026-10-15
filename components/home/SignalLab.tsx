@@ -170,10 +170,9 @@ export default function SignalLab() {
             </h2>
           </div>
           <p className="md:col-span-5 text-base md:text-lg leading-relaxed text-pretty">
-            At WHOOP I worked on onboarding that streams your heart rate from the strap
-            into SwiftUI the moment it registers, so the app feels alive before you&apos;ve
-            done anything. This is a toy version of that idea. The trace is synthesized
-            in your browser, not real data.
+            A toy version of the live heart-rate onboarding I built as a WHOOP co-op:
+            your pulse on screen the moment the strap finds it. Synthesized in your
+            browser, not real data.
           </p>
         </div>
 
@@ -217,14 +216,14 @@ export default function SignalLab() {
                 type="checkbox"
                 checked={haptics}
                 onChange={(e) => setHaptics(e.target.checked)}
-                className="w-5 h-5 accent-[var(--ink)]"
+                className="w-6 h-6 accent-[var(--ink)]"
               />
               Haptic tick
             </label>
             <button
               type="button"
               onClick={reset}
-              className="font-mono text-xs uppercase tracking-wider underline underline-offset-4 hover:no-underline"
+              className="min-h-6 px-1 font-mono text-xs uppercase tracking-wider underline underline-offset-4 hover:no-underline"
             >
               Reset
             </button>
@@ -269,7 +268,7 @@ function Slider({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[var(--ink)] cursor-pointer"
+        className="w-full h-6 accent-[var(--ink)] cursor-pointer"
       />
     </div>
   );

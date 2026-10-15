@@ -32,7 +32,7 @@ function List({ title, entries }: { title: string; entries: Entry[] }) {
           <li
             key={e.slug}
             id={e.slug}
-            className="scroll-mt-24 group grid grid-cols-12 gap-x-4 gap-y-2 py-6 md:py-8 border-b border-[var(--border-strong)] target:bg-[var(--bg-elevated)]"
+            className="scroll-mt-24 group grid grid-cols-12 gap-x-4 gap-y-2 py-6 md:py-8 md:px-3 md:-mx-3 border-b border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] target:bg-[var(--bg-elevated)] transition-colors"
           >
             <Motif
               slug={e.slug}
@@ -55,7 +55,7 @@ function List({ title, entries }: { title: string; entries: Entry[] }) {
                       href={l.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="link-underline hover:text-[var(--signal)] transition-colors"
+                      className="inline-block py-1 link-underline hover:text-[var(--signal)] transition-colors"
                     >
                       {l.label} ↗<span className="sr-only"> (opens in a new tab)</span>
                     </a>

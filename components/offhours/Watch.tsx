@@ -61,7 +61,7 @@ export default function Watch() {
   return (
     <div
       ref={rootRef}
-      className="absolute inset-0 grid place-items-center paper paper-grid"
+      className="absolute inset-0 grid place-items-center paper paper-grid [container-type:size]"
       style={{ perspective: "900px" }}
       onPointerMove={tilt}
       onPointerLeave={settle}
@@ -74,7 +74,7 @@ export default function Watch() {
         onPointerUp={() => setLume(false)}
         onKeyDown={(e) => (e.key === " " || e.key === "Enter") && setLume(true)}
         onKeyUp={() => setLume(false)}
-        className="relative w-[min(78%,340px)] aspect-square rounded-full select-none touch-none"
+        className="relative w-[min(78cqw,82cqh,340px)] aspect-square rounded-full select-none touch-none"
       >
         <div
           ref={caseRef}

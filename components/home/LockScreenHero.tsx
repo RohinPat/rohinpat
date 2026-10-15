@@ -40,7 +40,7 @@ const notifications = [
   {
     app: "Work",
     mark: "W",
-    title: headline,
+    title: site.employer,
     body: teamLine,
     href: "/projects#whoop",
   },
@@ -99,9 +99,9 @@ export default function LockScreenHero() {
       </div>
 
       {/* Name + phone */}
-      <div className="relative flex-1 flex flex-col md:flex-row md:items-center md:min-h-[520px]">
+      <div className="relative flex-1 flex flex-col lg:flex-row lg:items-center lg:min-h-[440px]">
         <h1
-          className="hero-name display w-full flex flex-col md:flex-row justify-between items-start md:items-center pt-6 md:py-2 select-none"
+          className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-6 lg:py-2 select-none"
           style={{ fontSize: "clamp(7rem, 21vw, 22rem)" }}
         >
           {/* Outer span: one-off entrance. Inner span: scroll-linked drift. */}
@@ -110,7 +110,7 @@ export default function LockScreenHero() {
               Rohin
             </span>
           </span>
-          <span className="block self-end md:self-auto enter-right">
+          <span className="block self-end lg:self-auto enter-right">
             <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * 35%))" }}>
               Patel
             </span>
@@ -118,7 +118,7 @@ export default function LockScreenHero() {
         </h1>
 
         {/* Phone — below the stacked name on phones, centred over it on desktop */}
-        <div className="relative md:absolute md:inset-0 z-10 flex md:grid justify-center md:place-items-center -mt-[3vw] md:mt-0 pointer-events-none">
+        <div className="relative lg:absolute lg:inset-0 z-10 flex lg:grid justify-center lg:place-items-center -mt-[3vw] lg:mt-0 pointer-events-none">
           <div className="pointer-events-auto enter-up">
             <div
               className="scroll-fx"
@@ -160,7 +160,7 @@ export default function LockScreenHero() {
 function Phone({ now }: { now: BostonNow | null }) {
   return (
     <div
-      className="relative w-[min(60vw,290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(12,12,11,0.55),0_0_0_1px_rgba(12,12,11,0.9)]"
+      className="relative w-[min(60vw,290px)] lg:w-[clamp(240px,calc((100svh_-_250px)*9/19),290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(12,12,11,0.55),0_0_0_1px_rgba(12,12,11,0.9)]"
       role="group"
       aria-label="Phone lock screen with links into the site"
     >
@@ -228,7 +228,7 @@ function Phone({ now }: { now: BostonNow | null }) {
                     <span>{n.app}</span>
                     <span aria-hidden="true">now</span>
                   </span>
-                  <span className="block text-[12.5px] font-semibold leading-tight truncate">
+                  <span className="block text-[12.5px] font-semibold leading-tight">
                     {n.title}
                   </span>
                   <span className="block text-[11.5px] leading-snug opacity-85 line-clamp-2">

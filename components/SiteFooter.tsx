@@ -5,10 +5,12 @@ import FooterCta from "./FooterCta";
 // Sign-off on every page: an invitation, one row of links, the name set
 // edge to edge. The page links already live in the nav.
 export default function SiteFooter() {
-  const links = [
+  const elsewhere = [
     { name: "Email", href: `mailto:${site.email}` },
     { name: "GitHub ↗", href: site.github, external: true },
     { name: "LinkedIn ↗", href: site.linkedin, external: true },
+  ];
+  const legal = [
     { name: "Privacy", href: "/privacy" },
     { name: "Terms", href: "/terms" },
     { name: "Cookies", href: "/cookies" },
@@ -21,30 +23,31 @@ export default function SiteFooter() {
 
         <nav
           aria-label="Footer"
-          className="mt-14 pt-5 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-wider"
+          className="mt-14 pt-5 border-t border-[var(--border)] flex flex-wrap items-center gap-x-10 gap-y-3 font-mono text-[11px] uppercase tracking-wider"
         >
           <ul className="flex flex-wrap gap-x-6 gap-y-2">
-            {links.map((l) =>
-              l.href.startsWith("/") ? (
-                <li key={l.name}>
-                  <Link href={l.href} className="hover:text-[var(--signal)] transition-colors">
-                    {l.name}
-                  </Link>
-                </li>
-              ) : (
-                <li key={l.name}>
-                  <a
-                    href={l.href}
-                    {...(l.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                    className="hover:text-[var(--signal)] transition-colors"
-                  >
-                    {l.name}
-                  </a>
-                </li>
-              ),
-            )}
+            {elsewhere.map((l) => (
+              <li key={l.name}>
+                <a
+                  href={l.href}
+                  {...(l.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                  className="inline-block py-1 hover:text-[var(--signal)] transition-colors"
+                >
+                  {l.name}
+                </a>
+              </li>
+            ))}
           </ul>
-          <p className="muted">
+          <ul className="flex flex-wrap gap-x-6 gap-y-2">
+            {legal.map((l) => (
+              <li key={l.name}>
+                <Link href={l.href} className="inline-block py-1 hover:text-[var(--signal)] transition-colors">
+                  {l.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="muted lg:ml-auto">
             © {new Date().getFullYear()} {site.name} · Views are my own
           </p>
         </nav>

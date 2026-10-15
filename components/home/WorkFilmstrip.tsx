@@ -89,7 +89,7 @@ export default function WorkFilmstrip() {
           ref={trackRef}
           tabIndex={0}
           aria-label="Selected projects — scroll sideways"
-          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth py-3 px-4 md:px-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth py-3 px-[max(1rem,calc((100vw-72rem)/2))] md:px-[max(2.5rem,calc((100vw-72rem)/2))] scroll-px-[max(1rem,calc((100vw-72rem)/2))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {projects.map((p, i) => (
             <li key={p.slug} className="snap-start shrink-0 w-[82vw] sm:w-[400px] md:w-[440px]">
@@ -111,7 +111,7 @@ export default function WorkFilmstrip() {
         {/* edge print, like the frame numbers on a strip of 35mm */}
         <p
           aria-hidden="true"
-          className="px-4 md:px-10 font-mono text-[9px] tracking-[0.35em] text-[#ff4a1c] opacity-80 whitespace-nowrap overflow-hidden select-none"
+          className="px-[max(1rem,calc((100vw-72rem)/2))] font-mono text-[9px] tracking-[0.35em] text-[#ff4a1c] opacity-80 whitespace-nowrap overflow-hidden select-none"
         >
           {Array.from({ length: 14 }, (_, i) => `RP 400 ▸ ${i + 1} ▸ ${i + 1}A   `).join("")}
         </p>
@@ -126,7 +126,7 @@ function Frame({ project, index, total }: { project: Entry; index: number; total
   return (
     <Link
       href={`/projects#${project.slug}`}
-      className={`${style} group relative flex flex-col h-full aspect-[4/5] p-5 md:p-6 overflow-hidden`}
+      className={`${style} group relative flex flex-col h-full aspect-[4/5] p-5 md:p-6 overflow-hidden transition-transform duration-300 ease-out hover:-translate-y-1.5 focus-visible:-translate-y-1.5`}
     >
       <div className="flex items-start justify-between font-mono text-[11px] uppercase tracking-[0.18em]">
         <span>
