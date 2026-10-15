@@ -19,6 +19,7 @@
 
   --bg: var(--ink);
   --bg-elevated: #171b18;
+  --surface: var(--bg);            /* the solid colour of the current section */
   --fg: #ece6d6;
   --fg-muted: #a3a69c;             /* 7.7:1 on ink */
   --fg-dim: #878b82;               /* 5.0:1 on elevated */
@@ -181,18 +182,20 @@ main h1:not(.hero-name) {
   --border: rgba(13, 16, 14, 0.12);
   --border-strong: rgba(13, 16, 14, 0.28);
   --accent-text: var(--signal);  /* green reads well on cream */
+  --surface: var(--paper);
   background-color: var(--paper);
   /* paper tooth: static noise in the background itself — no blend layer */
   background-image: var(--paper-noise);
   color: var(--ink);
 }
-.paper-grid {
+/* Drafting grid — used in exactly one place: behind the architecture
+   diagram in a write-up, where a schematic is what you're looking at. */
+.schematic {
   background-image:
-    linear-gradient(rgba(13, 16, 14, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 16, 14, 0.06) 1px, transparent 1px),
-    var(--paper-noise);
-  background-size: 48px 48px, 48px 48px, 160px 160px;
-  background-position: -1px -1px, -1px -1px, 0 0;
+    linear-gradient(rgba(13, 16, 14, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 16, 14, 0.055) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
 }
 
 /* Signal sections: full-bleed colour block, ink type. */
@@ -205,63 +208,142 @@ main h1:not(.hero-name) {
   --accent-text: var(--mint);
   --accent: var(--paper);      /* fills inside a green section are cream */
   --on-accent: var(--signal);
+  --surface: var(--signal);
   background-color: var(--signal);
   color: var(--paper);
 }
 
-/* Lab faders: a hairline track with ticks and a squared cap, so the
-   controls feel like an instrument rather than a web form. */
-.fader { -webkit-appearance: none; appearance: none; background: transparent; }
-.fader::-webkit-slider-runnable-track {
-  height: 10px;
-  background:
-    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 10%) center / 100% 6px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
-  opacity: 0.9;
+/* ---------------------------------------------------------------------------
+   Architecture diagram nodes (components/writeup/PipelineDiagram.tsx).
+   Sizes are in diagram units (--u), so the drawing scales as one piece.
+   ------------------------------------------------------------------------ */
+.pipe-node:focus-visible { outline-offset: 2px; z-index: 1; }
+.pipe-label {
+  font-weight: 600;
+  font-size: calc(var(--u) * 16);
+  line-height: 1.15;
 }
-.fader::-moz-range-track {
-  height: 10px;
-  background:
-    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 10%) center / 100% 6px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+.pipe-sub {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: calc(var(--u) * 11.5);
+  line-height: 1.3;
+  margin-top: calc(var(--u) * 3);
+  opacity: 0.85;
 }
-.fader::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 24px;
-  margin-top: -7px;
-  background: var(--paper);
-  border: 2px solid var(--ink);
-  border-radius: 2px;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-}
-.fader::-moz-range-thumb {
-  width: 14px;
-  height: 24px;
-  background: var(--paper);
-  border: 2px solid var(--ink);
-  border-radius: 2px;
-}
-.fader:focus-visible { outline-offset: 4px; }
-
-/* Beat pulse on the lab readout */
-@keyframes beat {
-  0% { transform: scale(1.06); }
-  100% { transform: scale(1); }
+@container (max-width: 520px) {
+  .pipe-label { font-size: calc(var(--u) * 13.5); }
+  .pipe-sub { font-size: calc(var(--u) * 10.5); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [class*="animate-[beat"] { animation: none !important; }
+/* ---------------------------------------------------------------------------
+   Long-form writing (case studies, colophon). Body type at full width for
+   reading, ~65 characters a line, a steady vertical rhythm. Headings drop the
+   condensed caps: those are for page titles, not for paragraphs.
+   ------------------------------------------------------------------------ */
+.prose {
+  --measure: 40rem;              /* ~65 characters of body text */
+  max-width: 56rem;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: var(--fg);
+  font-stretch: 100%;
 }
+/* text keeps to the measure; figures and code may use the full column */
+.prose > * { max-width: var(--measure); }
+.prose > .wide { max-width: none; }
+.prose p, .prose ul, .prose ol { margin-top: 0; margin-bottom: 1.25em; }
+.prose p { text-wrap: pretty; }
+.prose h2 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  font-stretch: 85%;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-top: 2.75em;
+  margin-bottom: 0.7em;
+  text-wrap: balance;
+}
+.prose h3 {
+  font-size: 1.1875rem;
+  font-weight: 650;
+  line-height: 1.3;
+  margin-top: 2.25em;
+  margin-bottom: 0.5em;
+}
+.prose ul { list-style: none; padding-left: 0; }
+.prose ul > li { position: relative; padding-left: 1.25em; margin-bottom: 0.6em; }
+.prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0.15em;
+  top: 0.78em;
+  width: 0.45em;
+  height: 1.5px;
+  background: currentColor;
+  opacity: 0.6;
+}
+.prose ol { list-style: decimal; padding-left: 1.4em; }
+.prose ol > li { margin-bottom: 0.6em; padding-left: 0.25em; }
+.prose strong { font-weight: 650; }
+.prose a:not(.plain) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  transition: text-decoration-color 150ms;
+}
+.prose a:not(.plain):hover { text-decoration-color: currentColor; }
+.prose :not(pre) > code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.84em;
+  padding: 0.1em 0.3em;
+  background: rgba(13, 16, 14, 0.07);
+  border-radius: 3px;
+}
+.prose figure { margin-top: 2em; margin-bottom: 2.25em; }
+.prose figcaption.note {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+.prose hr { border: 0; border-top: 1px solid var(--border-strong); margin-top: 3em; margin-bottom: 3em; }
 
-/* Filmstrip sprocket holes */
-.sprockets {
-  height: 14px;
-  background-image: radial-gradient(circle at 50% 50%, var(--paper) 0 3.5px, transparent 4px);
-  background-size: 22px 14px;
-  background-repeat: repeat-x;
-  opacity: 0.5;
+/* Code excerpts: ink block on any surface, tokens tinted from the palette.
+   Every colour clears 4.5:1 on #121613. */
+.code-block {
+  background: #121613;
+  color: #e6e0cf;
+  border-radius: 6px;
+  overflow: hidden;
 }
+.code-block figcaption {
+  padding: 0.6rem 1.1rem;
+  border-bottom: 1px solid rgba(242, 234, 215, 0.1);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: #a3a69c;
+}
+.code-block figcaption a { color: inherit; text-decoration: none; }
+.code-block figcaption a:hover { color: var(--mint); }
+.code-block pre {
+  margin: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  tab-size: 4;
+}
+.code-block pre:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; }
+.tok-comment { color: #9ea397; font-style: italic; }
+.tok-string { color: #e3cf9b; }
+.tok-number { color: #8ad9a8; }
+.tok-keyword { color: #8ad9a8; }
+.tok-name { color: #f2ead7; font-weight: 500; }
+.tok-decorator { color: #b9c8bd; }
 
 /* Keyboard piece: key height tracks the board's width */
 .kb { container-type: inline-size; }
@@ -286,3 +368,7 @@ main h1:not(.hero-name) {
   [class*="animate-["] { animation: none !important; }
   .scroll-fx { transform: none !important; }
 }
+
+/* the diagram's explanation panel keeps its own rhythm inside .prose */
+.pipe-panel p { margin: 0; }
+.pipe-panel p + p { margin-top: 0.25rem; }

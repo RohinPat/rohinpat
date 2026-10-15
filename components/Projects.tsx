@@ -1,36 +1,29 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-import { projects, type Entry } from "@/lib/projects";
+import Link from "next/link";
+import { jobs, made, type Entry } from "@/lib/projects";
 import Motif from "@/components/home/Motif";
 
-// /projects — an editorial index. "Made" is a list of huge titles; hovering
-// (or focusing) one floats a preview card with its drawing that trails the
-// cursor. "Worked at" is three colour-blocked cards.
+// /projects — an index. "Made" lists projects with their code and, where one
+// exists, the write-up; "Worked at" is three colour-blocked cards. Server
+// component: nothing here needs JavaScript.
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
 export default function Projects() {
-  const made = projects.filter((p) => p.kind === "project");
-  const work = projects.filter((p) => p.kind === "work");
-  const first = projects.reduce((y, p) => Math.min(y, parseInt(p.year, 10)), 9999);
-
-  // Opens on cream (the index), drops to ink for the jobs — each page gets
-  // its own colour moment, and green is saved for the WHOOP card.
   return (
     <>
-      <section className="paper paper-grid px-4 md:px-10 pt-28 pb-20 md:pb-28">
+      <section className="paper px-4 md:px-10 pt-28 pb-20 md:pb-28">
         <div className="max-w-6xl mx-auto">
-          <h1>Work.</h1>
-          <p className="-mt-6 mb-14 md:mb-20 font-mono text-xs uppercase tracking-[0.2em] muted">
-            {pad(made.length)} made · {pad(work.length)} worked at · {first} — now
+          <h1 className="!mb-6">Work</h1>
+          <p className="mb-14 md:mb-20 text-lg md:text-xl max-w-[46ch] text-pretty muted">
+            Things I&apos;ve built and places I&apos;ve worked. The long version of one of
+            them is <Link href="/projects/closet-organizer" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">the Closet Organizer write-up</Link>.
           </p>
           <MadeIndex entries={made} />
         </div>
       </section>
       <section className="px-4 md:px-10 py-20 md:py-28">
         <div className="max-w-6xl mx-auto">
-          <WorkedAt entries={work} />
+          <WorkedAt entries={jobs} />
         </div>
       </section>
     </>
@@ -45,10 +38,10 @@ function SectionHead({ id, title }: { id: string; title: string }) {
   );
 }
 
-function Links({ e }: { e: Entry }) {
+function ExternalLinks({ e }: { e: Entry }) {
   if (!e.links) return null;
   return (
-    <span className="flex gap-5 font-mono text-xs uppercase tracking-wider">
+    <>
       {e.links.map((l) => (
         <a
           key={l.href}
@@ -57,121 +50,58 @@ function Links({ e }: { e: Entry }) {
           rel="noopener noreferrer"
           className="inline-block py-1 link-underline hover:text-[var(--accent-text)] transition-colors"
         >
-          {l.label} ↗<span className="sr-only"> (opens in a new tab)</span>
+          {l.label} ↗<span className="sr-only"> for {e.title} (opens in a new tab)</span>
         </a>
       ))}
-    </span>
+    </>
   );
 }
 
 function MadeIndex({ entries }: { entries: Entry[] }) {
-  const [active, setActive] = useState<Entry | null>(null);
-  const card = useRef<HTMLDivElement>(null);
-  const target = useRef({ x: 0, y: 0 });
-  const pos = useRef({ x: 0, y: 0 });
-
-  // The card eases toward the pointer and tilts with its horizontal speed.
-  useEffect(() => {
-    if (!active) return;
-    let raf = 0;
-    const loop = () => {
-      const dx = target.current.x - pos.current.x;
-      pos.current.x += dx * 0.18;
-      pos.current.y += (target.current.y - pos.current.y) * 0.18;
-      const tilt = Math.max(-8, Math.min(8, dx * 0.05));
-      if (card.current) {
-        card.current.style.transform = `translate3d(${pos.current.x}px, ${pos.current.y}px, 0) rotate(${tilt.toFixed(2)}deg)`;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [active]);
-
-  const aim = (x: number, y: number, jump = false) => {
-    // keep the card on screen, offset from the cursor
-    const cx = Math.min(window.innerWidth - 320, x + 28);
-    const cy = Math.min(window.innerHeight - 400, Math.max(80, y - 160));
-    target.current = { x: cx, y: cy };
-    if (jump) pos.current = { ...target.current };
-  };
-
   return (
     <section aria-labelledby="made-title">
       <SectionHead id="made-title" title="Made" />
-      <ol onPointerLeave={() => setActive(null)}>
+      <ol>
         {entries.map((e, i) => (
           <li
             key={e.slug}
             id={e.slug}
-            onPointerEnter={(ev) => {
-              aim(ev.clientX, ev.clientY, !active);
-              setActive(e);
-            }}
-            onPointerMove={(ev) => aim(ev.clientX, ev.clientY)}
-            onFocusCapture={(ev) => {
-              const r = ev.currentTarget.getBoundingClientRect();
-              aim(r.left + r.width * 0.55, r.top + r.height / 2, true);
-              setActive(e);
-            }}
-            onBlurCapture={() => setActive(null)}
             className="group relative scroll-mt-24 grid grid-cols-12 gap-x-4 gap-y-3 py-8 md:py-10 border-b border-[var(--border-strong)]"
           >
             <span className="col-span-2 md:col-span-1 font-mono text-xs muted pt-3 md:pt-5 tabular-nums">
               {pad(i + 1)}
             </span>
-            <h3
-              className="col-span-10 md:col-span-7 display transition-[transform,color] duration-300 ease-out group-hover:translate-x-3 group-hover:text-[var(--accent-text)] group-focus-within:text-[var(--accent-text)]"
-              style={{ fontSize: "clamp(3rem, 8vw, 7rem)" }}
-            >
-              {e.title}
+            <h3 className="col-span-10 md:col-span-7 display" style={{ fontSize: "clamp(2.75rem, 7vw, 6rem)" }}>
+              {e.caseStudy ? (
+                <Link href={e.caseStudy} className="hover:text-[var(--accent-text)] transition-colors">
+                  {e.title}
+                </Link>
+              ) : (
+                e.title
+              )}
             </h3>
             <p className="col-span-10 col-start-3 md:col-span-4 md:col-start-auto md:pt-5 md:text-right font-mono text-xs uppercase tracking-wider muted">
               {e.year}
               <span className="block mt-1">{e.tags.join(" · ")}</span>
             </p>
-            <div className="col-span-10 col-start-3 md:col-span-7 md:col-start-2 flex flex-wrap items-baseline gap-x-8 gap-y-2">
-              <p className="muted leading-relaxed max-w-[48ch] text-pretty">{e.line}</p>
-              <Links e={e} />
+            <div className="col-span-10 col-start-3 md:col-span-7 md:col-start-2">
+              <p className="leading-relaxed max-w-[52ch] text-pretty">{e.line}</p>
+              <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs uppercase tracking-wider">
+                {e.caseStudy && (
+                  <Link
+                    href={e.caseStudy}
+                    className="inline-block py-1 font-medium text-[var(--accent-text)] link-underline"
+                  >
+                    Read the write-up →<span className="sr-only"> about {e.title}</span>
+                  </Link>
+                )}
+                <ExternalLinks e={e} />
+              </p>
             </div>
-            {/* phones/tablets have no hover: show the drawing inline instead */}
-            <Motif
-              slug={e.slug}
-              className="lg:hidden absolute right-0 top-8 w-12 h-12 muted"
-            />
+            <Motif slug={e.slug} className="hidden md:block absolute right-0 bottom-8 w-14 h-14 muted opacity-70" />
           </li>
         ))}
       </ol>
-
-      {/* floating preview (decorative; mirrors the row it follows) */}
-      <div
-        ref={card}
-        aria-hidden="true"
-        className="fixed left-0 top-0 z-40 pointer-events-none hidden lg:block motion-reduce:!hidden"
-      >
-        <div
-          className={`w-[280px] aspect-[4/5] p-5 flex flex-col bg-[var(--ink)] text-[var(--paper)] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55)] transition-[opacity,transform] duration-200 ${
-            active ? "opacity-100 scale-100" : "opacity-0 scale-90"
-          }`}
-        >
-          {active && (
-            <>
-              <div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.18em]">
-                <span>
-                  {pad(projects.indexOf(active) + 1)} / {pad(projects.length)}
-                </span>
-                <span>{active.year}</span>
-              </div>
-              <div className="flex-1 grid place-items-center">
-                <Motif slug={active.slug} className="w-[190px] h-auto" />
-              </div>
-              <p className="display" style={{ fontSize: "2.1rem", lineHeight: 0.92 }}>
-                {active.title}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
     </section>
   );
 }
@@ -190,21 +120,15 @@ function WorkedAt({ entries }: { entries: Entry[] }) {
             <li
               key={e.slug}
               id={e.slug}
-              className={`${styleFor(i)} scroll-mt-24 min-h-[340px] md:min-h-[440px] p-6 flex flex-col transition-transform duration-300 ease-out hover:-translate-y-1.5`}
+              className={`${styleFor(i)} scroll-mt-24 min-h-[320px] md:min-h-[400px] p-6 flex flex-col`}
             >
-              <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.18em]">
-                <span>{current ? `${e.year} now` : e.year}</span>
-                {current && (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-[var(--ink)] text-[var(--paper)]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--signal)] animate-pulse" />
-                    Now
-                  </span>
-                )}
-              </div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em]">
+                {current ? `${e.year} now` : e.year}
+              </p>
               <div className="flex-1 grid place-items-center py-6">
-                <Motif slug={e.slug} className="w-[150px] h-auto" />
+                <Motif slug={e.slug} className="w-[130px] h-auto" />
               </div>
-              <h3 className="display" style={{ fontSize: "clamp(2.6rem, 4.4vw, 3.6rem)", lineHeight: 0.9 }}>
+              <h3 className="display" style={{ fontSize: "clamp(2.4rem, 4vw, 3.3rem)", lineHeight: 0.9 }}>
                 {e.title}
               </h3>
               <p className="mt-3 text-lg font-semibold leading-tight">{e.role}</p>
