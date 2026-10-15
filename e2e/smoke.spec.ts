@@ -11,7 +11,7 @@ const routes: Array<{
   { path: "/",            titleContains: "Rohin Patel",     visibleText: /I build iOS apps/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /SiPhox Health/ },
   { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I'm into/ },
-  { path: "/contact",     titleContains: "Contact",         visibleText: /patel\.rohin@northeastern\.edu/ },
+  { path: "/contact",     titleContains: "Contact",         visibleText: /rohinp1124@gmail\.com/ },
 ];
 
 for (const { path, titleContains, visibleText } of routes) {

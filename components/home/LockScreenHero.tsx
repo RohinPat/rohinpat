@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { headline, site } from "@/lib/site";
+import { headline, site, teamLine } from "@/lib/site";
 
 // Hero: a giant split name on drafting paper with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
@@ -41,7 +41,7 @@ const notifications = [
     app: "Work",
     mark: "W",
     title: headline,
-    body: `Running the ${site.team} team.`,
+    body: teamLine,
     href: "/projects#whoop",
   },
   {

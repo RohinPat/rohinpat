@@ -1,3 +1,5 @@
+import { teamLine } from "./site";
+
 // Everything on /projects and the homepage filmstrip. One line each — this
 // is a portfolio, not a résumé. Deliberately no employer metrics.
 
@@ -49,7 +51,7 @@ export const projects: Entry[] = [
     slug: "whoop",
     title: "WHOOP",
     role: "Software Engineer",
-    line: "Running the in-app Shop team. Started as an iOS co-op on live heart-rate onboarding.",
+    line: `${teamLine} Started as an iOS co-op on live heart-rate onboarding.`,
     year: "2025 —",
     kind: "work",
     tags: ["SwiftUI", "iOS", "Commerce"],

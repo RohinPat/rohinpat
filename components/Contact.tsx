@@ -67,8 +67,8 @@ export default function Contact() {
         </ul>
 
         <p className="mt-10 muted max-w-prose">
-          Mostly heads-down running the {site.team} team at {site.employer}. Emails
-          still get read, just not always fast.
+          Mostly heads-down running the in-app shop at {site.employer}. Emails still
+          get read, just not always fast.
         </p>
       </div>
     </section>

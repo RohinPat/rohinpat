@@ -6,11 +6,11 @@ export const site = {
   name: "Rohin Patel",
   role: "Software Engineer",
   employer: "WHOOP",
-  team: "in-app Shop",
+  team: "A&A Shop",
   employerUrl: "https://whoop.com",
   school: "Northeastern University",
   schoolShort: "NEU CS '26",
-  email: "patel.rohin@northeastern.edu",
+  email: "rohinp1124@gmail.com",
   location: "Boston, MA",
   github: "https://github.com/RohinPat",
   linkedin: "https://www.linkedin.com/in/rohinpat/",
@@ -21,6 +21,7 @@ export const site = {
 
 export const headline = `${site.role} at ${site.employer}`;
 
-export const now = `Running the ${site.team} team at ${site.employer}.`;
+// "What I do there", in one line — used by the hero phone, /projects and metadata.
+export const teamLine = `On the ${site.team} team, running the in-app shop.`;
 
-export const description = `${headline}, running the ${site.team} team. ${site.schoolShort}. I build iOS apps, ML systems and the occasional toy.`;
+export const description = `${headline}. ${teamLine} ${site.schoolShort}. I build iOS apps, ML systems and the occasional toy.`;

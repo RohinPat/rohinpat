@@ -1,6 +1,6 @@
 # rohinpat
 
-Personal site of Rohin Patel — software engineer at WHOOP, running the in-app Shop team.
+Personal site of Rohin Patel — software engineer at WHOOP on the A&A Shop team, running the in-app shop.
 
 Live at **[rohinpat.vercel.app](https://rohinpat.vercel.app)**.
 
