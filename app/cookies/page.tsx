@@ -5,32 +5,9 @@ import { LEGAL_UPDATED } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Cookies",
-  description: "This site sets no cookies. Here is exactly what it stores, and when.",
+  description: "This site sets no cookies and stores nothing in your browser.",
   alternates: { canonical: "/cookies" },
 };
-
-const storage = [
-  {
-    key: "fun-mode",
-    what: "Whether you switched the Interests page toys on or off",
-    when: "When you flip the Fun mode switch",
-  },
-  {
-    key: "interests-sound",
-    what: "Whether you turned game sounds on",
-    when: "When you flip the Sound switch",
-  },
-  {
-    key: "interests.2048.hi",
-    what: "Your best 2048 score",
-    when: "When you play 2048 and beat your best",
-  },
-  {
-    key: "interests.ski.best",
-    what: "Your best distance in the skiing game",
-    when: "When you play and beat your best",
-  },
-];
 
 export default function CookiesPage() {
   return (
@@ -40,53 +17,25 @@ export default function CookiesPage() {
       updated={LEGAL_UPDATED}
       intro={
         <p>
-          This site sets <strong className="text-[var(--fg)]">no cookies</strong> and
-          runs no analytics or advertising trackers. That&apos;s why there&apos;s no
-          cookie banner.
+          This site sets <strong className="text-[var(--fg)]">no cookies</strong>, stores
+          nothing in your browser, and runs no analytics, advertising or third-party
+          embeds. That&apos;s why there&apos;s no cookie banner.
         </p>
       }
     >
-      <h2>Local storage</h2>
+      <h2>What runs in your browser</h2>
       <p>
-        A few toys on the <Link href="/interests">Interests page</Link> remember things
-        in your browser&apos;s local storage. Nothing is written until you interact
-        with them, and none of it is ever sent to me or anyone else.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Key</th>
-            <th scope="col">What it remembers</th>
-            <th scope="col">Written</th>
-          </tr>
-        </thead>
-        <tbody>
-          {storage.map((row) => (
-            <tr key={row.key}>
-              <td>
-                <code>{row.key}</code>
-              </td>
-              <td>{row.what}</td>
-              <td>{row.when}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        These entries stay until you clear them. To remove them, clear site data for
-        this site in your browser settings.
+        The interactive pieces on the <Link href="/interests">Off hours</Link> page (and
+        the heart-rate lab on the homepage) are drawn by code that runs on your device.
+        They don&apos;t save anything, and nothing they do is sent to me or anyone
+        else. Reload the page and they start fresh.
       </p>
 
-      <h2>Spotify player (optional)</h2>
+      <h2>Links to other sites</h2>
       <p>
-        With Fun mode off, the Interests page offers an embedded Spotify playlist. It
-        doesn&apos;t load automatically. Nothing is requested from Spotify until you
-        press <strong>Load Spotify player</strong>. Once loaded, Spotify may set its own
-        cookies under{" "}
-        <a href="https://www.spotify.com/legal/cookies-policy/" target="_blank" rel="noopener noreferrer">
-          Spotify&apos;s cookie policy
-        </a>
-        . You can always use the plain link to open the playlist on Spotify instead.
+        Some links go to other sites, such as Spotify, GitHub and LinkedIn. Those
+        sites only load if you click through, and they have their own cookie
+        policies.
       </p>
 
       <h2>Hosting</h2>

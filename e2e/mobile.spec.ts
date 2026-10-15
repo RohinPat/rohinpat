@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // Mobile-specific checks. Runs only under the "mobile" project (iPhone 13 viewport).
 // Catches the worst mobile failure mode: horizontal scroll / clipped content.
 
-const routes = ["/", "/projects", "/experience", "/skills", "/interests", "/contact"];
+const routes = ["/", "/projects", "/interests", "/contact", "/privacy"];
 
 for (const path of routes) {
   test(`${path} has no horizontal overflow on mobile`, async ({ page }) => {
@@ -27,7 +27,14 @@ test("mobile nav opens and closes", async ({ page }) => {
   const toggle = page.getByRole("button", { name: /toggle menu/i });
   await toggle.click();
   const menu = page.locator("#mobile-menu");
-  await expect(menu.getByRole("link", { name: /^Interests$/ })).toBeVisible();
-  await menu.getByRole("link", { name: /^Projects$/ }).click();
+  await expect(menu.getByRole("link", { name: /^Off hours$/ })).toBeVisible();
+  await menu.getByRole("link", { name: /^Work$/ }).click();
   await expect(page).toHaveURL(/\/projects$/);
+});
+
+test("hero CTAs sit on the first screen on a phone", async ({ page }) => {
+  await page.goto("/");
+  const cta = await page.getByRole("link", { name: /See the work/i }).boundingBox();
+  const vh = page.viewportSize()!.height;
+  expect(cta!.y + cta!.height).toBeLessThanOrEqual(vh);
 });

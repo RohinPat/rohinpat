@@ -1,16 +1,13 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { name: "Projects",   href: "/projects" },
-  { name: "Experience", href: "/experience" },
-  { name: "Skills",     href: "/skills" },
-  { name: "Interests",  href: "/interests" },
-  { name: "Contact",    href: "/contact" },
+  { name: "Work",      href: "/projects" },
+  { name: "Off hours", href: "/interests" },
+  { name: "Contact",   href: "/contact" },
 ];
 
 // Floating ink pill — reads the same over paper, ink and signal sections.
@@ -76,58 +73,47 @@ export default function Navigation() {
             aria-expanded={isOpen}
             aria-controls="mobile-menu"
           >
-            <div className="w-5 h-4 relative flex flex-col justify-between">
-              <motion.span
-                className="w-full h-px bg-current origin-center"
-                animate={{ rotate: isOpen ? 45 : 0, y: isOpen ? 7.5 : 0 }}
-                transition={{ duration: 0.25 }}
+            <span aria-hidden="true" className="relative w-5 h-4 block">
+              <span
+                className={`absolute left-0 right-0 top-0 h-px bg-current transition-transform duration-200 ${
+                  isOpen ? "translate-y-[7.5px] rotate-45" : ""
+                }`}
               />
-              <motion.span
-                className="w-full h-px bg-current"
-                animate={{ opacity: isOpen ? 0 : 1 }}
-                transition={{ duration: 0.2 }}
+              <span
+                className={`absolute left-0 right-0 top-1/2 h-px bg-current transition-opacity duration-150 ${
+                  isOpen ? "opacity-0" : ""
+                }`}
               />
-              <motion.span
-                className="w-full h-px bg-current origin-center"
-                animate={{ rotate: isOpen ? -45 : 0, y: isOpen ? -7.5 : 0 }}
-                transition={{ duration: 0.25 }}
+              <span
+                className={`absolute left-0 right-0 bottom-0 h-px bg-current transition-transform duration-200 ${
+                  isOpen ? "-translate-y-[7.5px] -rotate-45" : ""
+                }`}
               />
-            </div>
+            </span>
           </button>
         </div>
 
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              id="mobile-menu"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="md:hidden overflow-hidden"
-            >
-              <ul className="px-3 pb-4 pt-1 flex flex-col">
-                {navItems.map((item) => {
-                  const active = pathname === item.href;
-                  return (
-                    <li key={item.name}>
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => setIsOpen(false)}
-                        className={`display block py-2 text-4xl ${
-                          active ? "text-[var(--signal)]" : "text-[var(--paper)]"
-                        }`}
-                      >
-                        {item.name}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div id="mobile-menu" hidden={!isOpen} className="md:hidden">
+          <ul className="px-3 pb-4 pt-1 flex flex-col">
+            {navItems.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <li key={item.name}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setIsOpen(false)}
+                    className={`display block py-2 text-4xl animate-[rise_0.25s_ease-out] ${
+                      active ? "text-[var(--signal)]" : "text-[var(--paper)]"
+                    }`}
+                  >
+                    {item.name}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     </nav>
   );

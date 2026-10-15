@@ -15,29 +15,54 @@ export default function LegalPage({
   intro: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const tabs = [
+    { name: "Privacy", href: "/privacy" },
+    { name: "Terms", href: "/terms" },
+    { name: "Cookies", href: "/cookies" },
+  ];
+
   return (
-    <main className="relative pt-24 pb-20 px-6 md:px-10">
-      <article className="max-w-3xl mx-auto">
+    <main className="relative pt-24 pb-20 px-4 md:px-10">
+      <div className="max-w-6xl mx-auto">
         <p className="font-mono text-xs uppercase tracking-[0.2em] mb-6">
           <span className="accent">{eyebrow}</span>
           <span className="dim"> / last updated {updated}</span>
         </p>
-        <h1 className="text-4xl md:text-6xl font-semibold tracking-tight leading-[1.05] mb-8 text-balance">
-          {title}
-        </h1>
-        <div className="text-base md:text-lg muted leading-relaxed max-w-prose mb-12 text-pretty">
-          {intro}
+        <h1>{title}</h1>
+
+        <div className="grid lg:grid-cols-12 gap-x-10 gap-y-8">
+          {/* policy switcher: tabs on phones, a sticky rail on desktop */}
+          <nav aria-label="Policies" className="lg:col-span-3">
+            <ul className="flex lg:flex-col gap-2 lg:sticky lg:top-24">
+              {tabs.map((t) => {
+                const current = t.name === eyebrow;
+                return (
+                  <li key={t.href}>
+                    <Link
+                      href={t.href}
+                      aria-current={current ? "page" : undefined}
+                      className={`block px-4 py-2.5 font-mono text-xs uppercase tracking-wider border transition-colors ${
+                        current
+                          ? "bg-[var(--signal)] text-[var(--ink)] border-[var(--signal)]"
+                          : "border-[var(--border-strong)] hover:border-[var(--fg)]"
+                      }`}
+                    >
+                      {t.name}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <article className="lg:col-span-9">
+            <div className="text-lg md:text-xl muted leading-relaxed max-w-[60ch] mb-4 text-pretty">
+              {intro}
+            </div>
+            <div className="legal-prose">{children}</div>
+          </article>
         </div>
-        <div className="legal-prose">{children}</div>
-        <p className="mt-16 pt-6 border-t border-[var(--border)] font-mono text-xs uppercase tracking-wider muted">
-          Also see:{" "}
-          <Link href="/privacy" className="underline hover:text-[var(--fg)]">Privacy</Link>
-          {" · "}
-          <Link href="/terms" className="underline hover:text-[var(--fg)]">Terms</Link>
-          {" · "}
-          <Link href="/cookies" className="underline hover:text-[var(--fg)]">Cookies</Link>
-        </p>
-      </article>
+      </div>
     </main>
   );
 }

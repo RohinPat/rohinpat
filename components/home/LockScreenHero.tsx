@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { facts, headline, site } from "@/lib/site";
+import { headline, site, teamLine } from "@/lib/site";
 
 // Hero: a giant split name on drafting paper with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
@@ -46,9 +40,9 @@ const notifications = [
   {
     app: "Work",
     mark: "W",
-    title: headline,
-    body: "SwiftUI, Core Bluetooth, real-time health data.",
-    href: "/experience",
+    title: site.employer,
+    body: teamLine,
+    href: "/projects#whoop",
   },
   {
     app: "Projects",
@@ -58,10 +52,10 @@ const notifications = [
     href: "/projects#closet-organizer",
   },
   {
-    app: "Interests",
-    mark: "I",
-    title: "9 toys to play with",
-    body: "Rev a V10, take a free kick, beat my 2048 score.",
+    app: "Off hours",
+    mark: "O",
+    title: "Nine small experiments",
+    body: "Watches, cars, Barça, vinyl, skiing — made interactive.",
     href: "/interests",
   },
 ];
@@ -69,72 +63,59 @@ const notifications = [
 export default function LockScreenHero() {
   const ref = useRef<HTMLElement>(null);
   const now = useBostonNow();
-  const reduce = useReducedMotion();
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const leftX = useTransform(scrollYProgress, [0, 1], ["0%", "-35%"]);
-  const rightX = useTransform(scrollYProgress, [0, 1], ["0%", "35%"]);
-  const phoneY = useTransform(scrollYProgress, [0, 1], [0, 220]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 1], [0, -8]);
+  // Scroll progress through the hero (0 → 1) as a CSS variable; the name
+  // halves and the phone read it in their transforms. One passive listener,
+  // no re-renders.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const r = el.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, -r.top / r.height));
+      el.style.setProperty("--p", p.toFixed(4));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   return (
     <section
       ref={ref}
-      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-8 flex flex-col"
+      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-14 lg:pb-8 flex flex-col"
     >
       {/* Top meta row */}
       <div className="relative z-20 flex items-start justify-between gap-4 font-mono text-[11px] md:text-xs uppercase tracking-[0.18em] muted">
         <p className="hidden sm:block">{headline}</p>
-        <p className="tabular-nums sm:text-right">
-          Boston · <span className="text-[var(--fg)]">{now?.full ?? "—:—"}</span>
-        </p>
+        <p className="sm:text-right">{site.location}</p>
       </div>
 
-      {/* Name + phone */}
-      <div className="relative flex-1 flex flex-col md:flex-row md:items-center md:min-h-[520px]">
+      {/* Name */}
+      <div className="relative flex lg:flex-1 lg:items-center lg:min-h-[440px]">
         <h1
-          className="hero-name display w-full flex flex-col md:flex-row justify-between items-start md:items-center pt-6 md:py-2 select-none"
+          className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-6 lg:py-2 select-none"
           style={{ fontSize: "clamp(7rem, 21vw, 22rem)" }}
         >
           {/* Outer span: one-off entrance. Inner span: scroll-linked drift. */}
-          <motion.span
-            initial={{ opacity: 0, x: -40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }}
-            className="block"
-          >
-            <motion.span style={reduce ? undefined : { x: leftX }} className="block">
+          <span className="block enter-left">
+            <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * -35%))" }}>
               Rohin
-            </motion.span>
-          </motion.span>
-          <motion.span
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.08, ease: [0.2, 0.7, 0.2, 1] }}
-            className="block self-end md:self-auto"
-          >
-            <motion.span style={reduce ? undefined : { x: rightX }} className="block">
+            </span>
+          </span>
+          <span className="block self-end lg:self-auto enter-right">
+            <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * 35%))" }}>
               Patel
-            </motion.span>
-          </motion.span>
+            </span>
+          </span>
         </h1>
-
-        {/* Phone — below the stacked name on phones, centred over it on desktop */}
-        <div className="relative md:absolute md:inset-0 z-10 flex md:grid justify-center md:place-items-center -mt-[3vw] md:mt-0 pointer-events-none">
-          <motion.div
-            initial={{ opacity: 0, y: 80 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
-            className="pointer-events-auto"
-          >
-            <motion.div style={reduce ? undefined : { y: phoneY, rotate: phoneRotate }}>
-              <Phone now={now} />
-            </motion.div>
-          </motion.div>
-        </div>
       </div>
 
       {/* Tagline + CTAs */}
@@ -152,31 +133,26 @@ export default function LockScreenHero() {
             <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
           </Link>
           <Link
-            href="/contact"
+            href="/interests"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--paper)] transition-colors"
           >
-            Get in touch
-          </Link>
-          <Link
-            href="/interests"
-            className="link-underline font-mono text-xs uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
-          >
-            or play with the toys →
+            Off hours
           </Link>
         </div>
       </div>
 
-      {/* Fact grid */}
-      <dl className="relative z-20 mt-8 grid grid-cols-2 md:grid-cols-4 border-t border-[var(--border-strong)]">
-        {facts.map((f) => (
-          <div key={f.label} className="pt-3 pb-1 pr-4">
-            <dt className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.18em] muted">
-              {f.label}
-            </dt>
-            <dd className="mt-1 text-sm md:text-base font-medium">{f.value}</dd>
+      {/* Phone — after the CTAs in the DOM, so phones read name → CTAs → phone
+          (visual and focus order match); on desktop it floats over the name. */}
+      <div className="relative z-10 mt-10 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
+        <div className="pointer-events-auto enter-up">
+          <div
+            className="scroll-fx"
+            style={{ transform: "translateY(calc(var(--p, 0) * 220px)) rotate(calc(var(--p, 0) * -8deg))" }}
+          >
+            <Phone now={now} />
           </div>
-        ))}
-      </dl>
+        </div>
+      </div>
     </section>
   );
 }
@@ -184,7 +160,7 @@ export default function LockScreenHero() {
 function Phone({ now }: { now: BostonNow | null }) {
   return (
     <div
-      className="relative w-[min(60vw,290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(12,12,11,0.55),0_0_0_1px_rgba(12,12,11,0.9)]"
+      className="relative w-[min(60vw,290px)] lg:w-[clamp(240px,calc((100svh_-_250px)*9/19),290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(12,12,11,0.55),0_0_0_1px_rgba(12,12,11,0.9)]"
       role="group"
       aria-label="Phone lock screen with links into the site"
     >
@@ -252,7 +228,7 @@ function Phone({ now }: { now: BostonNow | null }) {
                     <span>{n.app}</span>
                     <span aria-hidden="true">now</span>
                   </span>
-                  <span className="block text-[12.5px] font-semibold leading-tight truncate">
+                  <span className="block text-[12.5px] font-semibold leading-tight">
                     {n.title}
                   </span>
                   <span className="block text-[11.5px] leading-snug opacity-85 line-clamp-2">

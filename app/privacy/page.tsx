@@ -34,9 +34,8 @@ export default function PrivacyPage() {
       <h2>What I collect</h2>
       <ul>
         <li>
-          <strong>Nothing through the site itself.</strong> The contact page composes an
-          email in your own mail app. Whatever you type there stays in your browser
-          until you choose to send it.
+          <strong>Nothing through the site itself.</strong> There are no forms. The
+          contact page just opens your own mail app.
         </li>
         <li>
           <strong>Emails you send me.</strong> If you do email me, I receive your email
@@ -59,11 +58,9 @@ export default function PrivacyPage() {
 
       <h2>Cookies and browser storage</h2>
       <p>
-        This site sets no cookies. A few games on the Interests page remember your
-        settings and high scores in your browser&apos;s local storage, only after you
-        interact with them. That data never leaves your device. The optional Spotify
-        player loads only if you click to load it. Details are in the{" "}
-        <Link href="/cookies">cookie policy</Link>.
+        This site sets no cookies, stores nothing in your browser and embeds no
+        third-party content. The interactive pieces run entirely on your device.
+        Details are in the <Link href="/cookies">cookie policy</Link>.
       </p>
 
       <h2>Sharing</h2>

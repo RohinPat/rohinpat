@@ -32,8 +32,8 @@ export default function PersonJsonLd() {
       "SwiftUI",
       "Machine Learning",
       "Computer Vision",
-      "TensorFlow",
-      "Bluetooth Low Energy",
+      "PyTorch",
+      "Mobile commerce",
     ],
   };
 

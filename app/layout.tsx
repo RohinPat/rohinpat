@@ -1,22 +1,25 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
-import { Archivo } from "next/font/google";
+import { Archivo, DM_Mono } from "next/font/google";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
-import ScrollProgress from "@/components/ScrollProgress";
 import SiteEasterEggs from "@/components/SiteEasterEggs";
 import PersonJsonLd from "@/components/PersonJsonLd";
 import SiteFooter from "@/components/SiteFooter";
-import MotionProvider from "@/components/MotionProvider";
 import { description, site } from "@/lib/site";
 
-// Display face. next/font downloads it at build time and serves it from this
-// site, so visitors' browsers never contact Google.
-const display = Archivo({
+// Two families total. next/font downloads them at build time and serves them
+// from this site, so visitors' browsers never contact Google.
+// Archivo (variable width) does both jobs: condensed for display, normal for body.
+const archivo = Archivo({
   subsets: ["latin"],
   axes: ["wdth"],
   variable: "--font-display",
+  display: "swap",
+});
+const mono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -72,7 +75,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${display.variable}`}
+      className={`${archivo.variable} ${mono.variable}`}
     >
       <body className="bg-[var(--bg)] text-[var(--fg)] antialiased font-sans">
         {/*
@@ -83,16 +86,12 @@ export default function RootLayout({
           Skip to content
         </a>
         <PersonJsonLd />
-        <div className="grain" />
-        <MotionProvider>
-          <ScrollProgress />
-          <Navigation />
-          <div id="main" tabIndex={-1} className="relative z-10 outline-none">
-            {children}
-          </div>
-          <SiteFooter />
-          <SiteEasterEggs />
-        </MotionProvider>
+        <Navigation />
+        <div id="main" tabIndex={-1} className="relative z-10 outline-none">
+          {children}
+        </div>
+        <SiteFooter />
+        <SiteEasterEggs />
       </body>
     </html>
   );

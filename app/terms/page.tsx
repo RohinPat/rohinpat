@@ -59,12 +59,13 @@ export default function TermsPage() {
         interests. Their mention doesn&apos;t imply any affiliation or endorsement.
       </p>
 
-      <h2>The games</h2>
+      <h2>The interactive pieces</h2>
       <p>
-        The toys on the Interests page are for fun. They&apos;re provided as they are,
-        with no promises that they work on every device. Some games use sound, which is
-        off until you turn it on, and some use motion. If you prefer less motion, set
-        your device&apos;s reduced-motion setting or switch Fun mode off.
+        The pieces on the Off hours page and the homepage lab are for fun. They&apos;re
+        provided as they are, with no promises that they work on every device. They
+        use motion; if you prefer less, turn on your device&apos;s reduced-motion
+        setting and they&apos;ll hold still. The heart-rate lab is synthesized, not
+        real data, and isn&apos;t medical information.
       </p>
 
       <h2>Links to other sites</h2>

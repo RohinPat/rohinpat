@@ -35,17 +35,6 @@ test("Konami code triggers the goal banner", async ({ page }) => {
   await expect(page.getByText(/Goallllll/i)).toBeVisible({ timeout: 2000 });
 });
 
-test("easter eggs do NOT fire when typing in a form field", async ({ page }) => {
-  await page.goto("/contact");
-  // Find the textarea on the contact form and type into it
-  const textarea = page.locator('textarea').first();
-  await textarea.click();
-  await textarea.fill("siu siu siu, here's a message");
-
-  // No banner should appear
-  await expect(page.getByText(/Goallllll/i)).toBeHidden();
-});
-
 test("console signature is printed on page load", async ({ page }) => {
   const messages: string[] = [];
   page.on("console", (msg) => messages.push(msg.text()));
