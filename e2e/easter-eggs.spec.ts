@@ -3,6 +3,8 @@ import { test, expect } from "@playwright/test";
 test('typing "siu" anywhere triggers the goal banner', async ({ page }) => {
   await page.goto("/");
   // Click on the body to make sure no input is focused
+  // the listener attaches on hydration; production bundles can land after load
+  await page.waitForLoadState("networkidle");
   await page.mouse.click(4, 420); // blank margin — nothing focused
 
   await page.keyboard.type("siu", { delay: 60 });
@@ -14,6 +16,8 @@ test('typing "siu" anywhere triggers the goal banner', async ({ page }) => {
 
 test('typing "barca" also triggers', async ({ page }) => {
   await page.goto("/interests");
+  // the listener attaches on hydration; production bundles can land after load
+  await page.waitForLoadState("networkidle");
   await page.mouse.click(4, 420); // blank margin — nothing focused
   await page.keyboard.type("barca", { delay: 60 });
   await expect(page.getByText(/Goallllll/i)).toBeVisible({ timeout: 2000 });
@@ -21,6 +25,8 @@ test('typing "barca" also triggers', async ({ page }) => {
 
 test("Konami code triggers the goal banner", async ({ page }) => {
   await page.goto("/");
+  // the listener attaches on hydration; production bundles can land after load
+  await page.waitForLoadState("networkidle");
   await page.mouse.click(4, 420); // blank margin — nothing focused
 
   const keys = [
