@@ -6,23 +6,39 @@ Live at **[rohinpat.vercel.app](https://rohinpat.vercel.app)**.
 
 ## Pages
 
-- **/** — lock-screen hero, a synthesized heart-rate "signal lab", selected work as a film strip
-- **/projects** — things I've made and places I've worked, one line each
-- **/interests** — "Off hours": nine small interactive pieces (watch, light trails, blaugrana, vinyl, ridgelines, dither, shot chart, golf contours, keyboard)
-- **/contact**, **/privacy**, **/terms**, **/cookies**
+- **/** — lock-screen hero, Closet Organizer's architecture as an explorable diagram, selected work
+- **/projects** — things I've made (with code and write-ups) and places I've worked
+- **/projects/closet-organizer** — case study: architecture, code excerpts, trade-offs
+- **/interests** — "Off hours": nine interactive pieces (watch, light trails, blaugrana, vinyl, ridgelines, dither, shot chart, golf contours, keyboard)
+- **/colophon** — how the site is built, with live numbers measured in the visitor's browser
+- **/contact**, **/privacy** (`/terms` and `/cookies` redirect into it)
 
 ## Stack
 
 Next.js 14 (App Router) · TypeScript · Tailwind CSS · Canvas 2D / SVG. No animation library, no
-analytics, no cookies. Fonts (Archivo, DM Mono) are self-hosted via `next/font`.
+analytics, no cookies, no third-party requests. Fonts (Archivo, DM Mono) are self-hosted via `next/font`.
 
 ## Editing content
 
 | What | Where |
 | --- | --- |
-| Name, role, team, email, links | `lib/site.ts` |
-| Projects and jobs | `lib/projects.ts` |
+| Name, role, team, point of view, email, links | `lib/site.ts` |
+| Projects and jobs (lines, links, write-up, media) | `lib/projects.ts` |
+| The Closet Organizer write-up | `app/projects/closet-organizer/page.tsx` |
+| Architecture diagram stages | `components/writeup/PipelineDiagram.tsx` |
 | Policy "last updated" date | `lib/legal.ts` |
+
+### Screenshots and recordings
+
+Each entry in `lib/projects.ts` takes an optional `media` list (image or video, with
+`alt`, `width` and `height`). Put files under `public/work/<slug>/` and reference them by
+public path. The first item becomes the cover on the write-up; until there is one, the
+project's drawing stands in. A unit test checks every media file exists and has alt text.
+
+### Custom domain
+
+Set `NEXT_PUBLIC_SITE_URL` (e.g. `https://example.com`) in Vercel. Canonical URLs, the
+sitemap, robots, structured data and social cards all read it.
 
 ## Develop
 

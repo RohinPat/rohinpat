@@ -6,5 +6,5 @@ export const contentType = "image/png";
 export const alt = "Work — Rohin Patel";
 
 export default function OG() {
-  return pageCard({ title: "Work.", kicker: "Made · Worked at", bg: "#f2ead7", fg: "#0d100e", accent: "#1d5e3f" });
+  return pageCard({ title: "Work", kicker: "Made · Worked at", bg: "#f2ead7", fg: "#0d100e", accent: "#1d5e3f" });
 }

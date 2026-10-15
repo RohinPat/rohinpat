@@ -43,7 +43,9 @@ export const metadata: Metadata = {
     "Northeastern University",
     "Machine Learning",
     "Computer Vision",
-    "TensorFlow",
+    "PyTorch",
+    "CLIP",
+    "FastAPI",
     "BLE",
   ],
   openGraph: {

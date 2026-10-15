@@ -21,7 +21,7 @@ export default function Contact() {
   return (
     <section className="signal min-h-[100svh] flex flex-col justify-center px-4 md:px-10 pt-28 pb-20">
       <div className="max-w-6xl w-full mx-auto">
-        <h1>Say hi.</h1>
+        <h1>Say hi</h1>
 
         <button
           type="button"

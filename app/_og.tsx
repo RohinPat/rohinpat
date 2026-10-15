@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { site } from "@/lib/site";
+import { site, siteHost } from "@/lib/site";
 
 // Shared social card for inner pages: the page's own colour, its title set
 // huge, the name underneath. Archivo is bundled (SIL OFL, app/_fonts).
@@ -11,12 +11,15 @@ export async function pageCard({
   bg,
   fg,
   accent,
+  titleSize = 230,
 }: {
   title: string;
   kicker: string;
   bg: string;
   fg: string;
   accent: string;
+  /** long titles (e.g. a case study) need a smaller size than one word */
+  titleSize?: number;
 }) {
   const archivo = await fetch(
     new URL("./_fonts/archivo-latin-900-normal.woff", import.meta.url),
@@ -40,12 +43,12 @@ export async function pageCard({
         <div style={{ display: "flex", fontSize: 26, letterSpacing: 4, textTransform: "uppercase", color: accent }}>
           {kicker}
         </div>
-        <div style={{ display: "flex", fontSize: 230, fontWeight: 900, lineHeight: 0.85, letterSpacing: -9, textTransform: "uppercase" }}>
+        <div style={{ display: "flex", fontSize: titleSize, fontWeight: 900, lineHeight: 0.85, letterSpacing: -titleSize / 25, textTransform: "uppercase" }}>
           {title}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 30, fontWeight: 900, textTransform: "uppercase" }}>
           <span>{site.name}</span>
-          <span style={{ color: accent }}>rohinpat.vercel.app</span>
+          <span style={{ color: accent }}>{siteHost}</span>
         </div>
       </div>
     ),

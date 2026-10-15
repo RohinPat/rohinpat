@@ -8,19 +8,21 @@ import Dither from "@/components/offhours/Dither";
 import ShotChart from "@/components/offhours/ShotChart";
 import Contours from "@/components/offhours/Contours";
 import Keyboard from "@/components/offhours/Keyboard";
+import Link from "next/link";
 
 const PLAYLIST = "https://open.spotify.com/playlist/364G4Hr4KtJzhWpoHz4MFf";
 
-// /interests — "Off hours". Nine things I like, each made into a small
-// piece you can poke at. No scores, no settings, nothing saved.
+// /interests — "Off hours". Nine things I like outside work, each drawn in
+// code. No scores, no settings, nothing saved.
 export default function Interests() {
   return (
     <section className="px-4 md:px-10 pb-16 md:pb-24">
       <div className="max-w-6xl mx-auto">
-        <h1>Off hours.</h1>
+        <h1>Off hours</h1>
         <p className="-mt-6 mb-10 md:mb-14 text-lg md:text-xl muted max-w-xl text-pretty">
-          Nine things I&apos;m into, each turned into something you can poke at.
-          Everything here moves. Go on.
+          Nine things I like outside work, drawn in code. They animate with
+          requestAnimationFrame, pause when you scroll past, work from a keyboard and hold
+          still if you prefer reduced motion. <Link href="/colophon" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">How they&apos;re built</Link>.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 auto-rows-[300px] gap-3 md:gap-4">

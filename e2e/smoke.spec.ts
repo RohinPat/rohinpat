@@ -10,7 +10,7 @@ const routes: Array<{
 }> = [
   { path: "/",            titleContains: "Rohin Patel",     visibleText: /I build iOS apps/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /SiPhox Health/ },
-  { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I'm into/ },
+  { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I like outside work/ },
   { path: "/contact",     titleContains: "Contact",         visibleText: /rohinp1124@gmail\.com/ },
 ];
 

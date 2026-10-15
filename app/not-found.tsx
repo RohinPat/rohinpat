@@ -17,9 +17,9 @@ export default function NotFound() {
         >
           404
         </p>
-        <h1>Off the pitch.</h1>
+        <h1>Nothing here</h1>
         <p className="-mt-6 mb-10 muted text-lg max-w-prose">
-          That page doesn&apos;t exist. Probably a stale link.
+          That page doesn&apos;t exist, or it moved. Probably a stale link.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
@@ -32,7 +32,7 @@ export default function NotFound() {
             href="/projects"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-[var(--fg)] transition-colors"
           >
-            See the work
+            All work
           </Link>
         </div>
       </div>
