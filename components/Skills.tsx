@@ -85,7 +85,7 @@ export default function Skills() {
                       aria-pressed={isSelected}
                       className={`inline-flex items-baseline gap-1.5 px-2.5 py-1 text-sm border transition-all duration-150 ${
                         isSelected
-                          ? "bg-accent text-white border-accent"
+                          ? "bg-accent text-[var(--on-accent)] border-accent"
                           : shipped
                             ? "border-[var(--border-strong)] hover:border-accent hover:text-[var(--fg)]"
                             : "border-[var(--border)] dim hover:text-[var(--fg)]"

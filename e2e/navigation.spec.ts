@@ -21,22 +21,19 @@ test("nav links route between top-level pages", async ({ page }) => {
 test("Hero CTAs go to the right places", async ({ page }) => {
   await page.goto("/");
 
-  // The Hero stagger-animates its content in over ~2.5s after load. Wait for
-  // the primary CTA to be fully visible before interacting, so we're clicking
-  // a stable target rather than a mid-animation one.
-  const projects = page.getByRole("link", { name: /See the projects/i });
+  const projects = page.getByRole("link", { name: /See the work/i });
   await expect(projects).toBeVisible();
   await projects.click();
   await expect(page).toHaveURL(/\/projects$/);
 
   await page.goBack();
-  const contact = page.getByRole("link", { name: /Get in touch/i });
+  const contact = page.getByRole("link", { name: /^Get in touch$/i });
   await expect(contact).toBeVisible();
   await contact.click();
   await expect(page).toHaveURL(/\/contact$/);
 
   await page.goBack();
-  const interests = page.getByRole("link", { name: /just see what I'm into/i });
+  const interests = page.getByRole("link", { name: /play with the toys/i });
   await expect(interests).toBeVisible();
   await interests.click();
   await expect(page).toHaveURL(/\/interests$/);

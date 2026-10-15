@@ -8,7 +8,7 @@ const routes: Array<{
   titleContains: string;
   visibleText: RegExp;
 }> = [
-  { path: "/",            titleContains: "Rohin Patel",     visibleText: /Incoming Software Engineer at WHOOP/ },
+  { path: "/",            titleContains: "Rohin Patel",     visibleText: /I build iOS apps/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /What I've built/ },
   { path: "/experience",  titleContains: "Experience",      visibleText: /Where I've worked/ },
   { path: "/skills",      titleContains: "Skills",          visibleText: /I mostly live in/ },
@@ -83,4 +83,34 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
   }));
   expect(cookies).toBe("");
   expect(keys).toEqual([]);
+});
+
+test("signal lab: heart-rate slider drives the readout", async ({ page }) => {
+  await page.goto("/");
+  const slider = page.getByLabel("Heart rate");
+  await slider.scrollIntoViewIfNeeded();
+  await slider.fill("120");
+  await expect(page.getByText("120 bpm")).toBeVisible();
+  await expect(page.getByRole("img", { name: /120 beats per minute/ })).toBeAttached();
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect(page.getByText("72 bpm")).toBeVisible();
+});
+
+test("work filmstrip: next/previous step through frames", async ({ page }) => {
+  await page.goto("/");
+  const prev = page.getByRole("button", { name: "Previous project" });
+  const next = page.getByRole("button", { name: "Next project" });
+  await next.scrollIntoViewIfNeeded();
+  await expect(prev).toBeDisabled();
+  await next.click();
+  await expect(prev).toBeEnabled();
+  await expect(page.getByRole("link", { name: /Closet Organizer/ }).last()).toHaveAttribute(
+    "href",
+    "/projects#closet-organizer",
+  );
+});
+
+test("project deep link opens that project", async ({ page }) => {
+  await page.goto("/projects#aimessage");
+  await expect(page.locator("#aimessage button[aria-expanded]")).toHaveAttribute("aria-expanded", "true");
 });

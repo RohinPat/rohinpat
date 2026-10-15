@@ -3,15 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0a0a0a;
-  --bg-elevated: #141414;
+  /* Palette — every text/background pair below clears WCAG AA (4.5:1).
+     Rule of thumb: signal is a fill. Text on signal is ink. Signal-coloured
+     text only ever sits on ink. */
+  --ink: #0c0c0b;
+  --paper: #f1eee7;
+  --paper-muted: #5f5b54;      /* 5.8:1 on paper */
+  --signal: #ff4a1c;           /* 5.8:1 against ink, either way round */
+  --garnet: #a50044;           /* Barça card only */
+
+  --bg: var(--ink);
+  --bg-elevated: #161615;
   --fg: #ededed;
   --fg-muted: #9ca3af;
-  /* Text tokens are tuned to clear WCAG AA (4.5:1) on --bg and --bg-elevated. */
   --fg-dim: #818896;
-  --accent: #a50044;        /* fills, borders, buttons (white on it = 7.8:1) */
-  --accent-text: #ec4d82;   /* accent used as text — #a50044 is only 2.5:1 here */
-  --accent-soft: rgba(165, 0, 68, 0.12);
+  --accent: var(--signal);         /* fills, borders, buttons */
+  --accent-hover: #ff6a42;
+  --accent-text: var(--signal);    /* accent as text, on ink only */
+  --on-accent: var(--ink);         /* text placed on an accent fill */
+  --accent-soft: rgba(255, 74, 28, 0.12);
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
 }
@@ -29,8 +39,8 @@ body {
 }
 
 ::selection {
-  background: var(--accent);
-  color: white;
+  background: var(--signal);
+  color: var(--ink);
 }
 
 ::-webkit-scrollbar { width: 10px; }
@@ -138,3 +148,77 @@ a { color: inherit; }
 .legal-prose table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; display: block; overflow-x: auto; }
 .legal-prose th, .legal-prose td { text-align: left; vertical-align: top; padding: 0.6rem 0.75rem 0.6rem 0; border-bottom: 1px solid var(--border); }
 .legal-prose th { color: var(--fg); font-weight: 600; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* ---------------------------------------------------------------------------
+   Display type — Archivo at its narrowest width. Every page title uses it.
+   ------------------------------------------------------------------------ */
+.display,
+main h1 {
+  font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+  font-stretch: 62%;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.88;
+}
+/* Page titles: one scale everywhere (beats the per-page Tailwind sizes). */
+main h1:not(.hero-name) {
+  font-size: clamp(3.25rem, 9.5vw, 8rem);
+  line-height: 0.88;
+  letter-spacing: -0.01em;
+  margin-bottom: 2.5rem;
+}
+
+/* Paper sections: warm stock with a faint drafting grid. */
+.paper {
+  --fg: var(--ink);
+  --fg-muted: var(--paper-muted);
+  --fg-dim: var(--paper-muted);
+  --border: rgba(12, 12, 11, 0.12);
+  --border-strong: rgba(12, 12, 11, 0.28);
+  --accent-text: var(--ink);
+  background-color: var(--paper);
+  color: var(--ink);
+}
+.paper-grid {
+  background-image:
+    linear-gradient(rgba(12, 12, 11, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(12, 12, 11, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* Signal sections: full-bleed colour block, ink type. */
+.signal {
+  --fg: var(--ink);
+  --fg-muted: #3a1307;         /* 4.9:1 on signal */
+  --fg-dim: #3a1307;
+  --border: rgba(12, 12, 11, 0.18);
+  --border-strong: rgba(12, 12, 11, 0.4);
+  --accent-text: var(--ink);
+  background-color: var(--signal);
+  color: var(--ink);
+}
+
+/* Beat pulse on the lab readout */
+@keyframes beat {
+  0% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Marquee */
+@keyframes marquee { to { transform: translateX(-50%); } }
+.marquee-track { animation: marquee 38s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+  [class*="animate-[beat"] { animation: none !important; }
+}
+
+/* Filmstrip sprocket holes */
+.sprockets {
+  height: 14px;
+  background-image: radial-gradient(circle at 50% 50%, var(--paper) 0 3.5px, transparent 4px);
+  background-size: 22px 14px;
+  background-repeat: repeat-x;
+  opacity: 0.5;
+}

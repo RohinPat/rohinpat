@@ -17,7 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
 import Link from "next/link";
-import { site } from "@/lib/site";
+import { headline, site } from "@/lib/site";
 
 type Vibe = {
   id: string;
@@ -218,7 +218,7 @@ export default function Contact() {
                     onClick={() => pickVibe(v)}
                     className={`group inline-flex items-center gap-2 px-3 py-1.5 border font-mono text-xs uppercase tracking-wider transition-all duration-200 ${
                       active
-                        ? "border-accent bg-accent text-white"
+                        ? "border-accent bg-accent text-[var(--on-accent)]"
                         : "border-[var(--border-strong)] muted hover:border-accent hover:text-[var(--fg)]"
                     }`}
                   >
@@ -282,7 +282,7 @@ export default function Contact() {
                 href={mailtoHref}
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.97 }}
-                className="group inline-flex items-center gap-2 px-5 py-3 bg-accent text-white font-mono text-xs uppercase tracking-[0.2em] hover:bg-[#c4005a] transition-colors"
+                className="group inline-flex items-center gap-2 px-5 py-3 bg-accent text-[var(--on-accent)] font-mono text-xs uppercase tracking-[0.2em] hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <Send size={14} aria-hidden="true" />
                 Open in mail app
@@ -414,15 +414,11 @@ export default function Contact() {
             </h3>
             <ul className="space-y-2 muted">
               <li className="flex gap-3">
-                <span className="accent">—</span>Just graduated NEU CS &apos;26
+                <span className="accent">—</span>
+                {headline}
               </li>
               <li className="flex gap-3">
-                <span className="accent">—</span>Returning to WHOOP full-time
-                July 2026
-              </li>
-              <li className="flex gap-3">
-                <span className="accent">—</span>Building solo until then —
-                open to projects + ideas
+                <span className="accent">—</span>Always up for side-project ideas
               </li>
               <li className="flex gap-3">
                 <span className="accent">—</span>Or just say hi

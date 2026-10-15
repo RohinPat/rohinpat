@@ -190,7 +190,7 @@ export default function Tachometer() {
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={isRed ? "#a50044" : "#9ca3af"}
+                stroke={isRed ? "#ff4a1c" : "#9ca3af"}
                 strokeWidth={2}
                 strokeLinecap="round"
               />
@@ -198,7 +198,7 @@ export default function Tachometer() {
                 x={labelX}
                 y={labelY}
                 textAnchor="middle"
-                fill={isRed ? "#ec4d82" : "#818896"}
+                fill={isRed ? "#ff4a1c" : "#818896"}
                 fontSize="7"
                 fontFamily="monospace"
                 fontWeight={600}
@@ -212,7 +212,7 @@ export default function Tachometer() {
         {/* Redline arc */}
         <path
           d={describeArc(100, 100, 76, REDLINE / MAX_RPM, 1)}
-          stroke="#a50044"
+          stroke="#ff4a1c"
           strokeWidth="2.5"
           fill="none"
         />
@@ -223,12 +223,12 @@ export default function Tachometer() {
           y1="100"
           x2={nx}
           y2={ny}
-          stroke={isRedline ? "#a50044" : "#ededed"}
+          stroke={isRedline ? "#ff4a1c" : "#ededed"}
           strokeWidth="2.6"
           strokeLinecap="round"
           style={{ filter: isRedline ? "drop-shadow(0 0 4px rgba(165,0,68,0.6))" : "none" }}
         />
-        <circle cx="100" cy="100" r="7" fill={isRedline ? "#a50044" : "#ededed"} />
+        <circle cx="100" cy="100" r="7" fill={isRedline ? "#ff4a1c" : "#ededed"} />
         <circle cx="100" cy="100" r="2" fill="#0a0a0a" />
 
         {/* RPM × 1000 label */}
@@ -247,7 +247,7 @@ export default function Tachometer() {
         onPointerUp={stop}
         onPointerLeave={stop}
         onPointerCancel={stop}
-        className="select-none px-6 py-3 border border-[var(--border-strong)] hover:border-accent hover:accent transition-colors font-mono text-xs uppercase tracking-[0.2em] active:bg-accent active:text-white active:border-accent touch-none"
+        className="select-none px-6 py-3 border border-[var(--border-strong)] hover:border-accent hover:accent transition-colors font-mono text-xs uppercase tracking-[0.2em] active:bg-accent active:text-[var(--on-accent)] active:border-accent touch-none"
       >
         Hold to rev
       </button>

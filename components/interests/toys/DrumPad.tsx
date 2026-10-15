@@ -129,7 +129,7 @@ export default function DrumPad() {
               onPointerDown={() => trigger(p.id)}
               className={`relative aspect-square border-2 transition-all duration-100 select-none active:scale-95 ${
                 active
-                  ? "bg-accent border-accent text-white shadow-[0_0_20px_rgba(165,0,68,0.5)]"
+                  ? "bg-accent border-accent text-[var(--on-accent)] shadow-[0_0_20px_rgba(255,74,28,0.45)]"
                   : "border-[var(--border-strong)] hover:border-accent text-[var(--fg)]"
               }`}
             >

@@ -1,4 +1,4 @@
-import { site } from "@/lib/site";
+import { description, site } from "@/lib/site";
 
 // Schema.org Person JSON-LD. Helps search engines + LinkedIn render a rich card.
 export default function PersonJsonLd() {
@@ -8,17 +8,16 @@ export default function PersonJsonLd() {
     name: site.name,
     url: site.url,
     email: `mailto:${site.email}`,
-    jobTitle: "iOS Engineer (Incoming, WHOOP, July 2026)",
-    description:
-      "Incoming iOS Engineer at WHOOP (July 2026). Northeastern CS '26. Building solo projects in the meantime.",
+    jobTitle: site.role,
+    description,
     worksFor: {
       "@type": "Organization",
-      name: "WHOOP",
-      url: "https://whoop.com",
+      name: site.employer,
+      url: site.employerUrl,
     },
     alumniOf: {
       "@type": "CollegeOrUniversity",
-      name: "Northeastern University",
+      name: site.school,
       sameAs: "https://www.northeastern.edu",
     },
     address: {

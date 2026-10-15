@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test('typing "siu" anywhere triggers the goal banner', async ({ page }) => {
   await page.goto("/");
   // Click on the body to make sure no input is focused
-  await page.locator("h1").first().click();
+  await page.mouse.click(4, 420); // blank margin — nothing focused
 
   await page.keyboard.type("siu", { delay: 60 });
 
@@ -14,14 +14,14 @@ test('typing "siu" anywhere triggers the goal banner', async ({ page }) => {
 
 test('typing "barca" also triggers', async ({ page }) => {
   await page.goto("/interests");
-  await page.locator("h1").first().click();
+  await page.mouse.click(4, 420); // blank margin — nothing focused
   await page.keyboard.type("barca", { delay: 60 });
   await expect(page.getByText(/Goallllll/i)).toBeVisible({ timeout: 2000 });
 });
 
 test("Konami code triggers the goal banner", async ({ page }) => {
   await page.goto("/");
-  await page.locator("h1").first().click();
+  await page.mouse.click(4, 420); // blank margin — nothing focused
 
   const keys = [
     "ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown",

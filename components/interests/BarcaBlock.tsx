@@ -8,9 +8,9 @@ function Crest() {
     <div className="w-9 h-11 relative border-2 border-[var(--fg)] rounded-b-[100%] overflow-hidden shrink-0">
       <div className="absolute inset-0 flex flex-col">
         <div className="flex-1 flex">
-          <div className="flex-1 bg-accent" />
+          <div className="flex-1 bg-[var(--garnet)]" />
           <div className="flex-1 bg-[#1B3A6B]" />
-          <div className="flex-1 bg-accent" />
+          <div className="flex-1 bg-[var(--garnet)]" />
           <div className="flex-1 bg-[#1B3A6B]" />
         </div>
         <div className="h-1/2 bg-[var(--fg)] flex items-center justify-center">
@@ -34,17 +34,17 @@ export default function BarcaBlock() {
       decoration={
         <>
           <div className="h-1.5 flex absolute top-0 left-0 right-0">
-            <div className="flex-1 bg-accent" />
+            <div className="flex-1 bg-[var(--garnet)]" />
             <div className="flex-1 bg-[#1B3A6B]" />
-            <div className="flex-1 bg-accent" />
+            <div className="flex-1 bg-[var(--garnet)]" />
             <div className="flex-1 bg-[#1B3A6B]" />
-            <div className="flex-1 bg-accent" />
+            <div className="flex-1 bg-[var(--garnet)]" />
           </div>
           <div className="h-1.5 flex absolute bottom-0 left-0 right-0">
             <div className="flex-1 bg-[#1B3A6B]" />
-            <div className="flex-1 bg-accent" />
+            <div className="flex-1 bg-[var(--garnet)]" />
             <div className="flex-1 bg-[#1B3A6B]" />
-            <div className="flex-1 bg-accent" />
+            <div className="flex-1 bg-[var(--garnet)]" />
             <div className="flex-1 bg-[#1B3A6B]" />
           </div>
         </>

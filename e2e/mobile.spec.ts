@@ -26,7 +26,8 @@ test("mobile nav opens and closes", async ({ page }) => {
   await page.goto("/");
   const toggle = page.getByRole("button", { name: /toggle menu/i });
   await toggle.click();
-  await expect(page.getByRole("link", { name: /^Interests$/ })).toBeVisible();
-  await page.getByRole("link", { name: /^Projects$/ }).click();
+  const menu = page.locator("#mobile-menu");
+  await expect(menu.getByRole("link", { name: /^Interests$/ })).toBeVisible();
+  await menu.getByRole("link", { name: /^Projects$/ }).click();
   await expect(page).toHaveURL(/\/projects$/);
 });

@@ -23,7 +23,7 @@ export default function NotFound() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/"
-            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
+            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-[var(--on-accent)] transition-colors"
           >
             Back home
             <span className="transition-transform group-hover:translate-x-0.5">→</span>
