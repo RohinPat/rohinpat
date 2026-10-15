@@ -72,7 +72,7 @@ const MOTIFS: Record<string, () => JSX.Element> = {
   ),
 
   // A heartbeat on a strap.
-  "whoop-onboarding": () => (
+  whoop: () => (
     <g>
       <rect x={20} y={88} width={200} height={64} rx={32} />
       <path
@@ -86,7 +86,7 @@ const MOTIFS: Record<string, () => JSX.Element> = {
   ),
 
   // A wireframe body mesh: stacked ellipses + meridians.
-  "siphox-body-scan": () => (
+  siphox: () => (
     <g>
       {[40, 68, 96, 124, 152, 180, 204].map((y, i) => {
         const rx = [26, 44, 50, 46, 40, 34, 22][i];
@@ -97,7 +97,7 @@ const MOTIFS: Record<string, () => JSX.Element> = {
   ),
 
   // Detection boxes over a road.
-  "varidx-traffic": () => (
+  varidx: () => (
     <g>
       <path d="M60 220L104 30M180 220L136 30" />
       <path d="M120 40v20M120 90v24M120 146v30" strokeDasharray="0" />

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Interests from "@/components/Interests";
 
 export const metadata: Metadata = {
-  title: "Interests",
+  title: "Off hours",
   description:
-    "Watches, cars, Barça, music, and a few other things I'd happily talk your ear off about.",
+    "Watches, cars, Barça, vinyl, skiing and more — each turned into a small interactive piece.",
 };
 
 export default function InterestsPage() {

@@ -9,11 +9,9 @@ const routes: Array<{
   visibleText: RegExp;
 }> = [
   { path: "/",            titleContains: "Rohin Patel",     visibleText: /I build iOS apps/ },
-  { path: "/projects",    titleContains: "Work",            visibleText: /What I've built/ },
-  { path: "/experience",  titleContains: "Experience",      visibleText: /Where I've worked/ },
-  { path: "/skills",      titleContains: "Skills",          visibleText: /I mostly live in/ },
-  { path: "/interests",   titleContains: "Interests",       visibleText: /What I'm into/ },
-  { path: "/contact",     titleContains: "Contact",         visibleText: /Just email me/ },
+  { path: "/projects",    titleContains: "Work",            visibleText: /SiPhox Health/ },
+  { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I'm into/ },
+  { path: "/contact",     titleContains: "Contact",         visibleText: /patel\.rohin@northeastern\.edu/ },
 ];
 
 for (const { path, titleContains, visibleText } of routes) {
@@ -45,31 +43,19 @@ test("homepage has scroll progress bar", async ({ page }) => {
   await expect(bar).toBeAttached();
 });
 
-test("Spotify embed on /interests loads only after the visitor asks", async ({ page }) => {
+test("Off hours makes no third-party requests, even when you play", async ({ page }) => {
   const thirdParty: string[] = [];
   page.on("request", (req) => {
     const host = new URL(req.url()).hostname;
     if (host !== "localhost" && host !== "127.0.0.1") thirdParty.push(host);
   });
-
   await page.goto("/interests");
-  // Wait for hydration so the toggle is interactive.
-  const toggle = page.getByRole("switch", { name: /fun mode/i }).first();
-  await expect(toggle).toBeVisible({ timeout: 10_000 });
-
-  if ((await toggle.getAttribute("aria-checked")) === "true") {
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
-  }
-
-  // Click-to-load: no iframe and no third-party requests until asked.
-  const iframe = page.locator('iframe[src*="open.spotify.com/embed/playlist"]');
-  await expect(page.getByRole("button", { name: /load spotify player/i })).toBeVisible();
-  await expect(iframe).toHaveCount(0);
+  await page.getByRole("button", { name: /spin the record/i }).click();
+  await page.mouse.click(4, 420);
+  await page.keyboard.type("hello");
+  await page.waitForTimeout(500);
   expect(thirdParty).toEqual([]);
-
-  await page.getByRole("button", { name: /load spotify player/i }).click();
-  await expect(iframe).toBeAttached({ timeout: 5_000 });
+  await expect(page.getByRole("link", { name: /playlist/i })).toHaveAttribute("href", /open\.spotify\.com\/playlist/);
 });
 
 test("a plain visit writes nothing to cookies or local storage", async ({ page }) => {
@@ -77,6 +63,10 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
     await page.goto(path);
     await page.waitForTimeout(500);
   }
+  // even after interacting with the pieces
+  await page.goto("/interests");
+  await page.getByRole("button", { name: /spin the record/i }).click();
+  await page.keyboard.type("abc");
   const { cookies, keys } = await page.evaluate(() => ({
     cookies: document.cookie,
     keys: Object.keys(localStorage),
@@ -110,7 +100,17 @@ test("work filmstrip: next/previous step through frames", async ({ page }) => {
   );
 });
 
-test("project deep link opens that project", async ({ page }) => {
+test("project deep link lands on that entry", async ({ page }) => {
   await page.goto("/projects#aimessage");
-  await expect(page.locator("#aimessage button[aria-expanded]")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#aimessage")).toBeInViewport();
+});
+
+test("watch lume lights up while held", async ({ page }) => {
+  await page.goto("/interests");
+  const watch = page.getByRole("button", { name: /watch face/i });
+  await watch.hover();
+  await page.mouse.down();
+  await expect(watch).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.up();
+  await expect(watch).toHaveAttribute("aria-pressed", "false");
 });

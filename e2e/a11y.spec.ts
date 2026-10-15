@@ -8,8 +8,6 @@ import AxeBuilder from "@axe-core/playwright";
 const routes = [
   "/",
   "/projects",
-  "/experience",
-  "/skills",
   "/interests",
   "/contact",
   "/privacy",

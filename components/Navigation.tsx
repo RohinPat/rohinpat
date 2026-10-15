@@ -6,11 +6,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { name: "Projects",   href: "/projects" },
-  { name: "Experience", href: "/experience" },
-  { name: "Skills",     href: "/skills" },
-  { name: "Interests",  href: "/interests" },
-  { name: "Contact",    href: "/contact" },
+  { name: "Work",      href: "/projects" },
+  { name: "Off hours", href: "/interests" },
+  { name: "Contact",   href: "/contact" },
 ];
 
 // Floating ink pill — reads the same over paper, ink and signal sections.

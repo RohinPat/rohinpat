@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { facts, headline, site } from "@/lib/site";
+import { headline } from "@/lib/site";
 
 // Hero: a giant split name on drafting paper with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
@@ -48,7 +48,7 @@ const notifications = [
     mark: "W",
     title: headline,
     body: "SwiftUI, Core Bluetooth, real-time health data.",
-    href: "/experience",
+    href: "/projects#whoop",
   },
   {
     app: "Projects",
@@ -58,10 +58,10 @@ const notifications = [
     href: "/projects#closet-organizer",
   },
   {
-    app: "Interests",
-    mark: "I",
-    title: "9 toys to play with",
-    body: "Rev a V10, take a free kick, beat my 2048 score.",
+    app: "Off hours",
+    mark: "O",
+    title: "Nine small experiments",
+    body: "Watches, cars, Barça, vinyl, skiing — made interactive.",
     href: "/interests",
   },
 ];
@@ -152,31 +152,14 @@ export default function LockScreenHero() {
             <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
           </Link>
           <Link
-            href="/contact"
+            href="/interests"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--paper)] transition-colors"
           >
-            Get in touch
-          </Link>
-          <Link
-            href="/interests"
-            className="link-underline font-mono text-xs uppercase tracking-wider muted hover:text-[var(--fg)] transition-colors"
-          >
-            or play with the toys →
+            Off hours
           </Link>
         </div>
       </div>
 
-      {/* Fact grid */}
-      <dl className="relative z-20 mt-8 grid grid-cols-2 md:grid-cols-4 border-t border-[var(--border-strong)]">
-        {facts.map((f) => (
-          <div key={f.label} className="pt-3 pb-1 pr-4">
-            <dt className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.18em] muted">
-              {f.label}
-            </dt>
-            <dd className="mt-1 text-sm md:text-base font-medium">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
     </section>
   );
 }

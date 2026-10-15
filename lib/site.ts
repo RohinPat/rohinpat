@@ -21,23 +21,3 @@ export const site = {
 export const headline = `${site.role} at ${site.employer}`;
 
 export const description = `${headline}. ${site.schoolShort}. I build iOS apps, ML systems and the occasional toy.`;
-
-// Disciplines marquee on the homepage.
-export const disciplines = [
-  "SwiftUI",
-  "Core Bluetooth",
-  "Computer Vision",
-  "PyTorch",
-  "TypeScript",
-  "FastAPI",
-  "Real-time data",
-  "Design engineering",
-] as const;
-
-// Mondragon-style fact grid under the homepage hero.
-export const facts = [
-  { label: "Based in", value: site.location },
-  { label: "Working at", value: site.employer },
-  { label: "Focus", value: "iOS · ML · Web" },
-  { label: "Studied", value: "CS + AI, Northeastern" },
-] as const;

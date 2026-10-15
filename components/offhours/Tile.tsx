@@ -1,0 +1,40 @@
+// A gallery tile: full-bleed artwork on top, a caption strip underneath.
+// Artwork is decorative (aria-hidden); the caption carries the meaning.
+
+export default function Tile({
+  index,
+  label,
+  line,
+  hint,
+  className = "",
+  artClassName = "",
+  children,
+}: {
+  index: number;
+  label: string;
+  line: string;
+  hint: string;
+  className?: string;
+  artClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <article
+      className={`group relative flex flex-col overflow-hidden border border-[var(--border-strong)] bg-[var(--bg-elevated)] ${className}`}
+    >
+      <div className={`relative flex-1 min-h-0 overflow-hidden ${artClassName}`}>
+        {children}
+      </div>
+      <div className="flex items-baseline justify-between gap-4 px-4 py-3 border-t border-[var(--border-strong)]">
+        <div className="min-w-0">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.2em]">
+            <span className="muted">{String(index).padStart(2, "0")} — </span>
+            {label}
+          </h2>
+          <p className="text-sm muted mt-0.5 truncate">{line}</p>
+        </div>
+        <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] accent">{hint}</p>
+      </div>
+    </article>
+  );
+}

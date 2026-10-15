@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { site } from "@/lib/site";
+import FooterCta from "./FooterCta";
 
 const pages = [
-  { name: "Projects", href: "/projects" },
-  { name: "Experience", href: "/experience" },
-  { name: "Skills", href: "/skills" },
-  { name: "Interests", href: "/interests" },
+  { name: "Work", href: "/projects" },
+  { name: "Off hours", href: "/interests" },
   { name: "Contact", href: "/contact" },
 ];
 
@@ -22,21 +21,7 @@ export default function SiteFooter() {
     <footer className="relative z-10 border-t border-[var(--border)] overflow-hidden">
       <div className="px-4 md:px-10 pt-16 md:pt-24 max-w-6xl mx-auto">
         <div className="grid md:grid-cols-12 gap-10">
-          <div className="md:col-span-7">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] accent mb-4">Next</p>
-            <Link
-              href="/contact"
-              className="group display block hover:text-[var(--signal)] transition-colors"
-              style={{ fontSize: "clamp(3rem, 9vw, 7.5rem)" }}
-            >
-              Got an idea?
-              <br />
-              Say hi{" "}
-              <span aria-hidden="true" className="inline-block transition-transform group-hover:translate-x-2">
-                →
-              </span>
-            </Link>
-          </div>
+          <FooterCta />
 
           <nav aria-label="Footer" className="md:col-span-5 grid grid-cols-2 gap-8 font-mono text-xs uppercase tracking-wider">
             <div>

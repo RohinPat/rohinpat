@@ -222,3 +222,7 @@ main h1:not(.hero-name) {
   background-repeat: repeat-x;
   opacity: 0.5;
 }
+
+/* Keyboard piece: key height tracks the board's width */
+.kb { container-type: inline-size; }
+.kb-key { height: 5.6cqw; min-height: 14px; }

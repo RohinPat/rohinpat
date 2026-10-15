@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { projects, type Project } from "@/lib/projects";
+import { projects, type Entry } from "@/lib/projects";
 import Motif from "./Motif";
 
 // Selected work as a strip of film frames with a frame counter. Native
@@ -104,7 +104,7 @@ export default function WorkFilmstrip() {
               <span className="display" style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)" }}>
                 All projects →
               </span>
-              <span className="mt-2 text-sm opacity-80">The full write-ups, with problem, approach and impact.</span>
+              <span className="mt-2 text-sm opacity-80">Everything I&apos;ve made and where I&apos;ve worked.</span>
             </Link>
           </li>
         </ol>
@@ -114,7 +114,7 @@ export default function WorkFilmstrip() {
   );
 }
 
-function Frame({ project, index, total }: { project: Project; index: number; total: number }) {
+function Frame({ project, index, total }: { project: Entry; index: number; total: number }) {
   const style = FRAME_STYLES[index % FRAME_STYLES.length];
   return (
     <Link
@@ -126,7 +126,7 @@ function Frame({ project, index, total }: { project: Project; index: number; tot
           {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
         </span>
         <span>
-          {project.category} · {project.year}
+          {project.kind === "work" ? "Work" : "Made"} · {project.year}
         </span>
       </div>
 
@@ -136,13 +136,13 @@ function Frame({ project, index, total }: { project: Project; index: number; tot
 
       <div>
         <h3 className="display" style={{ fontSize: "clamp(1.9rem, 4.4vw, 2.6rem)", lineHeight: 0.92 }}>
-          {project.title.split(" — ")[0]}
+          {project.title}
         </h3>
         <p className="mt-2 text-sm leading-snug line-clamp-3 text-[var(--fg-muted)]">
-          {project.description}
+          {project.line}
         </p>
         <span className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] font-semibold">
-          Read the story
+          More
           <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
         </span>
       </div>

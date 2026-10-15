@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Pages retired when the site went from job hunt to portfolio.
+  async redirects() {
+    return [
+      { source: "/experience", destination: "/projects", permanent: true },
+      { source: "/skills", destination: "/projects", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

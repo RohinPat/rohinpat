@@ -4,8 +4,6 @@ import { site } from "@/lib/site";
 const ROUTES = [
   "",
   "/projects",
-  "/experience",
-  "/skills",
   "/interests",
   "/contact",
   "/privacy",
