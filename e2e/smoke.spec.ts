@@ -145,3 +145,15 @@ test("footer sign-off only on home; inner pages get one quiet line", async ({ pa
   await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toHaveCount(0);
   await expect(page.locator("footer").getByRole("link", { name: /privacy/i })).toBeVisible();
 });
+
+test("colophon measures this page in the browser: no other domains, no cookies", async ({ page }) => {
+  await page.goto("/colophon");
+  await expect(page.getByRole("heading", { level: 1, name: /Colophon/ })).toBeVisible();
+  const stat = (label: string) => page.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd[1]");
+  await expect(stat("Requests")).toHaveText(/^\d+$/);
+  await expect(stat("Other domains")).toHaveText("0");
+  await expect(stat("Cookies")).toHaveText("0");
+  await expect(stat("Storage keys")).toHaveText("0");
+  await page.getByRole("button", { name: "Measure again" }).click();
+  await expect(stat("Other domains")).toHaveText("0");
+});

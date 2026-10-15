@@ -11,6 +11,7 @@ const routes = [
   "/projects/closet-organizer",
   "/interests",
   "/contact",
+  "/colophon",
   "/privacy",
   "/terms",
   "/cookies",

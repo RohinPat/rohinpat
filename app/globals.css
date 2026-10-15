@@ -235,6 +235,8 @@ main h1:not(.hero-name) {
   .pipe-sub { font-size: calc(var(--u) * 10.5); }
 }
 
+/* In a layer, so Tailwind utilities on individual elements can still win. */
+@layer components {
 /* ---------------------------------------------------------------------------
    Long-form writing (case studies, colophon). Body type at full width for
    reading, ~65 characters a line, a steady vertical rhythm. Headings drop the
@@ -344,6 +346,7 @@ main h1:not(.hero-name) {
 .tok-keyword { color: #8ad9a8; }
 .tok-name { color: #f2ead7; font-weight: 500; }
 .tok-decorator { color: #b9c8bd; }
+}
 
 /* Keyboard piece: key height tracks the board's width */
 .kb { container-type: inline-size; }
