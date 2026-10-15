@@ -131,20 +131,6 @@ test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
   }
 });
 
-test("shop lab: options rebuild the product and the bag counts", async ({ page }) => {
-  await page.goto("/");
-  const shop = page.locator("#lab-shop");
-  await shop.scrollIntoViewIfNeeded();
-  await expect(shop.getByText("Racing Knit")).toBeVisible();
-  // click the visible swatch / segment, as a person would
-  await shop.locator('label:has(input[value="Garnet"])').click();
-  await shop.locator('label:has(input[value="Leather"])').click();
-  await expect(shop.getByLabel("Garnet")).toBeChecked();
-  await expect(shop.getByText("Garnet Leather")).toBeVisible();
-  await shop.getByRole("button", { name: /add to bag/i }).click();
-  await expect(shop.getByRole("status")).toContainText("Added Garnet Leather");
-});
-
 test("footer sign-off only on home; inner pages get one quiet line", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toBeVisible();

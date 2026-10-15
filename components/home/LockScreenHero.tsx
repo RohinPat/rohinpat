@@ -58,13 +58,6 @@ const notifications = [
     body: "Watches, cars, Barça, vinyl, skiing — made interactive.",
     href: "/interests",
   },
-  {
-    app: "Lab",
-    mark: "L",
-    title: "Lab 02 — the shop",
-    body: "Pick a strap and watch it build. Further down this page.",
-    href: "#lab-shop",
-  },
 ];
 
 // Notifications rotate slowly so the phone feels switched on: every few

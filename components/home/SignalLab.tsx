@@ -163,7 +163,7 @@ export default function SignalLab() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-12 gap-8 items-end mb-10 md:mb-14">
           <div className="md:col-span-7">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4">Lab 01</p>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4">Lab</p>
             <h2 id="lab-title" className="display t-l">
               Never miss
               <br />a beat.
