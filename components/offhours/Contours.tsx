@@ -103,17 +103,17 @@ export default function Contours() {
 
       // cup + flag
       const cx = CUP.x * w, cy = CUP.y * h;
-      ctx.fillStyle = "#0c0c0b";
+      ctx.fillStyle = "#0d100e";
       ctx.beginPath();
       ctx.arc(cx, cy, 5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#f1eee7";
+      ctx.strokeStyle = "#f2ead7";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx, cy - 44);
       ctx.stroke();
-      ctx.fillStyle = "#ff4a1c";
+      ctx.fillStyle = "#f2ead7";
       ctx.beginPath();
       ctx.moveTo(cx, cy - 44);
       ctx.lineTo(cx + 20, cy - 38);
@@ -140,7 +140,7 @@ export default function Contours() {
           if (inCup || settled || b.x < 0 || b.x > 1 || b.y < 0 || b.y > 1) b.done = true;
           if (inCup) { b.x = CUP.x; b.y = CUP.y; }
         }
-        ctx.strokeStyle = "rgba(241,238,231,0.6)";
+        ctx.strokeStyle = "rgba(242,234,215,0.6)";
         ctx.setLineDash([2, 4]);
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -158,13 +158,13 @@ export default function Contours() {
         const x = p.x / w, y = p.y / h;
         const e = 0.01;
         const slope = Math.hypot(height(x + e, y) - height(x - e, y), height(x, y + e) - height(x, y - e)) / (2 * e);
-        ctx.strokeStyle = "rgba(241,238,231,0.7)";
+        ctx.strokeStyle = "rgba(242,234,215,0.7)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y);
         ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8);
         ctx.stroke();
-        ctx.fillStyle = "#f1eee7";
+        ctx.fillStyle = "#f2ead7";
         ctx.font = "10px var(--font-mono), monospace";
         ctx.fillText(`${(slope * 2.2).toFixed(1)}%`, p.x + 10, p.y - 8);
       }

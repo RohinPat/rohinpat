@@ -15,6 +15,22 @@ export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
+  // Hide the "Rohin Patel" label while the hero's giant name is on screen,
+  // so the name isn't said twice at once.
+  const [showName, setShowName] = useState(true);
+  useEffect(() => {
+    const hero = document.querySelector(".hero-name");
+    if (!hero) {
+      setShowName(true);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setShowName(!e.isIntersecting), {
+      rootMargin: "-64px 0px 0px 0px",
+    });
+    io.observe(hero);
+    return () => io.disconnect();
+  }, [pathname]);
+
   // Close the mobile menu on route change and on Escape.
   useEffect(() => setIsOpen(false), [pathname]);
   useEffect(() => {
@@ -26,7 +42,7 @@ export default function Navigation() {
 
   return (
     <nav aria-label="Main" className="fixed top-3 inset-x-3 md:inset-x-0 z-50 flex justify-center pointer-events-none">
-      <div className="pointer-events-auto w-full md:w-auto rounded-[1.6rem] bg-[rgba(12,12,11,0.9)] backdrop-blur-md border border-white/10 text-[var(--paper)] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]">
+      <div className="pointer-events-auto w-full md:w-auto rounded-[1.6rem] bg-[rgba(13,16,14,0.9)] backdrop-blur-md border border-white/10 text-[var(--paper)] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]">
         <div className="flex items-center justify-between gap-2 h-12 pl-1.5 pr-1.5">
           <Link
             href="/"
@@ -35,11 +51,16 @@ export default function Navigation() {
           >
             <span
               aria-hidden="true"
-              className="w-9 h-9 rounded-full bg-[var(--signal)] text-[var(--ink)] grid place-items-center display text-lg transition-transform group-hover:rotate-[-8deg]"
+              className="w-9 h-9 rounded-full bg-[var(--signal)] text-[var(--on-signal)] grid place-items-center display text-lg transition-transform group-hover:rotate-[-8deg]"
             >
               RP
             </span>
-            <span aria-hidden="true" className="font-mono text-xs uppercase tracking-[0.16em]">
+            <span
+              aria-hidden="true"
+              className={`font-mono text-xs uppercase tracking-[0.16em] whitespace-nowrap overflow-hidden transition-[max-width,opacity] duration-300 ${
+                showName ? "max-w-[10rem] opacity-100" : "max-w-0 opacity-0"
+              }`}
+            >
               Rohin Patel
             </span>
           </Link>
@@ -54,8 +75,8 @@ export default function Navigation() {
                     aria-current={active ? "page" : undefined}
                     className={`block px-3.5 py-2 rounded-full font-mono text-[11px] uppercase tracking-[0.16em] transition-colors ${
                       active
-                        ? "bg-[var(--signal)] text-[var(--ink)]"
-                        : "text-[#c9c5bc] hover:text-[var(--paper)] hover:bg-white/10"
+                        ? "bg-[var(--paper)] text-[var(--ink)]"
+                        : "text-[#c4c6ba] hover:text-[var(--paper)] hover:bg-white/10"
                     }`}
                   >
                     {item.name}
@@ -104,7 +125,7 @@ export default function Navigation() {
                     aria-current={active ? "page" : undefined}
                     onClick={() => setIsOpen(false)}
                     className={`display block py-2 text-4xl animate-[rise_0.25s_ease-out] ${
-                      active ? "text-[var(--signal)]" : "text-[var(--paper)]"
+                      active ? "text-[var(--accent-text)]" : "text-[var(--paper)]"
                     }`}
                   >
                     {item.name}

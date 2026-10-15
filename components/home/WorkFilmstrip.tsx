@@ -9,16 +9,16 @@ import Motif from "./Motif";
 // horizontal scroll (touch, trackpad, arrow keys when focused) plus
 // previous/next buttons.
 
-const FRAME_STYLES = [
-  "paper",
-  "signal",
-  "bg-[var(--bg-elevated)] text-[var(--fg)]",
-] as const;
+// Cream and ink only — on Home, green belongs to the lab.
+const FRAME_STYLES = ["paper", "bg-[var(--bg-elevated)] text-[var(--fg)]"] as const;
+
+// A highlight reel, not the index: the things I made. Work has the rest.
+const reel = projects.filter((p) => p.kind === "project");
 
 export default function WorkFilmstrip() {
   const trackRef = useRef<HTMLOListElement>(null);
   const [index, setIndex] = useState(0);
-  const total = projects.length;
+  const total = reel.length;
 
   const frameStep = useCallback(() => {
     const track = trackRef.current;
@@ -50,9 +50,8 @@ export default function WorkFilmstrip() {
     <section id="work" aria-labelledby="work-title" className="relative py-20 md:py-28 overflow-hidden">
       <div className="px-4 md:px-10 max-w-6xl mx-auto flex flex-wrap items-end justify-between gap-6 mb-10">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] accent mb-4">Selected work</p>
-          <h2 id="work-title" className="display" style={{ fontSize: "clamp(3.5rem, 11vw, 9.5rem)" }}>
-            Six frames.
+          <h2 id="work-title" className="display t-l">
+            Three frames.
           </h2>
         </div>
         <div className="flex items-center gap-4">
@@ -66,7 +65,7 @@ export default function WorkFilmstrip() {
               onClick={() => go(-1)}
               disabled={atStart}
               aria-label="Previous project"
-              className="w-12 h-12 border border-[var(--border-strong)] grid place-items-center hover:bg-[var(--signal)] hover:text-[var(--ink)] hover:border-[var(--signal)] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="w-12 h-12 border border-[var(--border-strong)] grid place-items-center hover:bg-[var(--signal)] hover:text-[var(--on-signal)] hover:border-[var(--signal)] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <span aria-hidden="true">←</span>
             </button>
@@ -75,7 +74,7 @@ export default function WorkFilmstrip() {
               onClick={() => go(1)}
               disabled={atEnd}
               aria-label="Next project"
-              className="w-12 h-12 border border-l-0 border-[var(--border-strong)] grid place-items-center hover:bg-[var(--signal)] hover:text-[var(--ink)] hover:border-[var(--signal)] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="w-12 h-12 border border-l-0 border-[var(--border-strong)] grid place-items-center hover:bg-[var(--signal)] hover:text-[var(--on-signal)] hover:border-[var(--signal)] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <span aria-hidden="true">→</span>
             </button>
@@ -91,18 +90,18 @@ export default function WorkFilmstrip() {
           aria-label="Selected projects — scroll sideways"
           className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth py-3 px-[max(1rem,calc((100vw-72rem)/2))] md:px-[max(2.5rem,calc((100vw-72rem)/2))] scroll-px-[max(1rem,calc((100vw-72rem)/2))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {projects.map((p, i) => (
-            <li key={p.slug} className="snap-start shrink-0 w-[82vw] sm:w-[400px] md:w-[440px]">
+          {reel.map((p, i) => (
+            <li key={p.slug} className="snap-start shrink-0 w-[84vw] sm:w-[460px] lg:w-[min(30vw,520px)]">
               <Frame project={p} index={i} total={total} />
             </li>
           ))}
           <li className="snap-start shrink-0 w-[60vw] sm:w-[280px]">
             <Link
               href="/projects"
-              className="h-full min-h-[420px] border border-white/15 text-[var(--fg)] flex flex-col justify-end p-6 hover:bg-[var(--signal)] hover:text-[var(--ink)] hover:border-[var(--signal)] transition-colors"
+              className="h-full min-h-[420px] border border-white/15 text-[var(--fg)] flex flex-col justify-end p-6 hover:bg-[var(--signal)] hover:text-[var(--on-signal)] hover:border-[var(--signal)] transition-colors"
             >
               <span className="display" style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)" }}>
-                All projects →
+                All work →
               </span>
               <span className="mt-2 text-sm opacity-80">Everything I&apos;ve made and where I&apos;ve worked.</span>
             </Link>
@@ -111,7 +110,7 @@ export default function WorkFilmstrip() {
         {/* edge print, like the frame numbers on a strip of 35mm */}
         <p
           aria-hidden="true"
-          className="px-[max(1rem,calc((100vw-72rem)/2))] font-mono text-[9px] tracking-[0.35em] text-[#ff4a1c] opacity-80 whitespace-nowrap overflow-hidden select-none"
+          className="px-[max(1rem,calc((100vw-72rem)/2))] font-mono text-[9px] tracking-[0.35em] text-[#8ad9a8] opacity-80 whitespace-nowrap overflow-hidden select-none"
         >
           {Array.from({ length: 14 }, (_, i) => `RP 400 ▸ ${i + 1} ▸ ${i + 1}A   `).join("")}
         </p>
@@ -132,13 +131,11 @@ function Frame({ project, index, total }: { project: Entry; index: number; total
         <span>
           {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
         </span>
-        <span>
-          {project.kind === "work" ? "Work" : "Made"} · {project.year}
-        </span>
+        <span>{project.year}</span>
       </div>
 
       <div className="flex-1 grid place-items-center py-4">
-        <Motif slug={project.slug} className="w-full max-w-[260px] h-auto transition-transform duration-500 group-hover:scale-[1.04]" />
+        <Motif slug={project.slug} className="w-full max-w-[300px] h-auto transition-transform duration-500 group-hover:scale-[1.04]" />
       </div>
 
       <div>

@@ -22,11 +22,10 @@ export default function LegalPage({
   ];
 
   return (
-    <main className="relative pt-24 pb-20 px-4 md:px-10">
+    <main className="paper relative min-h-screen pt-24 pb-20 px-4 md:px-10">
       <div className="max-w-6xl mx-auto">
         <p className="font-mono text-xs uppercase tracking-[0.2em] mb-6">
-          <span className="accent">{eyebrow}</span>
-          <span className="dim"> / last updated {updated}</span>
+          <span className="muted">Updated {updated}</span>
         </p>
         <h1>{title}</h1>
 
@@ -43,7 +42,7 @@ export default function LegalPage({
                       aria-current={current ? "page" : undefined}
                       className={`block px-4 py-2.5 font-mono text-xs uppercase tracking-wider border transition-colors ${
                         current
-                          ? "bg-[var(--signal)] text-[var(--ink)] border-[var(--signal)]"
+                          ? "bg-[var(--ink)] text-[var(--paper)] border-[var(--ink)]"
                           : "border-[var(--border-strong)] hover:border-[var(--fg)]"
                       }`}
                     >

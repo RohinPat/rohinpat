@@ -17,7 +17,7 @@ export default function PageError({
   return (
     <main className="min-h-[80vh] flex items-center px-6 md:px-10 pt-24 relative">
       <div className="max-w-3xl w-full mx-auto">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] accent mb-6">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] muted mb-6">
           yellow card · something broke
         </p>
         <h1 className="text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance">

@@ -36,7 +36,7 @@ export default function Tile({
           </h2>
           <p className="text-sm muted mt-0.5 leading-snug">{line}</p>
         </div>
-        <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] accent">
+        <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] muted">
           <span className={touchHint ? "[@media(pointer:coarse)]:hidden" : ""}>{hint}</span>
           {touchHint && <span className="hidden [@media(pointer:coarse)]:inline">{touchHint}</span>}
         </p>

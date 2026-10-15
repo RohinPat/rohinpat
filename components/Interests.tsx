@@ -20,6 +20,7 @@ export default function Interests() {
         <h1>Off hours.</h1>
         <p className="-mt-6 mb-10 md:mb-14 text-lg md:text-xl muted max-w-xl text-pretty">
           Nine things I&apos;m into, each turned into something you can poke at.
+          Everything here moves. Go on.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 auto-rows-[300px] gap-3 md:gap-4">

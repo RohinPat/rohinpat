@@ -58,9 +58,9 @@ const ROWS: Key[][] = [
 ];
 
 const TONES = {
-  alpha: { cap: "#f1eee7", side: "#c9c4b8", text: "#0c0c0b" },
+  alpha: { cap: "#f2ead7", side: "#c9c4b8", text: "#0d100e" },
   mod: { cap: "#3a3936", side: "#22211f", text: "#e7e3da" },
-  accent: { cap: "#ff4a1c", side: "#b8300e", text: "#0c0c0b" },
+  accent: { cap: "#1d5e3f", side: "#123b27", text: "#f2ead7" },
 };
 
 export default function Keyboard() {
@@ -98,19 +98,19 @@ export default function Keyboard() {
   }, []);
 
   return (
-    <div aria-hidden="true" className="absolute inset-0 grid place-items-center bg-[#d8d3c8] [container-type:size]">
+    <div aria-hidden="true" className="absolute inset-0 grid place-items-center paper paper-grid [container-type:size]">
       {/* fit by width and height: the board is ~2.5:1 */}
       <div className="kb" style={{ width: "min(100cqw - 2rem, 720px, (100cqh - 2rem) * 2.5)" }}>
-        <div className="rounded-[14px] bg-[#0c0c0b] p-[2.2%] shadow-[0_24px_40px_-18px_rgba(12,12,11,0.7),inset_0_1px_0_rgba(255,255,255,0.08)]">
+        <div className="rounded-[14px] bg-[#0d100e] p-[2.2%] shadow-[0_24px_40px_-18px_rgba(13,16,14,0.7),inset_0_1px_0_rgba(255,255,255,0.08)]">
           {/* display strip */}
           <div className="flex items-center justify-between mb-[1.6%] px-[1%]">
-            <span className="font-mono text-[clamp(8px,1.4cqw,12px)] tracking-[0.2em] text-[#ff4a1c] truncate">
+            <span className="font-mono text-[clamp(8px,1.4cqw,12px)] tracking-[0.2em] text-[#8ad9a8] truncate">
               {typed || "TYPE ANYTHING"}
               <span className="animate-pulse">▍</span>
             </span>
             <span className="flex gap-1.5">
-              <i className="w-1.5 h-1.5 rounded-full bg-[#ff4a1c]" />
-              <i className={`w-1.5 h-1.5 rounded-full ${down.size ? "bg-[#ff4a1c]" : "bg-[#3a3936]"}`} />
+              <i className="w-1.5 h-1.5 rounded-full bg-[#8ad9a8]" />
+              <i className={`w-1.5 h-1.5 rounded-full ${down.size ? "bg-[#8ad9a8]" : "bg-[#3a3936]"}`} />
             </span>
           </div>
           <div className="flex flex-col gap-[0.5cqw]">

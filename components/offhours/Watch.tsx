@@ -55,7 +55,7 @@ export default function Watch() {
     setLume(false);
   };
 
-  const ink = lume ? LUME : "#0c0c0b";
+  const ink = lume ? LUME : "#0d100e";
   const glow = lume ? `drop-shadow(0 0 3px ${LUME})` : "none";
 
   return (
@@ -82,7 +82,7 @@ export default function Watch() {
           style={{ transformStyle: "preserve-3d" }}
         >
           {/* case + bezel */}
-          <div className="absolute inset-0 rounded-full bg-[linear-gradient(145deg,#d9d6cf,#8f8b83_45%,#e9e6df_70%,#77736b)] shadow-[0_30px_50px_-20px_rgba(12,12,11,0.6)]" />
+          <div className="absolute inset-0 rounded-full bg-[linear-gradient(145deg,#d9d6cf,#8f8b83_45%,#e9e6df_70%,#77736b)] shadow-[0_30px_50px_-20px_rgba(13,16,14,0.6)]" />
           {/* dial */}
           <div
             className="absolute inset-[6%] rounded-full overflow-hidden transition-colors duration-[2500ms]"
@@ -102,7 +102,7 @@ export default function Watch() {
                   y1="8"
                   x2="100"
                   y2={i % 5 === 0 ? 8 : 12}
-                  stroke={lume ? "rgba(185,255,214,0.35)" : "rgba(12,12,11,0.55)"}
+                  stroke={lume ? "rgba(185,255,214,0.35)" : "rgba(13,16,14,0.55)"}
                   strokeWidth="0.8"
                   transform={`rotate(${i * 6} 100 100)`}
                 />
@@ -121,15 +121,15 @@ export default function Watch() {
                 </g>
               ))}
               {/* date window at 3 */}
-              <rect x="152" y="93" width="22" height="14" rx="1.5" fill={lume ? "#0b0c0b" : "#fff"} stroke={lume ? "rgba(185,255,214,0.4)" : "rgba(12,12,11,0.6)"} strokeWidth="0.8" />
-              <text x="163" y="103.6" textAnchor="middle" fontSize="9" fontFamily="var(--font-mono), monospace" fill={lume ? LUME : "#0c0c0b"}>
+              <rect x="152" y="93" width="22" height="14" rx="1.5" fill={lume ? "#0b0c0b" : "#fff"} stroke={lume ? "rgba(185,255,214,0.4)" : "rgba(13,16,14,0.6)"} strokeWidth="0.8" />
+              <text x="163" y="103.6" textAnchor="middle" fontSize="9" fontFamily="var(--font-mono), monospace" fill={lume ? LUME : "#0d100e"}>
                 {date ?? ""}
               </text>
               {/* wordmark */}
-              <text x="100" y="62" textAnchor="middle" fontSize="11" fontWeight="800" letterSpacing="1" fontFamily="var(--font-display), sans-serif" style={{ fontStretch: "70%" }} fill={lume ? "rgba(185,255,214,0.5)" : "#0c0c0b"}>
+              <text x="100" y="62" textAnchor="middle" fontSize="11" fontWeight="800" letterSpacing="1" fontFamily="var(--font-display), sans-serif" style={{ fontStretch: "70%" }} fill={lume ? "rgba(185,255,214,0.5)" : "#0d100e"}>
                 RP
               </text>
-              <text x="100" y="140" textAnchor="middle" fontSize="5.5" letterSpacing="1.6" fontFamily="var(--font-mono), monospace" fill={lume ? "rgba(185,255,214,0.4)" : "#ff4a1c"}>
+              <text x="100" y="140" textAnchor="middle" fontSize="5.5" letterSpacing="1.6" fontFamily="var(--font-mono), monospace" fill={lume ? "rgba(185,255,214,0.4)" : "#1d5e3f"}>
                 AUTOMATIC
               </text>
               {/* hands */}
@@ -140,11 +140,11 @@ export default function Watch() {
                 <path d="M100 22 L103.6 100 L96.4 100 Z" fill={ink} />
               </g>
               <g ref={secRef}>
-                <line x1="100" y1="118" x2="100" y2="16" stroke="#ff4a1c" strokeWidth="1.1" />
-                <circle cx="100" cy="40" r="3.2" fill="#ff4a1c" />
-                <rect x="98.2" y="104" width="3.6" height="14" rx="1.2" fill="#ff4a1c" />
+                <line x1="100" y1="118" x2="100" y2="16" stroke="#1d5e3f" strokeWidth="1.1" />
+                <circle cx="100" cy="40" r="3.2" fill="#1d5e3f" />
+                <rect x="98.2" y="104" width="3.6" height="14" rx="1.2" fill="#1d5e3f" />
               </g>
-              <circle cx="100" cy="100" r="3.6" fill="#0c0c0b" stroke="#ff4a1c" strokeWidth="1.2" />
+              <circle cx="100" cy="100" r="3.6" fill="#0d100e" stroke="#1d5e3f" strokeWidth="1.2" />
             </svg>
             {/* crystal reflection */}
             <div ref={shineRef} className="absolute inset-0 pointer-events-none mix-blend-screen" />

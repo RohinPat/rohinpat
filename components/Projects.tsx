@@ -8,9 +8,6 @@ import Motif from "@/components/home/Motif";
 // (or focusing) one floats a preview card with its drawing that trails the
 // cursor. "Worked at" is three colour-blocked cards.
 
-// Same colour order as the homepage filmstrip, so a project keeps its frame.
-const FRAME = ["paper", "signal", "bg-[var(--bg-elevated)] text-[var(--fg)]"] as const;
-const frameOf = (e: Entry) => FRAME[projects.indexOf(e) % FRAME.length];
 const pad = (n: number) => String(n).padStart(2, "0");
 
 export default function Projects() {
@@ -18,29 +15,33 @@ export default function Projects() {
   const work = projects.filter((p) => p.kind === "work");
   const first = projects.reduce((y, p) => Math.min(y, parseInt(p.year, 10)), 9999);
 
+  // Opens on cream (the index), drops to ink for the jobs — each page gets
+  // its own colour moment, and green is saved for the WHOOP card.
   return (
-    <section className="px-4 md:px-10 pb-12 md:pb-20">
-      <div className="max-w-6xl mx-auto">
-        <h1>Work.</h1>
-        <p className="-mt-6 mb-14 md:mb-20 font-mono text-xs uppercase tracking-[0.2em] muted">
-          {pad(made.length)} made · {pad(work.length)} worked at · {first} — now
-        </p>
-
-        <MadeIndex entries={made} />
-        <WorkedAt entries={work} />
-      </div>
-    </section>
+    <>
+      <section className="paper paper-grid px-4 md:px-10 pt-28 pb-20 md:pb-28">
+        <div className="max-w-6xl mx-auto">
+          <h1>Work.</h1>
+          <p className="-mt-6 mb-14 md:mb-20 font-mono text-xs uppercase tracking-[0.2em] muted">
+            {pad(made.length)} made · {pad(work.length)} worked at · {first} — now
+          </p>
+          <MadeIndex entries={made} />
+        </div>
+      </section>
+      <section className="px-4 md:px-10 py-20 md:py-28">
+        <div className="max-w-6xl mx-auto">
+          <WorkedAt entries={work} />
+        </div>
+      </section>
+    </>
   );
 }
 
-function SectionHead({ id, title, count }: { id: string; title: string; count: number }) {
+function SectionHead({ id, title }: { id: string; title: string }) {
   return (
-    <div className="flex items-baseline justify-between border-b-2 border-[var(--fg)] pb-3">
-      <h2 id={id} className="font-mono text-xs uppercase tracking-[0.2em] accent">
-        {title}
-      </h2>
-      <span className="font-mono text-xs muted tabular-nums">{pad(count)}</span>
-    </div>
+    <h2 id={id} className="display t-m border-b-2 border-[var(--fg)] pb-4">
+      {title}
+    </h2>
   );
 }
 
@@ -54,7 +55,7 @@ function Links({ e }: { e: Entry }) {
           href={l.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block py-1 link-underline hover:text-[var(--signal)] transition-colors"
+          className="inline-block py-1 link-underline hover:text-[var(--accent-text)] transition-colors"
         >
           {l.label} ↗<span className="sr-only"> (opens in a new tab)</span>
         </a>
@@ -96,8 +97,8 @@ function MadeIndex({ entries }: { entries: Entry[] }) {
   };
 
   return (
-    <section aria-labelledby="made-title" className="mb-24 md:mb-32">
-      <SectionHead id="made-title" title="Made" count={entries.length} />
+    <section aria-labelledby="made-title">
+      <SectionHead id="made-title" title="Made" />
       <ol onPointerLeave={() => setActive(null)}>
         {entries.map((e, i) => (
           <li
@@ -120,7 +121,7 @@ function MadeIndex({ entries }: { entries: Entry[] }) {
               {pad(i + 1)}
             </span>
             <h3
-              className="col-span-10 md:col-span-7 display transition-[transform,color] duration-300 ease-out group-hover:translate-x-3 group-hover:text-[var(--signal)] group-focus-within:text-[var(--signal)]"
+              className="col-span-10 md:col-span-7 display transition-[transform,color] duration-300 ease-out group-hover:translate-x-3 group-hover:text-[var(--accent-text)] group-focus-within:text-[var(--accent-text)]"
               style={{ fontSize: "clamp(3rem, 8vw, 7rem)" }}
             >
               {e.title}
@@ -149,8 +150,8 @@ function MadeIndex({ entries }: { entries: Entry[] }) {
         className="fixed left-0 top-0 z-40 pointer-events-none hidden lg:block motion-reduce:!hidden"
       >
         <div
-          className={`w-[280px] aspect-[4/5] p-5 flex flex-col shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-200 ${
-            active ? `opacity-100 scale-100 ${frameOf(active)}` : "opacity-0 scale-90"
+          className={`w-[280px] aspect-[4/5] p-5 flex flex-col bg-[var(--ink)] text-[var(--paper)] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55)] transition-[opacity,transform] duration-200 ${
+            active ? "opacity-100 scale-100" : "opacity-0 scale-90"
           }`}
         >
           {active && (
@@ -181,7 +182,7 @@ function WorkedAt({ entries }: { entries: Entry[] }) {
 
   return (
     <section aria-labelledby="worked-title">
-      <SectionHead id="worked-title" title="Worked at" count={entries.length} />
+      <SectionHead id="worked-title" title="Worked at" />
       <ol className="mt-6 grid md:grid-cols-3 gap-4">
         {entries.map((e, i) => {
           const current = e.year.trim().endsWith("—");
@@ -206,11 +207,8 @@ function WorkedAt({ entries }: { entries: Entry[] }) {
               <h3 className="display" style={{ fontSize: "clamp(2.6rem, 4.4vw, 3.6rem)", lineHeight: 0.9 }}>
                 {e.title}
               </h3>
-              <p className="mt-2 font-medium">{e.role}</p>
-              <p className="mt-1 text-sm leading-snug text-[var(--fg-muted)]">{e.line}</p>
-              <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">
-                {e.tags.join(" · ")}
-              </p>
+              <p className="mt-3 text-lg font-semibold leading-tight">{e.role}</p>
+              <p className="mt-2 text-sm leading-snug text-[var(--fg-muted)]">{e.line}</p>
             </li>
           );
         })}

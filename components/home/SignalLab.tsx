@@ -68,7 +68,7 @@ export default function SignalLab() {
     ctx.clearRect(0, 0, w, h);
 
     // grid
-    ctx.strokeStyle = "rgba(241,238,231,0.07)";
+    ctx.strokeStyle = "rgba(242,234,215,0.07)";
     ctx.lineWidth = 1;
     const step = 24;
     for (let x = (w % step) / 2; x < w; x += step) {
@@ -84,8 +84,8 @@ export default function SignalLab() {
 
     ctx.lineWidth = 2.25;
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#ff4a1c";
-    ctx.shadowColor = "rgba(255,74,28,0.55)";
+    ctx.strokeStyle = "#8ad9a8";
+    ctx.shadowColor = "rgba(138,217,168,0.55)";
     ctx.shadowBlur = 10;
     ctx.beginPath();
     for (let x = 0; x <= w; x += 1.5) {
@@ -98,7 +98,7 @@ export default function SignalLab() {
 
     // leading dot
     const yEnd = mid - sample(tNow, bpm, noise) * amp;
-    ctx.fillStyle = "#f1eee7";
+    ctx.fillStyle = "#f2ead7";
     ctx.beginPath(); ctx.arc(w - 3, yEnd, 3.5, 0, Math.PI * 2); ctx.fill();
   }, []);
 
@@ -163,16 +163,15 @@ export default function SignalLab() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-12 gap-8 items-end mb-10 md:mb-14">
           <div className="md:col-span-7">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4">Lab / 01 — the signal</p>
-            <h2 id="lab-title" className="display" style={{ fontSize: "clamp(3.5rem, 11vw, 9.5rem)" }}>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4">Lab 01</p>
+            <h2 id="lab-title" className="display t-l">
               Never miss
               <br />a beat.
             </h2>
           </div>
           <p className="md:col-span-5 text-base md:text-lg leading-relaxed text-pretty">
-            A toy version of the live heart-rate onboarding I built as a WHOOP co-op:
-            your pulse on screen the moment the strap finds it. Synthesized in your
-            browser, not real data.
+            Your pulse on screen the moment the strap finds it. Push it, add noise,
+            feel the tick. Synthesized in your browser, not real data.
           </p>
         </div>
 
@@ -188,14 +187,14 @@ export default function SignalLab() {
             <p className="flex items-baseline gap-2">
               <span
                 key={beat}
-                className="display tabular-nums text-[var(--signal)] inline-block animate-[beat_0.35s_ease-out]"
+                className="display tabular-nums text-[var(--accent-text)] inline-block animate-[beat_0.35s_ease-out]"
                 style={{ fontSize: "clamp(4.5rem, 12vw, 9rem)", fontStretch: "75%" }}
               >
                 {String(bpm).padStart(3, "0")}
               </span>
               <span className="font-mono text-sm uppercase tracking-widest">bpm</span>
             </p>
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#b9b4aa] text-right">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#b5b6ab] text-right">
               Live · synthesized
               <span className="block text-[var(--paper)] text-sm mt-1 tabular-nums">{quality}% quality</span>
             </p>
@@ -206,7 +205,7 @@ export default function SignalLab() {
         <form
           aria-label="Signal controls"
           onSubmit={(e) => e.preventDefault()}
-          className="grid sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-x-8 gap-y-5 items-end border-2 border-t-0 border-[var(--ink)] px-5 md:px-7 py-5"
+          className="grid sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-x-8 gap-y-5 items-end border-2 border-t-0 border-[var(--border-strong)] px-5 md:px-7 py-5"
         >
           <Slider id="lab-bpm" label="Heart rate" unit="bpm" min={40} max={190} value={bpm} onChange={setBpm} />
           <Slider id="lab-noise" label="Motion noise" unit="%" min={0} max={100} value={noise} onChange={setNoise} />
@@ -216,7 +215,7 @@ export default function SignalLab() {
                 type="checkbox"
                 checked={haptics}
                 onChange={(e) => setHaptics(e.target.checked)}
-                className="w-6 h-6 accent-[var(--ink)]"
+                className="w-6 h-6 accent-[var(--paper)]"
               />
               Haptic tick
             </label>
@@ -268,7 +267,7 @@ function Slider({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-6 accent-[var(--ink)] cursor-pointer"
+        className="fader w-full h-6 cursor-pointer"
       />
     </div>
   );

@@ -42,10 +42,8 @@ export const projects: Entry[] = [
     year: "2023",
     kind: "project",
     tags: ["Python", "D3", "Plotly"],
-    links: [
-      { label: "Demo", href: "https://data-visualization-bluebikes.vercel.app" },
-      { label: "Code", href: "https://github.com/RohinPat/data-visualization-bluebikes" },
-    ],
+    // Demo link removed while the live demo's data file 404s.
+    links: [{ label: "Code", href: "https://github.com/RohinPat/data-visualization-bluebikes" }],
   },
   {
     slug: "whoop",

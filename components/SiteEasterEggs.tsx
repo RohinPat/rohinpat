@@ -29,9 +29,9 @@ export default function SiteEasterEggs() {
   useEffect(() => {
     // Console signature — fires on first mount, sits at the top of devtools history.
     const heading =
-      "color:#ff4a1c;font-size:20px;font-weight:600;font-family:Menlo,monospace;line-height:1.4";
+      "color:#8ad9a8;font-size:20px;font-weight:600;font-family:Menlo,monospace;line-height:1.4";
     const dim = "color:#9ca3af;font-family:Menlo,monospace;line-height:1.6";
-    const accent = "color:#ff4a1c;font-family:Menlo,monospace;line-height:1.6";
+    const accent = "color:#8ad9a8;font-family:Menlo,monospace;line-height:1.6";
 
     console.log("%c👋  hey — rohin here.", heading);
     console.log(
@@ -108,7 +108,7 @@ export default function SiteEasterEggs() {
       <Confetti />
       <div className="flex flex-col items-center gap-3 animate-[egg-pop_0.5s_cubic-bezier(0.2,1.4,0.4,1)]">
         <div
-          className="display bg-[var(--signal)] text-[var(--ink)] px-8 pt-3 pb-2 shadow-2xl"
+          className="display bg-[var(--signal)] text-[var(--on-signal)] px-8 pt-3 pb-2 shadow-2xl"
           style={{ fontSize: "clamp(3.5rem, 10vw, 8rem)" }}
         >
           Goallllll

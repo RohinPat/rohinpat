@@ -12,7 +12,7 @@ export default function NotFound() {
       <div className="max-w-6xl w-full mx-auto">
         <p
           aria-hidden="true"
-          className="display text-[var(--signal)] leading-[0.8]"
+          className="display text-[var(--accent-text)] leading-[0.8]"
           style={{ fontSize: "clamp(9rem, 32vw, 24rem)" }}
         >
           404
@@ -24,7 +24,7 @@ export default function NotFound() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--signal)] text-[var(--ink)] font-medium hover:bg-[var(--accent-hover)] transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--paper)] text-[var(--ink)] font-medium hover:bg-[var(--mint)] transition-colors"
           >
             Back home →
           </Link>

@@ -71,7 +71,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
             }}
           >
             {/* label */}
-            <div className="absolute inset-[33%] rounded-full bg-[var(--signal)] grid place-items-center text-[var(--ink)]">
+            <div className="absolute inset-[33%] rounded-full bg-[var(--signal)] grid place-items-center text-[var(--on-signal)]">
               <div className="text-center leading-none">
                 <p className="display text-[9cqw]">RP</p>
                 <p className="font-mono text-[2.6cqw] tracking-[0.15em] mt-[1cqw] whitespace-nowrap">SIDE A · 33⅓</p>
@@ -104,7 +104,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
         type="button"
         aria-pressed={playing}
         onClick={() => setPlaying((v) => !v)}
-        className="absolute bottom-3 right-3 w-12 h-12 rounded-full bg-[var(--paper)] text-[var(--ink)] grid place-items-center hover:bg-[var(--signal)] transition-colors shadow-lg"
+        className="absolute bottom-3 right-3 w-12 h-12 rounded-full bg-[var(--paper)] text-[var(--on-signal)] grid place-items-center hover:bg-[var(--signal)] transition-colors shadow-lg"
       >
         <span className="sr-only">{playing ? "Stop the record" : "Spin the record"}</span>
         {playing ? (
@@ -117,7 +117,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
         href={playlistUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="absolute top-2 left-2 px-1 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c9c5bc] hover:text-[var(--paper)] underline underline-offset-4"
+        className="absolute top-2 left-2 px-1 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c4c6ba] hover:text-[var(--paper)] underline underline-offset-4"
       >
         Playlist ↗<span className="sr-only"> on Spotify (opens in a new tab)</span>
       </a>

@@ -3,26 +3,30 @@
 @tailwind utilities;
 
 :root {
-  /* Palette — every text/background pair below clears WCAG AA (4.5:1).
-     Rule of thumb: signal is a fill. Text on signal is ink. Signal-coloured
-     text only ever sits on ink. */
-  --ink: #0c0c0b;
-  --paper: #f1eee7;
-  --paper-muted: #5f5b54;      /* 5.8:1 on paper */
-  --signal: #ff4a1c;           /* 5.8:1 against ink, either way round */
+  /* Palette: ink, cream, racing green, mint. Every text/background pair
+     below clears WCAG AA (4.5:1).
+     - green is the signature fill; text on green is cream (6.4:1)
+     - green also works as text on cream (6.4:1) — never as text on ink
+     - mint is the accent on ink (11.5:1) and is legible on green too */
+  --ink: #0d100e;
+  --paper: #f2ead7;            /* cream */
+  --paper-muted: #5c5a4f;      /* 5.8:1 on cream */
+  --signal: #1d5e3f;           /* racing green */
+  --on-signal: var(--paper);
+  --mint: #8ad9a8;
   --garnet: #a50044;           /* Barça card only */
-  --paper-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.04  0 0 0 0.08 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  --paper-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.06  0 0 0 0 0.03  0 0 0 0.08 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 
   --bg: var(--ink);
-  --bg-elevated: #161615;
-  --fg: #ededed;
-  --fg-muted: #9ca3af;
-  --fg-dim: #818896;
+  --bg-elevated: #171b18;
+  --fg: #ece6d6;
+  --fg-muted: #a3a69c;             /* 7.7:1 on ink */
+  --fg-dim: #878b82;               /* 5.0:1 on elevated */
   --accent: var(--signal);         /* fills, borders, buttons */
-  --accent-hover: #ff6a42;
-  --accent-text: var(--signal);    /* accent as text, on ink only */
-  --on-accent: var(--ink);         /* text placed on an accent fill */
-  --accent-soft: rgba(255, 74, 28, 0.12);
+  --accent-hover: #24704b;
+  --accent-text: var(--mint);      /* accent as text — context-aware below */
+  --on-accent: var(--on-signal);   /* text placed on an accent fill */
+  --accent-soft: rgba(29, 94, 63, 0.18);
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
 }
@@ -41,7 +45,7 @@ body {
 
 ::selection {
   background: var(--signal);
-  color: var(--ink);
+  color: var(--on-signal);
 }
 
 ::-webkit-scrollbar { width: 10px; }
@@ -118,13 +122,10 @@ canvas:focus-visible { outline-offset: -3px; }
 .legal-prose { color: var(--fg-muted); line-height: 1.75; max-width: 65ch; }
 .legal-prose h2 {
   color: var(--fg);
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-stretch: 70%;
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: 1.85rem;
-  line-height: 1;
-  margin: 3rem 0 0.9rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 2.75rem 0 0.75rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
 }
@@ -151,6 +152,19 @@ main h1 {
   letter-spacing: -0.01em;
   line-height: 0.88;
 }
+/* Hero name: huge on phones; on desktop each word fits beside the phone
+   ("ROHIN [phone] PATEL") instead of being covered by it. */
+.hero-name { font-size: clamp(7rem, 21vw, 22rem); }
+@media (min-width: 1024px) {
+  .hero-name { font-size: min(21vw, calc((100vw - 300px - 10rem) / 5.1)); }
+}
+@keyframes notify { from { opacity: 0; transform: translateY(-14px) scale(0.97); } }
+
+/* Display scale: page title (h1) > section head (.t-l) > sub-head (.t-m).
+   Three steps so a page builds instead of stacking same-size shouts. */
+.t-l { font-size: clamp(2.75rem, 6.5vw, 5.75rem); line-height: 0.9; }
+.t-m { font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 0.95; }
+
 /* Page titles: one scale everywhere (beats the per-page Tailwind sizes). */
 main h1:not(.hero-name) {
   font-size: clamp(3.25rem, 9.5vw, 8rem);
@@ -164,9 +178,9 @@ main h1:not(.hero-name) {
   --fg: var(--ink);
   --fg-muted: var(--paper-muted);
   --fg-dim: var(--paper-muted);
-  --border: rgba(12, 12, 11, 0.12);
-  --border-strong: rgba(12, 12, 11, 0.28);
-  --accent-text: var(--ink);
+  --border: rgba(13, 16, 14, 0.12);
+  --border-strong: rgba(13, 16, 14, 0.28);
+  --accent-text: var(--signal);  /* green reads well on cream */
   background-color: var(--paper);
   /* paper tooth: static noise in the background itself — no blend layer */
   background-image: var(--paper-noise);
@@ -174,8 +188,8 @@ main h1:not(.hero-name) {
 }
 .paper-grid {
   background-image:
-    linear-gradient(rgba(12, 12, 11, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(12, 12, 11, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(13, 16, 14, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 16, 14, 0.06) 1px, transparent 1px),
     var(--paper-noise);
   background-size: 48px 48px, 48px 48px, 160px 160px;
   background-position: -1px -1px, -1px -1px, 0 0;
@@ -183,15 +197,52 @@ main h1:not(.hero-name) {
 
 /* Signal sections: full-bleed colour block, ink type. */
 .signal {
-  --fg: var(--ink);
-  --fg-muted: #3a1307;         /* 4.9:1 on signal */
-  --fg-dim: #3a1307;
-  --border: rgba(12, 12, 11, 0.18);
-  --border-strong: rgba(12, 12, 11, 0.4);
-  --accent-text: var(--ink);
+  --fg: var(--paper);
+  --fg-muted: #d6e4d8;         /* 5.9:1 on green */
+  --fg-dim: #d6e4d8;
+  --border: rgba(242, 234, 215, 0.2);
+  --border-strong: rgba(242, 234, 215, 0.45);
+  --accent-text: var(--mint);
+  --accent: var(--paper);      /* fills inside a green section are cream */
+  --on-accent: var(--signal);
   background-color: var(--signal);
-  color: var(--ink);
+  color: var(--paper);
 }
+
+/* Lab faders: a hairline track with ticks and a squared cap, so the
+   controls feel like an instrument rather than a web form. */
+.fader { -webkit-appearance: none; appearance: none; background: transparent; }
+.fader::-webkit-slider-runnable-track {
+  height: 10px;
+  background:
+    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 10%) center / 100% 6px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+  opacity: 0.9;
+}
+.fader::-moz-range-track {
+  height: 10px;
+  background:
+    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 10%) center / 100% 6px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+}
+.fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 24px;
+  margin-top: -7px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.fader::-moz-range-thumb {
+  width: 14px;
+  height: 24px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+}
+.fader:focus-visible { outline-offset: 4px; }
 
 /* Beat pulse on the lab readout */
 @keyframes beat {
