@@ -340,7 +340,7 @@ export default function SkiTrack() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: [0, 1, 1, 0], y: 0 }}
               transition={{ duration: 1.0, times: [0, 0.1, 0.7, 1] }}
-              className="absolute top-1/3 left-1/2 -translate-x-1/2 bg-accent text-white font-mono text-[10px] uppercase tracking-[0.25em] px-2 py-0.5 pointer-events-none"
+              className="absolute top-1/3 left-1/2 -translate-x-1/2 bg-accent text-[var(--on-accent)] font-mono text-[10px] uppercase tracking-[0.25em] px-2 py-0.5 pointer-events-none"
             >
               Wipeout
             </motion.div>

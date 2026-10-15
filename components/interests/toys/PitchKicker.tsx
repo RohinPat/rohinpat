@@ -215,8 +215,8 @@ export default function PitchKicker() {
               <div
                 className={`px-4 py-2 font-mono text-base uppercase tracking-[0.25em] ${
                   result === "goal"
-                    ? "bg-accent text-white"
-                    : "bg-black/70 text-white"
+                    ? "bg-accent text-[var(--on-accent)]"
+                    : "bg-black/70 text-[var(--on-accent)]"
                 }`}
               >
                 {result === "goal" ? "Goal!" : "Off target"}

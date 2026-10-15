@@ -22,7 +22,7 @@ export default function Icon() {
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        R<span style={{ color: "#a50044" }}>.</span>
+        R<span style={{ color: "#ff4a1c" }}>.</span>
       </div>
     ),
     { ...size },

@@ -377,7 +377,7 @@ function SpotifyFacade({
           <button
             type="button"
             onClick={() => setLoaded(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-[var(--on-accent)] transition-colors"
           >
             Load Spotify player
           </button>

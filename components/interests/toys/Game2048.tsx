@@ -161,7 +161,7 @@ function canMove(tiles: Tile[]): boolean {
 function tileStyle(v: number): { bg: string; color: string; fontSize: string } {
   const fontSize =
     v >= 1024 ? "11px" : v >= 128 ? "14px" : v >= 16 ? "18px" : "22px";
-  if (v >= 2048) return { bg: "#a50044", color: "#fff", fontSize };
+  if (v >= 2048) return { bg: "#ff4a1c", color: "#0c0c0b", fontSize };
   if (v >= 1024) return { bg: "rgba(165,0,68,0.95)", color: "#fff", fontSize };
   if (v >= 512) return { bg: "rgba(165,0,68,0.8)", color: "#fff", fontSize };
   if (v >= 256) return { bg: "rgba(165,0,68,0.6)", color: "#fff", fontSize };
@@ -184,7 +184,10 @@ const KEY_TO_DIR: Record<string, Direction> = {
 };
 
 export default function Game2048() {
-  const [tiles, setTiles] = useState<Tile[]>(() => initialTiles());
+  // Dealt after mount: random tiles rendered on the server would never match
+  // the browser's, which breaks hydration.
+  const [tiles, setTiles] = useState<Tile[]>([]);
+  useEffect(() => setTiles(initialTiles()), []);
   const [score, setScore] = useState(0);
   const [hi, setHi] = useState(0);
   const [over, setOver] = useState(false);
@@ -476,7 +479,7 @@ export default function Game2048() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-[var(--bg)]/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3"
+              className="absolute inset-0 bg-[rgba(12,12,11,0.9)] backdrop-blur-sm flex flex-col items-center justify-center gap-3"
             >
               <p className="font-mono text-[10px] uppercase tracking-[0.25em] accent">
                 game over
@@ -503,7 +506,7 @@ export default function Game2048() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="absolute top-2 left-1/2 -translate-x-1/2 bg-accent text-white px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider z-10"
+              className="absolute top-2 left-1/2 -translate-x-1/2 bg-accent text-[var(--on-accent)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider z-10"
             >
               2048 — keep going
             </motion.div>

@@ -29,10 +29,14 @@ export default function WatchFace() {
   const minDeg = ((m + s / 60) / 60) * 360;
   const hourDeg = ((h + m / 60) / 12) * 360;
 
+  // Rounded so server and browser render identical numbers (Math.cos can
+  // differ in the last digit between engines, which breaks hydration).
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
   // Polar→Cartesian helper
   const tip = (deg: number, r: number) => {
     const rad = ((deg - 90) * Math.PI) / 180;
-    return [50 + Math.cos(rad) * r, 50 + Math.sin(rad) * r];
+    return [r3(50 + Math.cos(rad) * r), r3(50 + Math.sin(rad) * r)];
   };
   const [hX, hY] = tip(hourDeg, 24);
   const [mX, mY] = tip(minDeg, 34);
@@ -77,10 +81,10 @@ export default function WatchFace() {
           const angle = (i * 6 * Math.PI) / 180;
           const r1 = isHour ? 36 : 39.5;
           const r2 = 41;
-          const x1 = 50 + Math.sin(angle) * r1;
-          const y1 = 50 - Math.cos(angle) * r1;
-          const x2 = 50 + Math.sin(angle) * r2;
-          const y2 = 50 - Math.cos(angle) * r2;
+          const x1 = r3(50 + Math.sin(angle) * r1);
+          const y1 = r3(50 - Math.cos(angle) * r1);
+          const x2 = r3(50 + Math.sin(angle) * r2);
+          const y2 = r3(50 - Math.cos(angle) * r2);
           return (
             <line
               key={i}
@@ -151,12 +155,12 @@ export default function WatchFace() {
           y1="50"
           x2={sX}
           y2={sY}
-          stroke="#a50044"
+          stroke="#ff4a1c"
           strokeWidth="0.5"
           strokeLinecap="round"
         />
         <circle cx="50" cy="50" r="1.6" fill="#ededed" />
-        <circle cx="50" cy="50" r="0.6" fill="#a50044" />
+        <circle cx="50" cy="50" r="0.6" fill="#ff4a1c" />
 
         {/* Crown */}
         <rect x="92" y="48" width="3" height="4" fill="#2a2a2a" stroke="#3a3a3a" strokeWidth="0.2" />

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
 import ScrollProgress from "@/components/ScrollProgress";
@@ -8,10 +9,17 @@ import SiteEasterEggs from "@/components/SiteEasterEggs";
 import PersonJsonLd from "@/components/PersonJsonLd";
 import SiteFooter from "@/components/SiteFooter";
 import MotionProvider from "@/components/MotionProvider";
-import { site } from "@/lib/site";
+import { description, site } from "@/lib/site";
 
-const description =
-  "Incoming iOS Engineer at WHOOP (July 2026). NEU CS '26. Building solo projects in the meantime.";
+// Display face. next/font downloads it at build time and serves it from this
+// site, so visitors' browsers never contact Google.
+const display = Archivo({
+  subsets: ["latin"],
+  axes: ["wdth"],
+  variable: "--font-display",
+  display: "swap",
+});
+
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
@@ -64,7 +72,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${display.variable}`}
     >
       <body className="bg-[var(--bg)] text-[var(--fg)] antialiased font-sans">
         {/*
@@ -76,7 +84,6 @@ export default function RootLayout({
         </a>
         <PersonJsonLd />
         <div className="grain" />
-        <div className="vignette" />
         <MotionProvider>
           <ScrollProgress />
           <Navigation />

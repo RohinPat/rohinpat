@@ -1,11 +1,18 @@
-import Hero from "@/components/Hero";
-import CursorSpotlight from "@/components/CursorSpotlight";
+import LockScreenHero from "@/components/home/LockScreenHero";
+import DisciplineMarquee from "@/components/home/DisciplineMarquee";
+import SignalLab from "@/components/home/SignalLab";
+import WorkFilmstrip from "@/components/home/WorkFilmstrip";
+import ExperienceIndex from "@/components/home/ExperienceIndex";
 
+// paper → ink → signal → ink → paper → (ink footer)
 export default function Home() {
   return (
     <main className="relative">
-      <CursorSpotlight />
-      <Hero />
+      <LockScreenHero />
+      <DisciplineMarquee />
+      <SignalLab />
+      <WorkFilmstrip />
+      <ExperienceIndex />
     </main>
   );
 }

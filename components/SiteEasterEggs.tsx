@@ -30,9 +30,9 @@ export default function SiteEasterEggs() {
   useEffect(() => {
     // Console signature — fires on first mount, sits at the top of devtools history.
     const heading =
-      "color:#a50044;font-size:20px;font-weight:600;font-family:Menlo,monospace;line-height:1.4";
+      "color:#ff4a1c;font-size:20px;font-weight:600;font-family:Menlo,monospace;line-height:1.4";
     const dim = "color:#9ca3af;font-family:Menlo,monospace;line-height:1.6";
-    const accent = "color:#a50044;font-family:Menlo,monospace;line-height:1.6";
+    const accent = "color:#ff4a1c;font-family:Menlo,monospace;line-height:1.6";
 
     console.log("%c👋  hey — rohin here.", heading);
     console.log(
@@ -115,7 +115,7 @@ export default function SiteEasterEggs() {
             transition={{ type: "spring", stiffness: 220, damping: 14 }}
             className="flex flex-col items-center gap-3"
           >
-            <div className="bg-accent text-white px-8 py-4 font-mono text-3xl md:text-5xl uppercase tracking-[0.2em] shadow-2xl">
+            <div className="bg-accent text-[var(--on-accent)] px-8 py-4 font-mono text-3xl md:text-5xl uppercase tracking-[0.2em] shadow-2xl">
               Goallllll
             </div>
             <motion.p

@@ -33,7 +33,7 @@ export default function GlobalError({
         <main style={{ maxWidth: 640, margin: "0 auto" }}>
           <p
             style={{
-              color: "#ec4d82",
+              color: "#ff4a1c",
               fontFamily: "ui-monospace, monospace",
               textTransform: "uppercase",
               letterSpacing: 4,

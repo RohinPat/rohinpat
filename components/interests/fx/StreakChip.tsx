@@ -21,7 +21,7 @@ export default function StreakChip({ streak, threshold = 3 }: Props) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.85 }}
           transition={{ type: "spring", stiffness: 400, damping: 20 }}
-          className="absolute top-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 bg-accent text-white font-mono text-[10px] uppercase tracking-wider tabular-nums"
+          className="absolute top-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 bg-accent text-[var(--on-accent)] font-mono text-[10px] uppercase tracking-wider tabular-nums"
         >
           <motion.span
             animate={{ rotate: [0, -15, 15, 0] }}

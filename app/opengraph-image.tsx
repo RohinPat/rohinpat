@@ -1,87 +1,96 @@
 import { ImageResponse } from "next/og";
+import { headline, site } from "@/lib/site";
 
 export const runtime = "edge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Rohin Patel — iOS Engineer at WHOOP";
+export const alt = `${site.name} — ${headline}`;
 
-export default function OG() {
+// Social card: paper stock, giant name, one signal block — same system as the site.
+// Archivo Black (SIL OFL, see app/_fonts/OFL-Archivo.txt) is bundled so the card
+// doesn't depend on any font service.
+export default async function OG() {
+  const archivo = await fetch(
+    new URL("./_fonts/archivo-latin-900-normal.woff", import.meta.url),
+  ).then((r) => r.arrayBuffer());
+
   return new ImageResponse(
     (
       <div
         style={{
-          background: "#0a0a0a",
+          background: "#f1eee7",
           width: "100%",
           height: "100%",
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: 80,
+          padding: 64,
           fontFamily: "system-ui, sans-serif",
+          color: "#0c0c0b",
         }}
       >
-        {/* Top label */}
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: 7,
-              background: "#a50044",
-            }}
-          />
-          <div
-            style={{
-              color: "#9ca3af",
-              fontSize: 26,
-              textTransform: "uppercase",
-              letterSpacing: 6,
-              fontFamily: "monospace",
-            }}
-          >
-            patel, rohin — boston, ma
-          </div>
-        </div>
-
-        {/* Big title */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            color: "#ededed",
-            fontSize: 100,
-            fontWeight: 600,
-            lineHeight: 1.02,
-            letterSpacing: -3,
-          }}
-        >
-          <div style={{ display: "flex" }}>
-            <span>iOS Engineer at&nbsp;</span>
-            <span style={{ color: "#a50044" }}>WHOOP.</span>
-          </div>
-          <div style={{ display: "flex", color: "#9ca3af" }}>
-            <span>NEU CS &apos;26 —&nbsp;</span>
-            <span style={{ color: "#ededed" }}>done.</span>
-          </div>
-        </div>
-
-        {/* Bottom */}
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            color: "#6b7280",
-            fontSize: 22,
+            fontSize: 24,
             textTransform: "uppercase",
             letterSpacing: 5,
             fontFamily: "monospace",
+            color: "#5f5b54",
           }}
         >
-          <span>github.com/RohinPat</span>
-          <span>2026</span>
+          <span>{site.location}</span>
+          <span>{site.schoolShort}</span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            fontFamily: "Archivo",
+            fontSize: 196,
+            fontWeight: 900,
+            lineHeight: 0.84,
+            letterSpacing: -8,
+            textTransform: "uppercase",
+          }}
+        >
+          <span>Rohin</span>
+          <span>Patel</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              background: "#ff4a1c",
+              padding: "18px 28px",
+              fontFamily: "Archivo",
+              fontSize: 38,
+              fontWeight: 900,
+            }}
+          >
+            {headline}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              background: "#0c0c0b",
+              color: "#f1eee7",
+              padding: "18px 28px",
+              fontSize: 26,
+              fontFamily: "monospace",
+              textTransform: "uppercase",
+              letterSpacing: 4,
+            }}
+          >
+            iOS · ML · Web
+          </div>
         </div>
       </div>
     ),
-    { ...size },
+    { ...size, fonts: [{ name: "Archivo", data: archivo, weight: 900, style: "normal" }] },
   );
 }
