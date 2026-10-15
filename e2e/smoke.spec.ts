@@ -29,18 +29,9 @@ test("/play returns 404 (route removed)", async ({ page }) => {
   expect(response?.status()).toBe(404);
 });
 
-test("homepage shows the live Boston time pill", async ({ page }) => {
+test("hero phone shows the live Boston time", async ({ page }) => {
   await page.goto("/");
-  // Match a 12-hour time like "11:42 AM" or "9:05 PM"
-  await expect(
-    page.locator("p").filter({ hasText: /\d{1,2}:\d{2}\s?(AM|PM)/i }).first(),
-  ).toBeVisible();
-});
-
-test("homepage has scroll progress bar", async ({ page }) => {
-  await page.goto("/");
-  const bar = page.locator("div.fixed.top-0").first();
-  await expect(bar).toBeAttached();
+  await expect(page.getByLabel(/Boston time \d{1,2}:\d{2}\s?(AM|PM)/i)).toBeVisible();
 });
 
 test("Off hours makes no third-party requests, even when you play", async ({ page }) => {

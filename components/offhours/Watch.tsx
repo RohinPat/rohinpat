@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useVisibleLoop } from "./useVisibleLoop";
 
 // A dial on your local time. The seconds hand sweeps at 8 beats a second
 // like an automatic movement. The case tilts toward the pointer with a
@@ -18,35 +19,25 @@ export default function Watch() {
   const [date, setDate] = useState<number | null>(null);
   const [lume, setLume] = useState(false);
 
-  useEffect(() => {
+  // Hands are written straight to the SVG — no React render per frame.
+  // Reduced motion: the seconds hand steps once a second instead of sweeping.
+  const lastBeat = useRef(-1);
+  const rootRef = useVisibleLoop<HTMLDivElement>(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let raf = 0;
-    const set = (el: SVGGElement | null, deg: number) => {
-      if (el) el.setAttribute("transform", `rotate(${deg.toFixed(2)} 100 100)`);
-    };
-    const tick = () => {
-      const d = new Date();
-      const ms = d.getMilliseconds();
-      const s = d.getSeconds() + (reduce ? 0 : Math.floor(ms / 125) / 8);
-      const m = d.getMinutes() + s / 60;
-      const h = (d.getHours() % 12) + m / 60;
-      set(secRef.current, s * 6);
-      set(minRef.current, m * 6);
-      set(hourRef.current, h * 30);
-      setDate((prev) => (prev === d.getDate() ? prev : d.getDate()));
-    };
-    tick();
-    if (reduce) {
-      const id = setInterval(tick, 1000);
-      return () => clearInterval(id);
-    }
-    const loop = () => {
-      tick();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    const d = new Date();
+    const beat = reduce ? d.getSeconds() : d.getSeconds() * 8 + Math.floor(d.getMilliseconds() / 125);
+    if (beat === lastBeat.current) return;
+    lastBeat.current = beat;
+    const s = reduce ? d.getSeconds() : beat / 8;
+    const m = d.getMinutes() + s / 60;
+    const h = (d.getHours() % 12) + m / 60;
+    const set = (el: SVGGElement | null, deg: number) =>
+      el?.setAttribute("transform", `rotate(${deg.toFixed(2)} 100 100)`);
+    set(secRef.current, s * 6);
+    set(minRef.current, m * 6);
+    set(hourRef.current, h * 30);
+    setDate((prev) => (prev === d.getDate() ? prev : d.getDate()));
+  });
 
   const tilt = (e: React.PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -69,6 +60,7 @@ export default function Watch() {
 
   return (
     <div
+      ref={rootRef}
       className="absolute inset-0 grid place-items-center paper paper-grid"
       style={{ perspective: "900px" }}
       onPointerMove={tilt}
@@ -130,14 +122,14 @@ export default function Watch() {
               ))}
               {/* date window at 3 */}
               <rect x="152" y="93" width="22" height="14" rx="1.5" fill={lume ? "#0b0c0b" : "#fff"} stroke={lume ? "rgba(185,255,214,0.4)" : "rgba(12,12,11,0.6)"} strokeWidth="0.8" />
-              <text x="163" y="103.6" textAnchor="middle" fontSize="9" fontFamily="var(--font-geist-mono), monospace" fill={lume ? LUME : "#0c0c0b"}>
+              <text x="163" y="103.6" textAnchor="middle" fontSize="9" fontFamily="var(--font-mono), monospace" fill={lume ? LUME : "#0c0c0b"}>
                 {date ?? ""}
               </text>
               {/* wordmark */}
               <text x="100" y="62" textAnchor="middle" fontSize="11" fontWeight="800" letterSpacing="1" fontFamily="var(--font-display), sans-serif" style={{ fontStretch: "70%" }} fill={lume ? "rgba(185,255,214,0.5)" : "#0c0c0b"}>
                 RP
               </text>
-              <text x="100" y="140" textAnchor="middle" fontSize="5.5" letterSpacing="1.6" fontFamily="var(--font-geist-mono), monospace" fill={lume ? "rgba(185,255,214,0.4)" : "#ff4a1c"}>
+              <text x="100" y="140" textAnchor="middle" fontSize="5.5" letterSpacing="1.6" fontFamily="var(--font-mono), monospace" fill={lume ? "rgba(185,255,214,0.4)" : "#ff4a1c"}>
                 AUTOMATIC
               </text>
               {/* hands */}

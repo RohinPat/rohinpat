@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 
 // The footer's "Say hi" — skipped on /contact, where it would just repeat the page.
 export default function FooterCta() {
-  if (usePathname() === "/contact") return <div className="md:col-span-7" />;
+  if (usePathname() === "/contact") return null;
   return (
-    <div className="md:col-span-7">
+    <div>
       <p className="font-mono text-xs uppercase tracking-[0.2em] accent mb-4">Next</p>
       <Link
         href="/contact"

@@ -1,4 +1,5 @@
 import { projects, type Entry } from "@/lib/projects";
+import Motif from "@/components/home/Motif";
 
 // /projects — two ruled lists: things I've made, places I've worked.
 export default function Projects() {
@@ -33,13 +34,17 @@ function List({ title, entries }: { title: string; entries: Entry[] }) {
             id={e.slug}
             className="scroll-mt-24 group grid grid-cols-12 gap-x-4 gap-y-2 py-6 md:py-8 border-b border-[var(--border-strong)] target:bg-[var(--bg-elevated)]"
           >
+            <Motif
+              slug={e.slug}
+              className="hidden md:block md:col-span-1 w-full max-w-[56px] h-auto muted group-hover:text-[var(--signal)] transition-colors"
+            />
             <h3
               className="col-span-12 md:col-span-4 display group-hover:text-[var(--signal)] transition-colors"
               style={{ fontSize: "clamp(2.25rem, 5vw, 3.75rem)" }}
             >
               {e.title}
             </h3>
-            <div className="col-span-12 md:col-span-5 md:pt-2">
+            <div className="col-span-12 md:col-span-4 md:pt-2">
               {e.role && <p className="font-medium mb-1">{e.role}</p>}
               <p className="muted leading-relaxed text-pretty">{e.line}</p>
               {e.links && (

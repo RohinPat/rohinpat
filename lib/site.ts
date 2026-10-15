@@ -6,6 +6,7 @@ export const site = {
   name: "Rohin Patel",
   role: "Software Engineer",
   employer: "WHOOP",
+  team: "in-app Shop",
   employerUrl: "https://whoop.com",
   school: "Northeastern University",
   schoolShort: "NEU CS '26",
@@ -20,4 +21,6 @@ export const site = {
 
 export const headline = `${site.role} at ${site.employer}`;
 
-export const description = `${headline}. ${site.schoolShort}. I build iOS apps, ML systems and the occasional toy.`;
+export const now = `Running the ${site.team} team at ${site.employer}.`;
+
+export const description = `${headline}, running the ${site.team} team. ${site.schoolShort}. I build iOS apps, ML systems and the occasional toy.`;

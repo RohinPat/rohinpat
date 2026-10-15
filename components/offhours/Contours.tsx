@@ -165,7 +165,7 @@ export default function Contours() {
         ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8);
         ctx.stroke();
         ctx.fillStyle = "#f1eee7";
-        ctx.font = "10px var(--font-geist-mono), monospace";
+        ctx.font = "10px var(--font-mono), monospace";
         ctx.fillText(`${(slope * 2.2).toFixed(1)}%`, p.x + 10, p.y - 8);
       }
     },

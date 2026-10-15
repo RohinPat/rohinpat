@@ -108,6 +108,13 @@ export default function WorkFilmstrip() {
             </Link>
           </li>
         </ol>
+        {/* edge print, like the frame numbers on a strip of 35mm */}
+        <p
+          aria-hidden="true"
+          className="px-4 md:px-10 font-mono text-[9px] tracking-[0.35em] text-[#ff4a1c] opacity-80 whitespace-nowrap overflow-hidden select-none"
+        >
+          {Array.from({ length: 14 }, (_, i) => `RP 400 ▸ ${i + 1} ▸ ${i + 1}A   `).join("")}
+        </p>
         <div aria-hidden="true" className="sprockets" />
       </div>
     </section>
@@ -141,7 +148,7 @@ function Frame({ project, index, total }: { project: Entry; index: number; total
         <p className="mt-2 text-sm leading-snug line-clamp-3 text-[var(--fg-muted)]">
           {project.line}
         </p>
-        <span className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] font-semibold">
+        <span className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] font-medium">
           More
           <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
         </span>

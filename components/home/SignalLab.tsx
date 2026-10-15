@@ -51,7 +51,6 @@ export default function SignalLab() {
   params.current = { bpm, noise, haptics };
 
   const quality = Math.max(0, Math.round(100 - noise * 0.7));
-  const rr = Math.round(60000 / bpm);
 
   const draw = useCallback((tNow: number) => {
     const canvas = canvasRef.current;
@@ -178,109 +177,59 @@ export default function SignalLab() {
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-12 gap-4 md:gap-6">
-          {/* Control panel */}
-          <form
-            className="lg:col-span-4 border-2 border-[var(--ink)] p-5 md:p-6 flex flex-col gap-6"
-            onSubmit={(e) => e.preventDefault()}
-            aria-label="Signal controls"
-          >
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] font-semibold">Tune the signal</p>
-              <button
-                type="button"
-                onClick={reset}
-                className="font-mono text-[11px] uppercase tracking-wider underline underline-offset-4 hover:no-underline"
+        {/* Monitor */}
+        <div className="relative bg-[var(--ink)] text-[var(--paper)] h-[340px] md:h-[420px] overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            role="img"
+            aria-label={`Synthesized heart-rate trace at ${bpm} beats per minute, ${noise}% motion noise`}
+            className="absolute inset-0 w-full h-full"
+          />
+          <div className="relative flex items-start justify-between p-5 md:p-7 pointer-events-none">
+            <p className="flex items-baseline gap-2">
+              <span
+                key={beat}
+                className="display tabular-nums text-[var(--signal)] inline-block animate-[beat_0.35s_ease-out]"
+                style={{ fontSize: "clamp(4.5rem, 12vw, 9rem)", fontStretch: "75%" }}
               >
-                Reset
-              </button>
-            </div>
-
-            <Slider
-              id="lab-bpm"
-              label="Heart rate"
-              unit="bpm"
-              min={40}
-              max={190}
-              value={bpm}
-              onChange={setBpm}
-            />
-            <Slider
-              id="lab-noise"
-              label="Motion noise"
-              unit="%"
-              min={0}
-              max={100}
-              value={noise}
-              onChange={setNoise}
-            />
-
-            <label className="flex items-center justify-between gap-4 cursor-pointer">
-              <span className="font-mono text-xs uppercase tracking-wider">
-                Haptic tick on each beat
-                <span className="block normal-case tracking-normal text-[11px] text-[var(--fg-muted)] mt-0.5">
-                  Phones that support vibration only
-                </span>
+                {String(bpm).padStart(3, "0")}
               </span>
+              <span className="font-mono text-sm uppercase tracking-widest">bpm</span>
+            </p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#b9b4aa] text-right">
+              Live · synthesized
+              <span className="block text-[var(--paper)] text-sm mt-1 tabular-nums">{quality}% quality</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Control bar */}
+        <form
+          aria-label="Signal controls"
+          onSubmit={(e) => e.preventDefault()}
+          className="grid sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-x-8 gap-y-5 items-end border-2 border-t-0 border-[var(--ink)] px-5 md:px-7 py-5"
+        >
+          <Slider id="lab-bpm" label="Heart rate" unit="bpm" min={40} max={190} value={bpm} onChange={setBpm} />
+          <Slider id="lab-noise" label="Motion noise" unit="%" min={0} max={100} value={noise} onChange={setNoise} />
+          <div className="flex items-center gap-6 sm:col-span-2 lg:col-span-1">
+            <label className="flex items-center gap-3 cursor-pointer font-mono text-xs uppercase tracking-wider">
               <input
                 type="checkbox"
                 checked={haptics}
                 onChange={(e) => setHaptics(e.target.checked)}
-                className="w-5 h-5 accent-[var(--ink)] shrink-0"
+                className="w-5 h-5 accent-[var(--ink)]"
               />
+              Haptic tick
             </label>
-
-            <div className="mt-auto pt-5 border-t border-[var(--border-strong)]">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] font-semibold mb-3">
-                The real version
-              </p>
-              <dl className="grid grid-cols-2 gap-y-3 gap-x-4">
-              {[
-                ["UI", "SwiftUI"],
-                ["Transport", "Core Bluetooth"],
-                ["Feedback", "Haptics"],
-                ["Data", "Live from the strap"],
-              ].map(([k, v]) => (
-                <div key={k}>
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--fg-muted)]">{k}</dt>
-                  <dd className="text-sm font-medium">{v}</dd>
-                </div>
-              ))}
-              </dl>
-            </div>
-          </form>
-
-          {/* Monitor */}
-          <div className="lg:col-span-8 relative bg-[var(--ink)] text-[var(--paper)] min-h-[320px] md:min-h-[380px] flex flex-col">
-            <div className="flex items-start justify-between p-5 md:p-6 gap-6">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#b9b4aa]">Live · synthesized</p>
-                <p className="mt-1 flex items-baseline gap-2">
-                  <span
-                    key={beat}
-                    className="display tabular-nums text-[var(--signal)] inline-block animate-[beat_0.35s_ease-out]"
-                    style={{ fontSize: "clamp(4rem, 10vw, 7.5rem)", fontStretch: "75%" }}
-                  >
-                    {String(bpm).padStart(3, "0")}
-                  </span>
-                  <span className="font-mono text-sm uppercase tracking-widest">bpm</span>
-                </p>
-              </div>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-right">
-                <Readout label="R–R" value={`${rr} ms`} />
-                <Readout label="Quality" value={`${quality}%`} />
-                <Readout label="Window" value={`${WINDOW_SECONDS} s`} />
-                <Readout label="Source" value="Browser" />
-              </dl>
-            </div>
-            <canvas
-              ref={canvasRef}
-              role="img"
-              aria-label={`Synthesized heart-rate trace at ${bpm} beats per minute, ${noise}% motion noise`}
-              className="flex-1 w-full min-h-[180px]"
-            />
+            <button
+              type="button"
+              onClick={reset}
+              className="font-mono text-xs uppercase tracking-wider underline underline-offset-4 hover:no-underline"
+            >
+              Reset
+            </button>
           </div>
-        </div>
+        </form>
       </div>
     </section>
   );
@@ -309,7 +258,7 @@ function Slider({
         <label htmlFor={id} className="font-mono text-xs uppercase tracking-wider">
           {label}
         </label>
-        <output htmlFor={id} className="font-mono text-sm tabular-nums font-semibold">
+        <output htmlFor={id} className="font-mono text-sm tabular-nums font-medium">
           {value} {unit}
         </output>
       </div>
@@ -322,15 +271,6 @@ function Slider({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-[var(--ink)] cursor-pointer"
       />
-    </div>
-  );
-}
-
-function Readout({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#b9b4aa]">{label}</dt>
-      <dd className="font-mono text-sm tabular-nums">{value}</dd>
     </div>
   );
 }

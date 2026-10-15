@@ -49,10 +49,10 @@ export const projects: Entry[] = [
     slug: "whoop",
     title: "WHOOP",
     role: "Software Engineer",
-    line: "iOS. Started on live heart-rate onboarding as a co-op; full-time since 2026.",
+    line: "Running the in-app Shop team. Started as an iOS co-op on live heart-rate onboarding.",
     year: "2025 —",
     kind: "work",
-    tags: ["SwiftUI", "Core Bluetooth"],
+    tags: ["SwiftUI", "iOS", "Commerce"],
   },
   {
     slug: "siphox",

@@ -11,6 +11,7 @@
   --paper-muted: #5f5b54;      /* 5.8:1 on paper */
   --signal: #ff4a1c;           /* 5.8:1 against ink, either way round */
   --garnet: #a50044;           /* Barça card only */
+  --paper-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.04  0 0 0 0.08 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 
   --bg: var(--ink);
   --bg-elevated: #161615;
@@ -55,31 +56,12 @@ body {
   .accent { color: var(--accent-text); }
   .bg-accent { background-color: var(--accent); }
   .border-accent { border-color: var(--accent); }
-  .ring-accent { --tw-ring-color: var(--accent); }
 
   .muted { color: var(--fg-muted); }
   .dim { color: var(--fg-dim); }
 
-  .hairline { border-color: var(--border); }
-  .hairline-strong { border-color: var(--border-strong); }
 
-  .grain {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0.06;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
-  }
 
-  .vignette {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    background: radial-gradient(ellipse at 50% 30%, transparent 0%, transparent 50%, rgba(0,0,0,0.4) 100%);
-  }
 }
 
 a { color: inherit; }
@@ -98,7 +80,7 @@ a { color: inherit; }
   padding: 0.6rem 1rem;
   background: var(--fg);
   color: var(--bg);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
@@ -144,17 +126,17 @@ a { color: inherit; }
 .legal-prose strong { color: var(--fg); font-weight: 600; }
 .legal-prose a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
 .legal-prose a:hover { color: var(--accent-text); }
-.legal-prose code { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.875em; color: var(--fg); }
+.legal-prose code { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.875em; color: var(--fg); }
 .legal-prose table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; display: block; overflow-x: auto; }
 .legal-prose th, .legal-prose td { text-align: left; vertical-align: top; padding: 0.6rem 0.75rem 0.6rem 0; border-bottom: 1px solid var(--border); }
-.legal-prose th { color: var(--fg); font-weight: 600; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.legal-prose th { color: var(--fg); font-weight: 600; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
 
 /* ---------------------------------------------------------------------------
    Display type — Archivo at its narrowest width. Every page title uses it.
    ------------------------------------------------------------------------ */
 .display,
 main h1 {
-  font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-display), system-ui, sans-serif;
   font-stretch: 62%;
   font-weight: 800;
   text-transform: uppercase;
@@ -178,14 +160,17 @@ main h1:not(.hero-name) {
   --border-strong: rgba(12, 12, 11, 0.28);
   --accent-text: var(--ink);
   background-color: var(--paper);
+  /* paper tooth: static noise in the background itself — no blend layer */
+  background-image: var(--paper-noise);
   color: var(--ink);
 }
 .paper-grid {
   background-image:
     linear-gradient(rgba(12, 12, 11, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(12, 12, 11, 0.06) 1px, transparent 1px);
-  background-size: 48px 48px;
-  background-position: -1px -1px;
+    linear-gradient(90deg, rgba(12, 12, 11, 0.06) 1px, transparent 1px),
+    var(--paper-noise);
+  background-size: 48px 48px, 48px 48px, 160px 160px;
+  background-position: -1px -1px, -1px -1px, 0 0;
 }
 
 /* Signal sections: full-bleed colour block, ink type. */
@@ -206,11 +191,7 @@ main h1:not(.hero-name) {
   100% { transform: scale(1); }
 }
 
-/* Marquee */
-@keyframes marquee { to { transform: translateX(-50%); } }
-.marquee-track { animation: marquee 38s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track { animation: none; }
   [class*="animate-[beat"] { animation: none !important; }
 }
 
@@ -226,3 +207,23 @@ main h1:not(.hero-name) {
 /* Keyboard piece: key height tracks the board's width */
 .kb { container-type: inline-size; }
 .kb-key { height: 5.6cqw; min-height: 14px; }
+
+/* Entrances + small motion, all CSS (no animation library) */
+@keyframes enter-left { from { opacity: 0; transform: translateX(-40px); } }
+@keyframes enter-right { from { opacity: 0; transform: translateX(40px); } }
+@keyframes enter-up { from { opacity: 0; transform: translateY(80px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.enter-left { animation: enter-left 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.enter-right { animation: enter-right 0.8s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.enter-up { animation: enter-up 0.9s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Easter egg */
+@keyframes egg-life { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes egg-pop { from { transform: scale(0.6) translateY(20px); } }
+@keyframes egg-fall { to { transform: translateY(105vh) rotate(540deg); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .enter-left, .enter-right, .enter-up, .scroll-fx,
+  [class*="animate-["] { animation: none !important; }
+  .scroll-fx { transform: none !important; }
+}

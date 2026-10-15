@@ -31,18 +31,12 @@ export default function Contact() {
         </a>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <a
-            href={`mailto:${site.email}`}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--signal)] text-[var(--ink)] font-medium hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            Email me
-          </a>
           <button
             type="button"
             onClick={copy}
-            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-[var(--fg)] transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--signal)] text-[var(--ink)] font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
-            {copied ? "Copied" : "Copy address"}
+            {copied ? "Copied ✓" : "Copy address"}
           </button>
           <span role="status" className="sr-only">
             {copied ? "Email address copied to clipboard" : ""}
@@ -73,8 +67,8 @@ export default function Contact() {
         </ul>
 
         <p className="mt-10 muted max-w-prose">
-          Mostly heads-down at {site.employer} these days. Emails still get read, just
-          not always fast.
+          Mostly heads-down running the {site.team} team at {site.employer}. Emails
+          still get read, just not always fast.
         </p>
       </div>
     </section>

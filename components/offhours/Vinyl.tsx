@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useVisibleLoop } from "./useVisibleLoop";
 
 // A record on a platter. Play spins it at 33⅓ rpm and drops the tonearm;
 // grab the vinyl to scratch it. The light sheen is fixed while the grooves
@@ -13,25 +14,17 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
   const [playing, setPlaying] = useState(false);
   const s = useRef({ angle: 0, speed: 0, dragging: false, lastPointer: 0 });
 
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let raf = 0;
-    let last = performance.now();
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const st = s.current;
-      if (!st.dragging) {
-        const target = playing && !reduce ? RPM_DEG_PER_S : 0;
-        st.speed += (target - st.speed) * Math.min(1, dt * 3); // platter spin-up / brake
-        st.angle += st.speed * dt;
-      }
-      if (discRef.current) discRef.current.style.transform = `rotate(${st.angle.toFixed(2)}deg)`;
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  const rootRef = useVisibleLoop<HTMLDivElement>((dt) => {
+    const st = s.current;
+    if (!st.dragging) {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const target = playing && !reduce ? RPM_DEG_PER_S : 0;
+      st.speed += (target - st.speed) * Math.min(1, dt * 3); // platter spin-up / brake
+      if (Math.abs(st.speed) < 0.01 && !playing) return; // at rest: nothing to draw
+      st.angle += st.speed * dt;
+    }
+    if (discRef.current) discRef.current.style.transform = `rotate(${st.angle.toFixed(2)}deg)`;
+  });
 
   const angleAt = (e: React.PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -56,7 +49,7 @@ export default function Vinyl({ playlistUrl }: { playlistUrl: string }) {
   };
 
   return (
-    <div className="absolute inset-0 bg-[#1a1918] flex items-center justify-center p-6">
+    <div ref={rootRef} className="absolute inset-0 bg-[#1a1918] flex items-center justify-center p-6">
       <div className="relative h-full max-h-[300px] aspect-square">
         {/* platter */}
         <div className="absolute inset-0 rounded-full bg-[#2a2927] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.05)]" />

@@ -27,14 +27,16 @@ export default function Blaugrana() {
       return d;
     };
 
+    const edges = new Float32Array(STRIPES + 2);
     for (let y = 0; y < h; y += BAND) {
       const yc = y + BAND / 2;
+      // each stripe edge is shared by two stripes: displace it once per row
+      for (let e = 0; e < STRIPES + 2; e++) edges[e] = (e - 1) * sw + disp((e - 1) * sw, yc);
       for (let i = -1; i <= STRIPES; i++) {
         const xl = i * sw;
-        const xr = xl + sw;
-        const l = xl + disp(xl, yc);
-        const r = xr + disp(xr, yc);
-        // fold shading from how the edge leans
+        const l = edges[i + 1];
+        const r = i + 2 < edges.length ? edges[i + 2] : xl + sw + disp(xl + sw, yc);
+        // fold shading from how the stripe leans
         const slope = (disp(xl + sw / 2, yc + BAND) - disp(xl + sw / 2, yc - BAND)) / (2 * BAND);
         const shade = Math.max(-0.35, Math.min(0.35, slope * 1.4));
         const base = ((i % 2) + 2) % 2 === 0 ? GARNET : BLUE;

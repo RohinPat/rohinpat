@@ -8,29 +8,29 @@ export const metadata: Metadata = {
 
 export default function NotFound() {
   return (
-    <main className="min-h-[80vh] flex items-center px-6 md:px-10 pt-24 relative">
-      <div className="max-w-3xl w-full mx-auto">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] accent mb-6">
-          404 · off the pitch
+    <main className="min-h-[80vh] flex items-center px-4 md:px-10 pt-24 pb-16">
+      <div className="max-w-6xl w-full mx-auto">
+        <p
+          aria-hidden="true"
+          className="display text-[var(--signal)] leading-[0.8]"
+          style={{ fontSize: "clamp(9rem, 32vw, 24rem)" }}
+        >
+          404
         </p>
-        <h1 className="text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05] mb-6 text-balance">
-          That route doesn&apos;t exist.
-        </h1>
-        <p className="muted text-base md:text-lg max-w-prose mb-10 text-pretty">
-          You took a touch too many. Probably a stale link or a typo in the URL. The site
-          itself is fine.
+        <h1>Off the pitch.</h1>
+        <p className="-mt-6 mb-10 muted text-lg max-w-prose">
+          That page doesn&apos;t exist. Probably a stale link.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
             href="/"
-            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] font-medium hover:bg-accent hover:text-[var(--on-accent)] transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--signal)] text-[var(--ink)] font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
-            Back home
-            <span className="transition-transform group-hover:translate-x-0.5">→</span>
+            Back home →
           </Link>
           <Link
             href="/projects"
-            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent-text transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-[var(--fg)] transition-colors"
           >
             See the work
           </Link>

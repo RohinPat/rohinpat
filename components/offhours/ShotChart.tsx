@@ -24,6 +24,8 @@ function density(x: number, y: number) {
 
 export default function ShotChart() {
   const shots = useRef<Shot[]>([]);
+  // hex centres + densities depend only on size: computed once per resize
+  const hexes = useRef<{ key: string; list: Array<{ x: number; y: number; px: number; py: number; v: number }> }>({ key: "", list: [] });
 
   const layout = (w: number, h: number) => {
     // court is 50 x 32 units; fit with margin, rim near the bottom
@@ -41,27 +43,36 @@ export default function ShotChart() {
 
       // hex grid
       const r = 1.25; // hex radius in court units
-      const dx = r * Math.sqrt(3);
-      const dy = r * 1.5;
-      for (let row = 0, y = -4; y < 30; row++, y += dy) {
-        for (let x = -25 + (row % 2) * (dx / 2); x <= 25; x += dx) {
-          const v = density(x, y);
-          if (v < 0.08) continue;
-          const [px, py] = toPx(x, y);
-          let k = 0.35 + v * 0.6 + Math.sin(t * 1.5 + x * 0.4 + y * 0.3) * 0.04;
-          if (p.inside) k += Math.exp(-((px - p.x) ** 2 + (py - p.y) ** 2) / (2 * 40 * 40)) * 0.45;
-          const lit = shots.current.some((sh) => Math.hypot(sh.x - x, sh.y - y) < r && t - sh.t < 1.6);
-          ctx.fillStyle = lit ? "#ff4a1c" : v > 0.6 ? TEAL : `rgba(0,160,176,${0.25 + v * 0.5})`;
-          ctx.beginPath();
-          for (let i = 0; i < 6; i++) {
-            const a = (Math.PI / 3) * i + Math.PI / 6;
-            const hx = px + Math.cos(a) * r * s * Math.min(1, k);
-            const hy = py + Math.sin(a) * r * s * Math.min(1, k);
-            if (i === 0) ctx.moveTo(hx, hy);
-            else ctx.lineTo(hx, hy);
+      const key = `${w}x${h}`;
+      if (hexes.current.key !== key) {
+        const list = [];
+        const dx = r * Math.sqrt(3);
+        const dy = r * 1.5;
+        for (let row = 0, y = -4; y < 30; row++, y += dy) {
+          for (let x = -25 + (row % 2) * (dx / 2); x <= 25; x += dx) {
+            const v = density(x, y);
+            if (v < 0.08) continue;
+            const [px, py] = toPx(x, y);
+            list.push({ x, y, px, py, v });
           }
-          ctx.fill();
         }
+        hexes.current = { key, list };
+      }
+      const live = shots.current.filter((sh) => t - sh.t < 1.6);
+      for (const { x, y, px, py, v } of hexes.current.list) {
+        let k = 0.35 + v * 0.6 + Math.sin(t * 1.5 + x * 0.4 + y * 0.3) * 0.04;
+        if (p.inside) k += Math.exp(-((px - p.x) ** 2 + (py - p.y) ** 2) / (2 * 40 * 40)) * 0.45;
+        const lit = live.length > 0 && live.some((sh) => Math.hypot(sh.x - x, sh.y - y) < r);
+        ctx.fillStyle = lit ? "#ff4a1c" : v > 0.6 ? TEAL : `rgba(0,160,176,${0.25 + v * 0.5})`;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i + Math.PI / 6;
+          const hx = px + Math.cos(a) * r * s * Math.min(1, k);
+          const hy = py + Math.sin(a) * r * s * Math.min(1, k);
+          if (i === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
+        }
+        ctx.fill();
       }
 
       // court lines

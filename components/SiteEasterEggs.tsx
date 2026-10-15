@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   KONAMI_SEQUENCE,
   findWordTrigger,
@@ -97,68 +96,56 @@ export default function SiteEasterEggs() {
 
   const flavor = active ? FLAVOR[active] ?? "Goallllll" : "";
 
+  if (!active) return null;
+
+  // Visible for 2.4s; the fade-out is baked into the keyframes.
   return (
-    <AnimatePresence>
-      {active && (
-        <motion.div
-          key={active + Date.now()}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 pointer-events-none flex items-center justify-center"
-          style={{ zIndex: 55 }}
+    <div
+      key={active}
+      className="fixed inset-0 pointer-events-none flex items-center justify-center animate-[egg-life_2.4s_ease-out_forwards]"
+      style={{ zIndex: 55 }}
+    >
+      <Confetti />
+      <div className="flex flex-col items-center gap-3 animate-[egg-pop_0.5s_cubic-bezier(0.2,1.4,0.4,1)]">
+        <div
+          className="display bg-[var(--signal)] text-[var(--ink)] px-8 pt-3 pb-2 shadow-2xl"
+          style={{ fontSize: "clamp(3.5rem, 10vw, 8rem)" }}
         >
-          <Confetti />
-          <motion.div
-            initial={{ scale: 0.6, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 220, damping: 14 }}
-            className="flex flex-col items-center gap-3"
-          >
-            <div className="bg-accent text-[var(--on-accent)] px-8 py-4 font-mono text-3xl md:text-5xl uppercase tracking-[0.2em] shadow-2xl">
-              Goallllll
-            </div>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.15 }}
-              className="font-mono text-xs uppercase tracking-[0.25em] text-white bg-black/70 px-3 py-1.5"
-            >
-              {flavor}
-            </motion.p>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          Goallllll
+        </div>
+        <p className="font-mono text-xs uppercase tracking-[0.25em] text-[var(--paper)] bg-[var(--ink)] px-3 py-1.5">
+          {flavor}
+        </p>
+      </div>
+    </div>
   );
 }
 
 function Confetti() {
-  const pieces = Array.from({ length: 60 });
+  const [pieces] = useState(() =>
+    Array.from({ length: 60 }, (_, i) => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 0.3,
+      dur: 1.6 + Math.random() * 1.1,
+      w: 6 + Math.random() * 4,
+      h: 10 + Math.random() * 6,
+      accent: i % 2 === 0,
+    })),
+  );
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {pieces.map((_, i) => {
-        const left = `${Math.random() * 100}%`;
-        const delay = Math.random() * 0.3;
-        const dur = 1.6 + Math.random() * 1.1;
-        const isAccent = i % 2 === 0;
-        const w = 6 + Math.random() * 4;
-        const h = 10 + Math.random() * 6;
-        return (
-          <motion.span
-            key={i}
-            className={`absolute top-[-20px] ${isAccent ? "bg-accent" : "bg-white"}`}
-            style={{ left, width: `${w}px`, height: `${h}px` }}
-            initial={{ y: -20, rotate: 0, opacity: 1 }}
-            animate={{
-              y: typeof window === "undefined" ? 800 : window.innerHeight + 40,
-              rotate: 540,
-              opacity: 0,
-            }}
-            transition={{ duration: dur, delay, ease: "easeIn" }}
-          />
-        );
-      })}
+      {pieces.map((c, i) => (
+        <span
+          key={i}
+          className={`absolute -top-5 ${c.accent ? "bg-[var(--signal)]" : "bg-[var(--paper)]"}`}
+          style={{
+            left: `${c.left}%`,
+            width: c.w,
+            height: c.h,
+            animation: `egg-fall ${c.dur}s ${c.delay}s ease-in forwards`,
+          }}
+        />
+      ))}
     </div>
   );
 }

@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { headline } from "@/lib/site";
+import { headline, site } from "@/lib/site";
 
 // Hero: a giant split name on drafting paper with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
@@ -47,7 +41,7 @@ const notifications = [
     app: "Work",
     mark: "W",
     title: headline,
-    body: "SwiftUI, Core Bluetooth, real-time health data.",
+    body: `Running the ${site.team} team.`,
     href: "/projects#whoop",
   },
   {
@@ -69,16 +63,29 @@ const notifications = [
 export default function LockScreenHero() {
   const ref = useRef<HTMLElement>(null);
   const now = useBostonNow();
-  const reduce = useReducedMotion();
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const leftX = useTransform(scrollYProgress, [0, 1], ["0%", "-35%"]);
-  const rightX = useTransform(scrollYProgress, [0, 1], ["0%", "35%"]);
-  const phoneY = useTransform(scrollYProgress, [0, 1], [0, 220]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 1], [0, -8]);
+  // Scroll progress through the hero (0 → 1) as a CSS variable; the name
+  // halves and the phone read it in their transforms. One passive listener,
+  // no re-renders.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const r = el.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, -r.top / r.height));
+      el.style.setProperty("--p", p.toFixed(4));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   return (
     <section
@@ -88,9 +95,7 @@ export default function LockScreenHero() {
       {/* Top meta row */}
       <div className="relative z-20 flex items-start justify-between gap-4 font-mono text-[11px] md:text-xs uppercase tracking-[0.18em] muted">
         <p className="hidden sm:block">{headline}</p>
-        <p className="tabular-nums sm:text-right">
-          Boston · <span className="text-[var(--fg)]">{now?.full ?? "—:—"}</span>
-        </p>
+        <p className="sm:text-right">{site.location}</p>
       </div>
 
       {/* Name + phone */}
@@ -100,40 +105,28 @@ export default function LockScreenHero() {
           style={{ fontSize: "clamp(7rem, 21vw, 22rem)" }}
         >
           {/* Outer span: one-off entrance. Inner span: scroll-linked drift. */}
-          <motion.span
-            initial={{ opacity: 0, x: -40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }}
-            className="block"
-          >
-            <motion.span style={reduce ? undefined : { x: leftX }} className="block">
+          <span className="block enter-left">
+            <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * -35%))" }}>
               Rohin
-            </motion.span>
-          </motion.span>
-          <motion.span
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.08, ease: [0.2, 0.7, 0.2, 1] }}
-            className="block self-end md:self-auto"
-          >
-            <motion.span style={reduce ? undefined : { x: rightX }} className="block">
+            </span>
+          </span>
+          <span className="block self-end md:self-auto enter-right">
+            <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * 35%))" }}>
               Patel
-            </motion.span>
-          </motion.span>
+            </span>
+          </span>
         </h1>
 
         {/* Phone — below the stacked name on phones, centred over it on desktop */}
         <div className="relative md:absolute md:inset-0 z-10 flex md:grid justify-center md:place-items-center -mt-[3vw] md:mt-0 pointer-events-none">
-          <motion.div
-            initial={{ opacity: 0, y: 80 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
-            className="pointer-events-auto"
-          >
-            <motion.div style={reduce ? undefined : { y: phoneY, rotate: phoneRotate }}>
+          <div className="pointer-events-auto enter-up">
+            <div
+              className="scroll-fx"
+              style={{ transform: "translateY(calc(var(--p, 0) * 220px)) rotate(calc(var(--p, 0) * -8deg))" }}
+            >
               <Phone now={now} />
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
       </div>
 
