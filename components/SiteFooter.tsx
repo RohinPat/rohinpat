@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { site } from "@/lib/site";
 
-// Home ends with a sign-off: an invitation and the name set edge to edge.
-// Every other page gets one quiet line, so the footer never outweighs the
-// page above it.
+// Home ends with one invitation. Every other page gets a single quiet line,
+// so the footer never outweighs the page above it.
 export default function SiteFooter() {
   const home = usePathname() === "/";
   const elsewhere = [
@@ -14,19 +13,18 @@ export default function SiteFooter() {
     { name: "GitHub ↗", href: site.github, external: true },
     { name: "LinkedIn ↗", href: site.linkedin, external: true },
   ];
-  const legal = [
+  const about = [
+    { name: "Colophon", href: "/colophon" },
     { name: "Privacy", href: "/privacy" },
-    { name: "Terms", href: "/terms" },
-    { name: "Cookies", href: "/cookies" },
   ];
 
   return (
-    <footer className="relative z-10 border-t border-[var(--border)] overflow-hidden">
-      <div className={`px-4 md:px-10 max-w-6xl mx-auto ${home ? "pt-16 md:pt-24" : "py-6"}`}>
+    <footer className={`relative z-10 border-t border-[var(--border)] px-4 md:px-10 ${home ? "pt-16 md:pt-24 pb-8" : "py-6"}`}>
+      <div className="max-w-6xl mx-auto">
         {home && (
           <Link
             href="/contact"
-            className="group display block hover:text-[var(--accent-text)] transition-colors"
+            className="group display block w-fit hover:text-[var(--accent-text)] transition-colors"
             style={{ fontSize: "clamp(3rem, 9vw, 7.5rem)" }}
           >
             Say hi{" "}
@@ -56,7 +54,7 @@ export default function SiteFooter() {
             ))}
           </ul>
           <ul className="flex flex-wrap gap-x-6 gap-y-2">
-            {legal.map((l) => (
+            {about.map((l) => (
               <li key={l.name}>
                 <Link href={l.href} className="inline-block py-1 hover:text-[var(--accent-text)] transition-colors">
                   {l.name}
@@ -69,16 +67,6 @@ export default function SiteFooter() {
           </p>
         </nav>
       </div>
-
-      {home && (
-        <p
-          aria-hidden="true"
-          className="display whitespace-nowrap text-center leading-[0.8] mt-8 -mb-[0.12em] select-none text-[var(--fg)]"
-          style={{ fontSize: "clamp(4rem, 17.5vw, 20rem)" }}
-        >
-          Rohin Patel
-        </p>
-      )}
     </footer>
   );
 }

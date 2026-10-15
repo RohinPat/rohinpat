@@ -66,29 +66,36 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
   expect(keys).toEqual([]);
 });
 
-test("signal lab: heart-rate slider drives the readout", async ({ page }) => {
+test("home diagram: focusing a stage explains it", async ({ page }) => {
   await page.goto("/");
-  const slider = page.getByLabel("Heart rate");
-  await slider.scrollIntoViewIfNeeded();
-  await slider.fill("120");
-  await expect(page.getByText("120 bpm")).toBeVisible();
-  await expect(page.getByRole("img", { name: /120 beats per minute/ })).toBeAttached();
-  await page.getByRole("button", { name: "Reset" }).click();
-  await expect(page.getByText("72 bpm")).toBeVisible();
+  const stage = page.getByRole("button", { name: /Tagging/ }).first();
+  await stage.focus();
+  await expect(stage).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/closet-organizer");
 });
 
-test("work filmstrip: next/previous step through frames", async ({ page }) => {
-  await page.goto("/");
-  const prev = page.getByRole("button", { name: "Previous project" });
-  const next = page.getByRole("button", { name: "Next project" });
-  await next.scrollIntoViewIfNeeded();
-  await expect(prev).toBeDisabled();
-  await next.click();
-  await expect(prev).toBeEnabled();
-  await expect(page.getByRole("link", { name: /Closet Organizer/ }).last()).toHaveAttribute(
+test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {
+  const res = await page.goto("/projects/closet-organizer");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveTitle(/Closet Organizer/);
+  await expect(page.getByRole("heading", { level: 1, name: /Closet Organizer/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Read the code on GitHub/ })).toHaveAttribute(
     "href",
-    "/projects#closet-organizer",
+    "https://github.com/RohinPat/Closet-Org",
   );
+  const excerpts = page.locator("figure.code-block figcaption a");
+  expect(await excerpts.count()).toBeGreaterThanOrEqual(2);
+  for (const href of await excerpts.evaluateAll((els) => els.map((e) => e.getAttribute("href")))) {
+    expect(href).toMatch(/^https:\/\/github\.com\/RohinPat\/Closet-Org\/blob\/[0-9a-f]{40}\/.+#L\d+-L\d+$/);
+  }
+});
+
+test("work page links the write-up and the code", async ({ page }) => {
+  await page.goto("/projects");
+  const row = page.locator("#closet-organizer");
+  await expect(row.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/closet-organizer");
+  await expect(row.getByRole("link", { name: /Code/ })).toHaveAttribute("href", "https://github.com/RohinPat/Closet-Org");
 });
 
 test("project deep link lands on that entry", async ({ page }) => {

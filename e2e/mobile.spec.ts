@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // Mobile-specific checks. Runs only under the "mobile" project (iPhone 13 viewport).
 // Catches the worst mobile failure mode: horizontal scroll / clipped content.
 
-const routes = ["/", "/projects", "/interests", "/contact", "/privacy"];
+const routes = ["/", "/projects", "/projects/closet-organizer", "/interests", "/contact", "/privacy"];
 
 for (const path of routes) {
   test(`${path} has no horizontal overflow on mobile`, async ({ page }) => {
@@ -32,9 +32,15 @@ test("mobile nav opens and closes", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects$/);
 });
 
-test("hero CTAs sit on the first screen on a phone", async ({ page }) => {
+test("name, point of view and the primary action sit on the first screen", async ({ page }) => {
   await page.goto("/");
-  const cta = await page.getByRole("link", { name: /See the work/i }).boundingBox();
   const vh = page.viewportSize()!.height;
-  expect(cta!.y + cta!.height).toBeLessThanOrEqual(vh);
+  for (const el of [
+    page.getByRole("heading", { level: 1 }),
+    page.getByText(/I build iOS apps/),
+    page.getByRole("link", { name: /Read the case study/i }),
+  ]) {
+    const box = await el.boundingBox();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(vh);
+  }
 });

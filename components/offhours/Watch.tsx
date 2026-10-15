@@ -61,7 +61,7 @@ export default function Watch() {
   return (
     <div
       ref={rootRef}
-      className="absolute inset-0 grid place-items-center paper paper-grid [container-type:size]"
+      className="absolute inset-0 grid place-items-center paper [container-type:size]"
       style={{ perspective: "900px" }}
       onPointerMove={tilt}
       onPointerLeave={settle}

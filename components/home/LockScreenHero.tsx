@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { headline, site, teamLine } from "@/lib/site";
+import { now as nowLine, pov, site, teamLine } from "@/lib/site";
 
-// Hero: a giant split name on drafting paper with an iPhone between the two
+// Hero: a giant split name on cream stock with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
 // are real links into the site. Scrolling pulls the name apart and lifts the
-// phone away.
+// phone away. On a phone the order is name → point of view → actions, with
+// the top of the phone peeking in at the bottom of the first screen.
 
 type BostonNow = { full: string; clock: string; date: string };
 
@@ -48,14 +49,14 @@ const notifications = [
     app: "Projects",
     mark: "P",
     title: "Closet Organizer",
-    body: "ResNet50 + color theory. One FastAPI backend, two apps.",
-    href: "/projects#closet-organizer",
+    body: "CLIP tagging, per-pixel colour, a rule-based stylist. How it works →",
+    href: "/projects/closet-organizer",
   },
   {
     app: "Off hours",
     mark: "O",
-    title: "Nine small experiments",
-    body: "Watches, cars, Barça, vinyl, skiing — made interactive.",
+    title: "Nine canvas pieces",
+    body: "Watches, cars, Barça, vinyl, skiing — drawn in code.",
     href: "/interests",
   },
 ];
@@ -102,19 +103,11 @@ export default function LockScreenHero() {
   return (
     <section
       ref={ref}
-      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-14 lg:pb-8 flex flex-col"
+      className="paper relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-[4.75rem] md:pt-24 pb-14 lg:pb-8 flex flex-col"
     >
-      {/* Top meta row */}
-      <div className="relative z-20 flex items-start justify-between gap-4 font-mono text-[11px] md:text-xs uppercase tracking-[0.18em] muted">
-        <p className="hidden sm:block">{headline}</p>
-        <p className="sm:text-right">{site.location}</p>
-      </div>
-
       {/* Name */}
       <div className="relative flex lg:flex-1 lg:items-center lg:min-h-[440px]">
-        <h1
-          className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-6 lg:py-2 select-none"
-        >
+        <h1 className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-2 lg:py-2 select-none">
           {/* Outer span: one-off entrance. Inner span: scroll-linked drift. */}
           <span className="block enter-left">
             <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * -35%))" }}>
@@ -129,32 +122,32 @@ export default function LockScreenHero() {
         </h1>
       </div>
 
-      {/* Tagline + CTAs */}
-      <div className="relative z-20 mt-6 grid md:grid-cols-12 gap-6 items-end">
-        <p className="md:col-span-6 text-lg md:text-2xl leading-snug text-balance max-w-xl">
-          I build iOS apps, ML systems and the occasional toy. This site is one of
-          them.
+      {/* Point of view + actions */}
+      <div className="relative z-20 mt-5 lg:mt-4 grid md:grid-cols-12 gap-5 md:gap-6 items-end">
+        <p className="md:col-span-7 text-[1.1875rem] md:text-2xl leading-snug text-pretty max-w-[34ch] md:max-w-[36ch]">
+          {pov} <span className="muted">{nowLine}</span>
         </p>
-        <div className="md:col-span-6 flex flex-wrap md:justify-end items-center gap-3">
+        <div className="md:col-span-5 flex flex-wrap md:justify-end items-center gap-3">
           <Link
-            href="/projects"
+            href="/projects/closet-organizer"
             className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--ink)] text-[var(--paper)] font-medium hover:bg-[var(--signal)] hover:text-[var(--on-signal)] transition-colors"
           >
-            See the work
+            Read the case study
             <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
           </Link>
           <Link
-            href="/interests"
+            href="/projects"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--paper)] transition-colors"
           >
-            Off hours
+            All work
           </Link>
         </div>
       </div>
 
-      {/* Phone — after the CTAs in the DOM, so phones read name → CTAs → phone
-          (visual and focus order match); on desktop it floats over the name. */}
-      <div className="relative z-10 mt-10 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
+      {/* Phone — after the actions in the DOM, so phones read name → line →
+          actions → phone (visual and focus order match); on desktop it floats
+          over the name. */}
+      <div className="relative z-10 mt-9 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
         <div className="pointer-events-auto enter-up">
           <div
             className="scroll-fx"

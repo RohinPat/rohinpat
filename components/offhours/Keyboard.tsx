@@ -98,7 +98,7 @@ export default function Keyboard() {
   }, []);
 
   return (
-    <div aria-hidden="true" className="absolute inset-0 grid place-items-center paper paper-grid [container-type:size]">
+    <div aria-hidden="true" className="absolute inset-0 grid place-items-center paper [container-type:size]">
       {/* fit by width and height: the board is ~2.5:1 */}
       <div className="kb" style={{ width: "min(100cqw - 2rem, 720px, (100cqh - 2rem) * 2.5)" }}>
         <div className="rounded-[14px] bg-[#0d100e] p-[2.2%] shadow-[0_24px_40px_-18px_rgba(13,16,14,0.7),inset_0_1px_0_rgba(255,255,255,0.08)]">

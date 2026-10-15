@@ -155,7 +155,7 @@ main h1 {
 }
 /* Hero name: huge on phones; on desktop each word fits beside the phone
    ("ROHIN [phone] PATEL") instead of being covered by it. */
-.hero-name { font-size: clamp(7rem, 21vw, 22rem); }
+.hero-name { font-size: clamp(5.5rem, 25vw, 22rem); }
 @media (min-width: 1024px) {
   .hero-name { font-size: min(21vw, calc((100vw - 300px - 10rem) / 5.1)); }
 }

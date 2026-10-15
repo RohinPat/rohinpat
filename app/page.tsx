@@ -1,14 +1,14 @@
 import LockScreenHero from "@/components/home/LockScreenHero";
-import SignalLab from "@/components/home/SignalLab";
-import WorkFilmstrip from "@/components/home/WorkFilmstrip";
+import HowItWorks from "@/components/home/HowItWorks";
+import SelectedWork from "@/components/home/SelectedWork";
 
-// cream → green → ink → (ink footer)
+// cream (who) → green (how one thing works) → ink (everything else)
 export default function Home() {
   return (
     <main className="relative">
       <LockScreenHero />
-      <SignalLab />
-      <WorkFilmstrip />
+      <HowItWorks />
+      <SelectedWork />
     </main>
   );
 }
