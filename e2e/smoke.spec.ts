@@ -105,3 +105,28 @@ test("watch lume lights up while held", async ({ page }) => {
   await page.mouse.up();
   await expect(watch).toHaveAttribute("aria-pressed", "false");
 });
+
+test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
+  await page.goto("/interests");
+  const golf = page.getByRole("img", { name: /putting green/i });
+  await golf.focus();
+  await expect(golf).toBeFocused();
+  // focusing scrolls the tile into view (smoothly) — let that finish first
+  let before = -1;
+  await expect
+    .poll(async () => {
+      const y = await page.evaluate(() => window.scrollY);
+      const settled = y === before;
+      before = y;
+      return settled;
+    }, { intervals: [250] })
+    .toBe(true);
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  // arrows drive the piece instead of scrolling the page
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+  for (const name of [/night road/i, /Blaugrana/i, /ridgelines/i, /dithered/i, /shot chart/i]) {
+    await expect(page.getByRole("img", { name })).toHaveAttribute("tabindex", "0");
+  }
+});

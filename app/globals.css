@@ -72,6 +72,9 @@ a { color: inherit; }
   outline-offset: 3px;
 }
 
+/* canvases sit inside overflow-hidden tiles: draw the ring inside the edge */
+canvas:focus-visible { outline-offset: -3px; }
+
 .skip-link {
   position: fixed;
   top: 0.75rem;

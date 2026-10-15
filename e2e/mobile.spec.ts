@@ -31,3 +31,10 @@ test("mobile nav opens and closes", async ({ page }) => {
   await menu.getByRole("link", { name: /^Work$/ }).click();
   await expect(page).toHaveURL(/\/projects$/);
 });
+
+test("hero CTAs sit on the first screen on a phone", async ({ page }) => {
+  await page.goto("/");
+  const cta = await page.getByRole("link", { name: /See the work/i }).boundingBox();
+  const vh = page.viewportSize()!.height;
+  expect(cta!.y + cta!.height).toBeLessThanOrEqual(vh);
+});

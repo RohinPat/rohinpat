@@ -59,5 +59,5 @@ export default function Blaugrana() {
     ctx.stroke();
   });
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 w-full h-full touch-pan-y" />;
+  return <canvas ref={ref} role="img" aria-label="Blaugrana stripes waving like cloth. Arrow keys push the fabric." className="absolute inset-0 w-full h-full touch-pan-y" />;
 }

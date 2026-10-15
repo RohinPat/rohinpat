@@ -79,9 +79,7 @@ export default function Trails() {
   });
 
   return (
-    <canvas
-      ref={ref}
-      aria-hidden="true"
+    <canvas ref={ref} role="img" aria-label="Long-exposure night road with light trails. Arrow keys bend the road."
       className="absolute inset-0 w-full h-full touch-pan-y"
     />
   );

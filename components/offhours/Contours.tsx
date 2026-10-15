@@ -177,5 +177,5 @@ export default function Contours() {
     },
   );
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 w-full h-full touch-pan-y cursor-crosshair" />;
+  return <canvas ref={ref} role="img" aria-label="Topographic map of a putting green. Arrow keys aim, Enter drops a ball." className="absolute inset-0 w-full h-full touch-pan-y cursor-crosshair" />;
 }

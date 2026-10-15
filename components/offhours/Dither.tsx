@@ -60,5 +60,5 @@ export default function Dither() {
     ctx.drawImage(c, 0, 0, cols * PX, rows * PX);
   });
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 w-full h-full touch-pan-y [image-rendering:pixelated]" />;
+  return <canvas ref={ref} role="img" aria-label="One-bit dithered light field. Arrow keys move the light." className="absolute inset-0 w-full h-full touch-pan-y [image-rendering:pixelated]" />;
 }

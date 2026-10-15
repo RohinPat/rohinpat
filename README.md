@@ -38,5 +38,5 @@ Deploys to Vercel from `main`.
 
 ## License
 
-Code is available under the MIT License. The Archivo font is under the SIL Open Font License
+Code: [MIT](LICENSE). The Archivo font is under the SIL Open Font License
 (`app/_fonts/OFL-Archivo.txt`).

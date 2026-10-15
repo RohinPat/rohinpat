@@ -136,5 +136,5 @@ export default function ShotChart() {
     },
   );
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 w-full h-full touch-pan-y cursor-crosshair" />;
+  return <canvas ref={ref} role="img" aria-label="Hornets shot chart on a half court. Arrow keys aim, Enter shoots." className="absolute inset-0 w-full h-full touch-pan-y cursor-crosshair" />;
 }

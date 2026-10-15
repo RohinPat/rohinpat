@@ -7,6 +7,8 @@ import { useEffect, useRef } from "react";
 // - animates only while on screen and the tab is visible
 // - prefers-reduced-motion: no autonomous animation, redraws on interaction
 // - pointer position in CSS pixels, plus enter/leave/down state
+// - keyboard: focus the canvas, arrow keys move the "pointer" (Shift = bigger
+//   steps), Enter/Space presses — so every piece works without a mouse
 
 export type Pointer = {
   x: number;
@@ -116,11 +118,51 @@ export function useCanvas(draw: (f: Frame) => void, options: Options = {}) {
       p.down = false;
     };
 
+    const onFocus = () => {
+      p.inside = true;
+      if (reduce) paint(0);
+    };
+    const onBlur = () => {
+      p.inside = false;
+      p.down = false;
+      if (reduce) paint(0);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const step = (e.shiftKey ? 0.15 : 0.05) * Math.min(w, h);
+      const moves: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      };
+      if (moves[e.key]) {
+        e.preventDefault();
+        p.inside = true;
+        p.x = Math.min(w, Math.max(0, p.x + moves[e.key][0]));
+        p.y = Math.min(h, Math.max(0, p.y + moves[e.key][1]));
+        if (reduce) paint(0);
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (e.repeat) return;
+        p.down = true;
+        optsRef.current.onDown?.(p, { w, h, t });
+        if (reduce) paint(0);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") p.down = false;
+    };
+
     canvas.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointerleave", onLeave);
     canvas.addEventListener("pointercancel", onLeave);
     window.addEventListener("pointerup", onUp);
+    canvas.tabIndex = 0;
+    canvas.addEventListener("focus", onFocus);
+    canvas.addEventListener("blur", onBlur);
+    canvas.addEventListener("keydown", onKey);
+    canvas.addEventListener("keyup", onKeyUp);
 
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
@@ -141,6 +183,10 @@ export function useCanvas(draw: (f: Frame) => void, options: Options = {}) {
       canvas.removeEventListener("pointerleave", onLeave);
       canvas.removeEventListener("pointercancel", onLeave);
       window.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("focus", onFocus);
+      canvas.removeEventListener("blur", onBlur);
+      canvas.removeEventListener("keydown", onKey);
+      canvas.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 

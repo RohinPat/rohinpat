@@ -91,5 +91,5 @@ export default function Ridgelines() {
     }
   });
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 w-full h-full touch-pan-y" />;
+  return <canvas ref={ref} role="img" aria-label="Mountain ridgelines at golden hour with falling snow. Arrow keys shift the view." className="absolute inset-0 w-full h-full touch-pan-y" />;
 }

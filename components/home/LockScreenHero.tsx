@@ -90,7 +90,7 @@ export default function LockScreenHero() {
   return (
     <section
       ref={ref}
-      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-8 flex flex-col"
+      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-14 lg:pb-8 flex flex-col"
     >
       {/* Top meta row */}
       <div className="relative z-20 flex items-start justify-between gap-4 font-mono text-[11px] md:text-xs uppercase tracking-[0.18em] muted">
@@ -98,8 +98,8 @@ export default function LockScreenHero() {
         <p className="sm:text-right">{site.location}</p>
       </div>
 
-      {/* Name + phone */}
-      <div className="relative flex-1 flex flex-col lg:flex-row lg:items-center lg:min-h-[440px]">
+      {/* Name */}
+      <div className="relative flex lg:flex-1 lg:items-center lg:min-h-[440px]">
         <h1
           className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-6 lg:py-2 select-none"
           style={{ fontSize: "clamp(7rem, 21vw, 22rem)" }}
@@ -116,18 +116,6 @@ export default function LockScreenHero() {
             </span>
           </span>
         </h1>
-
-        {/* Phone — below the stacked name on phones, centred over it on desktop */}
-        <div className="relative lg:absolute lg:inset-0 z-10 flex lg:grid justify-center lg:place-items-center -mt-[3vw] lg:mt-0 pointer-events-none">
-          <div className="pointer-events-auto enter-up">
-            <div
-              className="scroll-fx"
-              style={{ transform: "translateY(calc(var(--p, 0) * 220px)) rotate(calc(var(--p, 0) * -8deg))" }}
-            >
-              <Phone now={now} />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Tagline + CTAs */}
@@ -153,6 +141,18 @@ export default function LockScreenHero() {
         </div>
       </div>
 
+      {/* Phone — after the CTAs in the DOM, so phones read name → CTAs → phone
+          (visual and focus order match); on desktop it floats over the name. */}
+      <div className="relative z-10 mt-10 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
+        <div className="pointer-events-auto enter-up">
+          <div
+            className="scroll-fx"
+            style={{ transform: "translateY(calc(var(--p, 0) * 220px)) rotate(calc(var(--p, 0) * -8deg))" }}
+          >
+            <Phone now={now} />
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
