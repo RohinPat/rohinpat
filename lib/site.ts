@@ -4,7 +4,6 @@
 
 export const site = {
   name: "Rohin Patel",
-  // TODO(Rohin): confirm wording — assumes the July 2026 full-time start happened.
   role: "Software Engineer",
   employer: "WHOOP",
   employerUrl: "https://whoop.com",
