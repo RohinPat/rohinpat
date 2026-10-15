@@ -126,7 +126,7 @@ test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
   await page.keyboard.press("Enter");
   // arrows drive the piece instead of scrolling the page
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
-  for (const name of [/night road/i, /Blaugrana/i, /ridgelines/i, /dithered/i, /shot chart/i]) {
+  for (const name of [/night highway/i, /Blaugrana/i, /ridgelines/i, /dithered/i, /shot chart/i]) {
     await expect(page.getByRole("img", { name })).toHaveAttribute("tabindex", "0");
   }
 });
