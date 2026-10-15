@@ -39,3 +39,11 @@ test("retired pages redirect to /projects", async ({ page }) => {
     await expect(page).toHaveURL(/\/projects$/);
   }
 });
+
+test("terms and cookies fold into the privacy page", async ({ page }) => {
+  for (const [path, hash] of [["/terms", "#terms"], ["/cookies", "#cookies"]]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(new RegExp(`/privacy${hash}$`));
+    await expect(page.locator(hash)).toBeVisible();
+  }
+});

@@ -9,8 +9,6 @@ const ROUTES = [
   "/contact",
   "/colophon",
   "/privacy",
-  "/terms",
-  "/cookies",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

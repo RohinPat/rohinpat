@@ -13,8 +13,6 @@ const routes = [
   "/contact",
   "/colophon",
   "/privacy",
-  "/terms",
-  "/cookies",
 ];
 
 for (const path of routes) {
