@@ -45,20 +45,42 @@ test("homepage has scroll progress bar", async ({ page }) => {
   await expect(bar).toBeAttached();
 });
 
-test("Spotify embed iframe is present on /interests (quiet mode)", async ({ page }) => {
+test("Spotify embed on /interests loads only after the visitor asks", async ({ page }) => {
+  const thirdParty: string[] = [];
+  page.on("request", (req) => {
+    const host = new URL(req.url()).hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") thirdParty.push(host);
+  });
+
   await page.goto("/interests");
-  // Quiet mode (fun mode off) renders the Spotify playlist iframe in the Music cell.
   // Wait for hydration so the toggle is interactive.
   const toggle = page.getByRole("switch", { name: /fun mode/i }).first();
   await expect(toggle).toBeVisible({ timeout: 10_000 });
 
-  // If fun mode is on, click to switch to quiet mode.
   if ((await toggle.getAttribute("aria-checked")) === "true") {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
   }
 
-  await expect(
-    page.locator('iframe[src*="open.spotify.com/embed/playlist"]'),
-  ).toBeAttached({ timeout: 5_000 });
+  // Click-to-load: no iframe and no third-party requests until asked.
+  const iframe = page.locator('iframe[src*="open.spotify.com/embed/playlist"]');
+  await expect(page.getByRole("button", { name: /load spotify player/i })).toBeVisible();
+  await expect(iframe).toHaveCount(0);
+  expect(thirdParty).toEqual([]);
+
+  await page.getByRole("button", { name: /load spotify player/i }).click();
+  await expect(iframe).toBeAttached({ timeout: 5_000 });
+});
+
+test("a plain visit writes nothing to cookies or local storage", async ({ page }) => {
+  for (const path of ["/", "/interests", "/contact"]) {
+    await page.goto(path);
+    await page.waitForTimeout(500);
+  }
+  const { cookies, keys } = await page.evaluate(() => ({
+    cookies: document.cookie,
+    keys: Object.keys(localStorage),
+  }));
+  expect(cookies).toBe("");
+  expect(keys).toEqual([]);
 });

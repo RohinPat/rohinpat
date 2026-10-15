@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
+import Link from "next/link";
 import { site } from "@/lib/site";
 
 type Vibe = {
@@ -202,16 +203,18 @@ export default function Contact() {
         <div className="border border-[var(--border-strong)] bg-[var(--bg-elevated)] mb-14">
           {/* Vibe chips */}
           <div className="px-5 md:px-7 pt-5 md:pt-7 pb-4 border-b border-[var(--border)]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] muted mb-3">
+            <p id="vibe-label" className="font-mono text-[10px] uppercase tracking-[0.2em] muted mb-3">
               What brings you by?
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div role="group" aria-labelledby="vibe-label" className="flex flex-wrap gap-2">
               {VIBES.map((v) => {
                 const Icon = v.icon;
                 const active = activeVibe === v.id;
                 return (
                   <button
                     key={v.id}
+                    type="button"
+                    aria-pressed={active}
                     onClick={() => pickVibe(v)}
                     className={`group inline-flex items-center gap-2 px-3 py-1.5 border font-mono text-xs uppercase tracking-wider transition-all duration-200 ${
                       active
@@ -219,7 +222,7 @@ export default function Contact() {
                         : "border-[var(--border-strong)] muted hover:border-accent hover:text-[var(--fg)]"
                     }`}
                   >
-                    <Icon size={13} className={active ? "" : "muted group-hover:accent transition-colors"} />
+                    <Icon size={13} aria-hidden="true" className={active ? "" : "muted group-hover:accent transition-colors"} />
                     <span>{v.label}</span>
                   </button>
                 );
@@ -236,9 +239,10 @@ export default function Contact() {
                       setBody("");
                       setEdited(false);
                     }}
+                    type="button"
                     className="font-mono text-[10px] uppercase tracking-wider dim hover:accent transition-colors ml-1"
                   >
-                    clear
+                    clear message
                   </motion.button>
                 )}
               </AnimatePresence>
@@ -256,7 +260,7 @@ export default function Contact() {
                 value={subject}
                 onChange={onSubjectChange}
                 placeholder="Hello from your site"
-                className="w-full bg-[var(--bg)] border border-[var(--border)] focus:border-accent focus:outline-none transition-colors px-3 py-2 font-mono text-sm text-[var(--fg)] placeholder:dim"
+                className="w-full bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--accent-text)] transition-colors px-3 py-2 font-mono text-sm text-[var(--fg)] placeholder:dim"
               />
             </label>
 
@@ -269,7 +273,7 @@ export default function Contact() {
                 onChange={onBodyChange}
                 rows={6}
                 placeholder="Whatever you'd say in an email."
-                className="w-full bg-[var(--bg)] border border-[var(--border)] focus:border-accent focus:outline-none transition-colors px-3 py-2 font-mono text-sm text-[var(--fg)] placeholder:dim resize-y"
+                className="w-full bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--accent-text)] transition-colors px-3 py-2 font-mono text-sm text-[var(--fg)] placeholder:dim resize-y"
               />
             </label>
 
@@ -280,15 +284,17 @@ export default function Contact() {
                 whileTap={{ scale: 0.97 }}
                 className="group inline-flex items-center gap-2 px-5 py-3 bg-accent text-white font-mono text-xs uppercase tracking-[0.2em] hover:bg-[#c4005a] transition-colors"
               >
-                <Send size={14} />
+                <Send size={14} aria-hidden="true" />
                 Open in mail app
                 <ArrowUpRight
                   size={14}
+                  aria-hidden="true"
                   className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                 />
               </motion.a>
 
               <button
+                type="button"
                 onClick={copyEmail}
                 className="group inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent transition-colors font-mono text-xs uppercase tracking-[0.2em]"
               >
@@ -302,7 +308,7 @@ export default function Contact() {
                       transition={{ duration: 0.15 }}
                       className="inline-flex items-center gap-2 accent"
                     >
-                      <Check size={14} />
+                      <Check size={14} aria-hidden="true" />
                       copied
                     </motion.span>
                   ) : (
@@ -314,17 +320,28 @@ export default function Contact() {
                       transition={{ duration: 0.15 }}
                       className="inline-flex items-center gap-2 muted group-hover:text-[var(--fg)] transition-colors"
                     >
-                      <Copy size={14} />
-                      copy address
+                      <Copy size={14} aria-hidden="true" />
+                      copy email address
                     </motion.span>
                   )}
                 </AnimatePresence>
               </button>
+              <span role="status" className="sr-only">
+                {copied ? "Email address copied to clipboard" : ""}
+              </span>
 
               <span className="font-mono text-[10px] uppercase tracking-wider dim ml-auto truncate max-w-full">
                 → <span className="text-[var(--fg)]">{site.email}</span>
               </span>
             </div>
+            <p className="font-mono text-[10px] uppercase tracking-wider muted leading-relaxed">
+              Nothing you type here leaves your browser. It only goes anywhere if you
+              send the email yourself — then I see your address and message, and use them
+              only to reply.{" "}
+              <Link href="/privacy" className="underline hover:text-[var(--fg)]">
+                Privacy policy
+              </Link>
+            </p>
           </div>
         </div>
 

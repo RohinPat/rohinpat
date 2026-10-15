@@ -334,7 +334,7 @@ export default function PuttPutt() {
         {result && result !== "lip" && (
           <div
             className={`absolute inset-0 flex items-center justify-center pointer-events-none font-mono text-xs uppercase tracking-[0.2em] ${
-              result === "in" ? "text-accent" : "text-white/70"
+              result === "in" ? "text-accent-text" : "text-white/70"
             }`}
           >
             <span className="bg-black/70 px-3 py-1">

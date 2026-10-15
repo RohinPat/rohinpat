@@ -198,7 +198,7 @@ export default function Tachometer() {
                 x={labelX}
                 y={labelY}
                 textAnchor="middle"
-                fill={isRed ? "#a50044" : "#6b6b6b"}
+                fill={isRed ? "#ec4d82" : "#818896"}
                 fontSize="7"
                 fontFamily="monospace"
                 fontWeight={600}

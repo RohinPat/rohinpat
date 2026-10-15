@@ -120,7 +120,7 @@ const projects: Project[] = [
   {
     title: "SiPhox — 3D Body Scan iOS App",
     description:
-      "First iOS app generating 3D body models from video for body-fat analysis. ±3.9% median error vs. clinical benchmarks.",
+      "SiPhox's first iOS app: generates 3D body models from video for body-fat analysis. ±3.9% median error vs. clinical benchmarks.",
     tech: ["SwiftUI", "Python", "3D Graphics", "Computer Vision"],
     category: "Mobile",
     year: "2024",

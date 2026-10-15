@@ -100,7 +100,7 @@ export default function Hero() {
           </Link>
           <Link
             href="/contact"
-            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border-strong)] hover:border-accent hover:text-accent-text transition-colors"
           >
             Get in touch
           </Link>
