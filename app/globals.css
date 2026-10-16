@@ -132,21 +132,13 @@ main h1 {
   letter-spacing: -0.01em;
   line-height: 0.88;
 }
-/* Hero name: huge on phones; on desktop each word fits beside the phone
-   ("ROHIN [phone] PATEL") instead of being covered by it. */
-.hero-name { font-size: clamp(5.5rem, 25vw, 22rem); }
-@media (min-width: 1024px) {
-  .hero-name { font-size: min(21vw, calc((100vw - 300px - 10rem) / 5.1)); }
-}
-@keyframes notify { from { opacity: 0; transform: translateY(-14px) scale(0.97); } }
-
 /* Display scale: page title (h1) > section head (.t-l) > sub-head (.t-m).
    Three steps so a page builds instead of stacking same-size shouts. */
 .t-l { font-size: clamp(2.75rem, 6.5vw, 5.75rem); line-height: 0.9; }
 .t-m { font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 0.95; }
 
 /* Page titles: one scale everywhere (beats the per-page Tailwind sizes). */
-main h1:not(.hero-name) {
+main h1:not(.hero-field) {
   font-size: clamp(3.25rem, 9.5vw, 8rem);
   line-height: 0.88;
   letter-spacing: -0.01em;
@@ -333,18 +325,27 @@ main h1:not(.hero-name) {
 .kb-key { height: 5.6cqw; min-height: 14px; }
 
 /* Entrances + small motion, all CSS (no animation library) */
-@keyframes enter-left { from { opacity: 0; transform: translateX(-40px); } }
-@keyframes enter-right { from { opacity: 0; transform: translateX(40px); } }
-@keyframes enter-up { from { opacity: 0; transform: translateY(80px); } }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
-.enter-left { animation: enter-left 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.enter-right { animation: enter-right 0.8s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.enter-up { animation: enter-up 0.9s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 
 /* Page entrance (app/template.tsx). `backwards` fill only applies the start
    state, so no transform lingers to trap position:fixed children. */
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
 .page-enter { animation: page-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+
+/* Home field: hotspot pulse, and the ripple that opens a page */
+@keyframes well { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes ripple {
+  from { clip-path: circle(0px at var(--rx) var(--ry)); }
+  to { clip-path: circle(150vmax at var(--rx) var(--ry)); }
+}
+.hero-field {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-stretch: 62%;
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 0.86;
+  letter-spacing: -0.01em;
+}
 
 /* Easter egg */
 @keyframes egg-life { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
@@ -352,9 +353,8 @@ main h1:not(.hero-name) {
 @keyframes egg-fall { to { transform: translateY(105vh) rotate(540deg); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .enter-left, .enter-right, .enter-up, .scroll-fx, .page-enter,
+  .page-enter,
   [class*="animate-["] { animation: none !important; }
-  .scroll-fx { transform: none !important; }
 }
 
 /* the diagram's explanation panel keeps its own rhythm inside .prose */

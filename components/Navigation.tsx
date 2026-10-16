@@ -19,7 +19,7 @@ export default function Navigation() {
   // so the name isn't said twice at once.
   const [showName, setShowName] = useState(true);
   useEffect(() => {
-    const hero = document.querySelector(".hero-name");
+    const hero = document.querySelector("[data-hero-name]");
     if (!hero) {
       setShowName(true);
       return;

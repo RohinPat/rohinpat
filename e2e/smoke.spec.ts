@@ -29,11 +29,6 @@ test("/play returns 404 (route removed)", async ({ page }) => {
   expect(response?.status()).toBe(404);
 });
 
-test("hero phone shows the live Boston time", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByLabel(/Boston time \d{1,2}:\d{2}\s?(AM|PM)/i)).toBeVisible();
-});
-
 test("Off hours makes no third-party requests, even when you play", async ({ page }) => {
   const thirdParty: string[] = [];
   page.on("request", (req) => {
@@ -75,11 +70,11 @@ test("case-study diagram: focusing a stage explains it", async ({ page }) => {
   await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
 });
 
-test("home is visual: work cards link to the write-up, live pieces render", async ({ page }) => {
+test("home field: hotspots point at the four detailed pages", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("link", { name: /Closet Organizer/ }).first()).toHaveAttribute("href", "/projects/closet-organizer");
-  await expect(page.getByRole("img", { name: /night highway/i })).toBeAttached();
-  await expect(page.getByRole("button", { name: /watch face/i })).toBeAttached();
+  const spots = page.getByRole("navigation", { name: "Sections" });
+  const hrefs = await spots.getByRole("link").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+  expect(hrefs).toEqual(["/projects", "/projects/closet-organizer", "/interests", "/contact"]);
 });
 
 test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {
@@ -145,12 +140,13 @@ test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
   }
 });
 
-test("footer sign-off only on home; inner pages get one quiet line", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toBeVisible();
-  await page.goto("/projects");
-  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toHaveCount(0);
-  await expect(page.locator("footer").getByRole("link", { name: /privacy/i })).toBeVisible();
+test("footer is one quiet line on every page", async ({ page }) => {
+  for (const path of ["/", "/projects"]) {
+    await page.goto(path);
+    const footer = page.locator("footer");
+    await expect(footer.getByRole("link", { name: /say hi/i })).toHaveCount(0);
+    await expect(footer.getByRole("link", { name: /privacy/i })).toBeVisible();
+  }
 });
 
 test("colophon measures this page in the browser: no other domains, no cookies", async ({ page }) => {

@@ -21,16 +21,21 @@ test("nav links route between top-level pages", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("Hero CTAs go to the right places", async ({ page }) => {
+test("home field: each hotspot opens its page (mouse and keyboard)", async ({ page }) => {
   await page.goto("/");
-  const hero = page.locator("section").first();
+  const spots = page.getByRole("navigation", { name: "Sections" });
+  await expect(spots.getByRole("link")).toHaveCount(4);
 
-  await hero.getByRole("link", { name: /Read the case study/i }).click();
-  await expect(page).toHaveURL(/\/projects\/closet-organizer$/);
-
-  await page.goBack();
-  await hero.getByRole("link", { name: /^All work$/ }).click();
+  // click: the ripple plays, then the page opens
+  await spots.getByRole("link", { name: /^Work/ }).click();
   await expect(page).toHaveURL(/\/projects$/);
+
+  // keyboard: focus a hotspot, press Enter
+  await page.goto("/");
+  const cs = spots.getByRole("link", { name: /Closet Organizer/ });
+  await cs.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/projects\/closet-organizer$/);
 });
 
 test("retired pages redirect to /projects", async ({ page }) => {
