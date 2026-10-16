@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useVisibleLoop } from "./useVisibleLoop";
 import type { PieceProps } from "./useCanvas";
 import { burst, getAudio, modal } from "./audio";
@@ -73,7 +73,7 @@ function spiral(turns: number, r0: number, r1: number, steps = 220) {
 
 function Jewel({ x, y, r = 2.6 }: { x: number; y: number; r?: number }) {
   return (
-    <g transform={`translate(${x} ${y})`}>
+    <g transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}>
       <circle r={r * 1.6} fill="#e9d9a8" />
       <circle r={r} fill="#b8202a" />
       <circle r={r * 0.4} cx={-r * 0.3} cy={-r * 0.3} fill="#ff8a8a" />
@@ -82,7 +82,7 @@ function Jewel({ x, y, r = 2.6 }: { x: number; y: number; r?: number }) {
 }
 function Screw({ x, y, r = 3.2, a = 30 }: { x: number; y: number; r?: number; a?: number }) {
   return (
-    <g transform={`translate(${x} ${y}) rotate(${a})`}>
+    <g transform={`translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${a})`}>
       <circle r={r} fill="#2c4f97" stroke="#1a2f5c" strokeWidth="0.5" />
       <rect x={-r} y={-0.45} width={r * 2} height={0.9} fill="#0f1b33" />
     </g>
@@ -111,7 +111,7 @@ function Wheel({ teeth, r, gRef }: { teeth: number; r: number; gRef?: React.Ref<
 
 export default function Watch({ mode, paused }: PieceProps) {
   const play = mode === "play";
-  const uid = useRef(`w${Math.random().toString(36).slice(2, 7)}`).current;
+  const uid = `w` + useId().replace(/[^a-zA-Z0-9]/g, ""); // SSR-stable, safe in url(#…)
   const [explode, setExplode] = useState(play ? 0.7 : 0);
   const [flip, setFlip] = useState(false);
   const [reserve, setReserve] = useState(play ? 0.15 : 0.7);
@@ -215,7 +215,7 @@ export default function Watch({ mode, paused }: PieceProps) {
     const mid = (PARTS.length - 1) / 2;
     layers.current.forEach((el, i) => {
       if (!el) return;
-      el.style.transform = `translateZ(calc(var(--d) * ${(i * 0.011 + e * (i - mid) * 0.085).toFixed(4)}))`;
+      el.style.transform = `translateZ(calc(var(--d) * ${(i * 0.011 + e * (i - mid) * 0.2).toFixed(4)}))`;
       const label = el.querySelector<HTMLElement>("[data-label]");
       const leader = el.querySelector<HTMLElement>("[data-leader]");
       const show = String(Math.max(0, Math.min(1, (e - 0.3) / 0.35)));
@@ -293,8 +293,9 @@ export default function Watch({ mode, paused }: PieceProps) {
     caseback: svg(
       1.08,
       <>
-        <circle r="96" fill={`url(#${uid}-steel)`} />
-        <circle r="70" fill="rgba(160,190,210,0.16)" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
+        {/* a steel ring around a sapphire window, so the movement shows through */}
+        <path d="M-96 0 A96 96 0 1 0 96 0 A96 96 0 1 0 -96 0 Z M-70 0 A70 70 0 1 1 70 0 A70 70 0 1 1 -70 0 Z" fillRule="evenodd" fill={`url(#${uid}-steel)`} />
+        <circle r="70" fill="rgba(160,190,210,0.12)" stroke="rgba(255,255,255,0.6)" strokeWidth="0.8" />
         {Array.from({ length: 6 }, (_, i) => {
           const a = (i / 6) * Math.PI * 2;
           return <Screw key={i} x={Math.cos(a) * 83} y={Math.sin(a) * 83} r={3.4} a={i * 40} />;
@@ -317,7 +318,7 @@ export default function Watch({ mode, paused }: PieceProps) {
         </text>
         <circle r="12" fill="#c9ccd0" stroke="#8a8f96" strokeWidth="0.8" />
         {Array.from({ length: 10 }, (_, i) => (
-          <circle key={i} r="1.4" cx={Math.cos((i / 10) * Math.PI * 2) * 8} cy={Math.sin((i / 10) * Math.PI * 2) * 8} fill="#eef0f2" />
+          <circle key={i} r="1.4" cx={+(Math.cos((i / 10) * Math.PI * 2) * 8).toFixed(2)} cy={+(Math.sin((i / 10) * Math.PI * 2) * 8).toFixed(2)} fill="#eef0f2" />
         ))}
         <Screw x={0} y={0} r={3} />
       </g>,
@@ -358,8 +359,8 @@ export default function Watch({ mode, paused }: PieceProps) {
             <circle
               key={i}
               r="1"
-              cx={Math.cos((i / 16) * Math.PI * 2) * (AT.balance[2] + 1.6)}
-              cy={Math.sin((i / 16) * Math.PI * 2) * (AT.balance[2] + 1.6)}
+              cx={+(Math.cos((i / 16) * Math.PI * 2) * (AT.balance[2] + 1.6)).toFixed(2)}
+              cy={+(Math.sin((i / 16) * Math.PI * 2) * (AT.balance[2] + 1.6)).toFixed(2)}
               fill="#f2e3c0"
             />
           ))}
@@ -592,7 +593,7 @@ export default function Watch({ mode, paused }: PieceProps) {
 
       <div
         className="relative flex-1 min-h-0 overflow-hidden touch-none select-none"
-        style={{ perspective: "1600px", ["--d" as string]: play ? "min(34cqh, 30cqw)" : "min(46cqh, 54cqw)" } as React.CSSProperties}
+        style={{ perspective: "1600px", ["--d" as string]: play ? "min(27cqh, 25cqw)" : "min(40cqh, 48cqw)" } as React.CSSProperties}
         onPointerDown={orbitDown}
         onPointerMove={orbitMove}
         onPointerUp={() => (S.current.dragging = false)}
@@ -605,7 +606,7 @@ export default function Watch({ mode, paused }: PieceProps) {
                 layers.current[i] = el;
               }}
               className="absolute left-0 top-0 w-0 h-0 transition-opacity duration-300"
-              style={{ transformStyle: "preserve-3d", opacity: solo && solo !== p.id ? 0.1 : 1 }}
+              style={{ transformStyle: "preserve-3d", opacity: solo && solo !== p.id ? 0.1 : 1, filter: solo === p.id ? "drop-shadow(0 0 6px rgba(29,94,63,0.7))" : undefined }}
             >
               {art[p.id]}
               {play && (
@@ -688,7 +689,7 @@ export default function Watch({ mode, paused }: PieceProps) {
           </button>
           <div className="hidden md:block">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Parts · pick one</p>
-            <ul className="grid grid-cols-1 gap-0.5">
+            <ul className="grid grid-cols-2 gap-x-1 gap-y-0.5">
               {[...PARTS].reverse().map((p) => (
                 <li key={p.id}>
                   <button
@@ -698,7 +699,7 @@ export default function Watch({ mode, paused }: PieceProps) {
                       setSolo(solo === p.id ? null : p.id);
                       if (explode < 0.5) setExplode(0.8);
                     }}
-                    className={`w-full text-left px-2 py-1 rounded text-[12px] ${solo === p.id ? "bg-[var(--paper)] text-[var(--ink)]" : "hover:bg-white/10"}`}
+                    className={`w-full text-left px-2 py-0.5 rounded text-[11px] leading-tight ${solo === p.id ? "bg-[var(--paper)] text-[var(--ink)]" : "hover:bg-white/10"}`}
                   >
                     {p.label}
                   </button>
