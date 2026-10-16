@@ -93,6 +93,23 @@ test("home screen: opens locked; unlocking reveals the apps", async ({ page }) =
   await expect(page.getByRole("navigation", { name: "Dock" }).getByRole("link", { name: "Work" })).toBeVisible();
 });
 
+test("home screen: on wide screens it's an iPhone Duo that unfolds on unlock", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/");
+  const duo = page.locator("[data-duo]");
+  await expect(duo).toHaveAttribute("data-duo", "closed");
+  await unlock(page);
+  await expect(duo).toHaveAttribute("data-duo", "open");
+  await expect(page.locator(".duo-leaf")).toHaveCount(0);
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  await expect(dock.getByRole("link", { name: "Work" })).toBeVisible();
+  // the open device fits the window
+  const box = (await duo.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(1920);
+  expect(box.y + box.height).toBeLessThanOrEqual(1080);
+});
+
 test("home screen: Control Center toggles the wallpaper", async ({ page }) => {
   await page.goto("/");
   await unlock(page);

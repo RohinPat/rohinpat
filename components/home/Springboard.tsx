@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { pov, site } from "@/lib/site";
 import FieldWallpaper from "./FieldWallpaper";
 import Motif from "./Motif";
@@ -12,12 +12,14 @@ import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 
 // Home is an iPhone. On a phone it's full-bleed (your phone is the device);
 // from 768px it sits in a frame — "pro", then "pro max" from 1280px with the
-// name either side — and on ultra-wide screens a second phone runs the case
-// study live ("duo"). It opens on a lock screen; swipe/scroll/Enter to
-// unlock. Apps launch with the iOS zoom; Control Center pulls down from the
-// status bar; Spotlight on Search or ⌘/Ctrl-K; long-press to jiggle.
+// name either side — and from 1600px it's an iPhone Duo, the book-style
+// foldable: it opens closed on the outer screen's lock screen, and unlocking
+// swings the cover open to the wide inner screen (widgets left, apps right).
+// Apps launch with the iOS zoom; Control Center pulls down from the status
+// bar; Spotlight on Search or ⌘/Ctrl-K; long-press to jiggle.
 
 const CREAM = "#f2ead7";
+const DUO_MS = 720; // the cover's swing; matches .duo-leaf in globals.css
 
 type Boston = { h: number; m: number; s: number; label: string; date: string };
 
@@ -45,37 +47,44 @@ function useBoston() {
   return now;
 }
 
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 export default function Springboard() {
   const router = useRouter();
   const section = useRef<HTMLElement>(null);
+  const now = useBoston();
   const [duo, setDuo] = useState(false);
+  const [fitted, setFitted] = useState(false);
   const [search, setSearch] = useState(false);
+  const [locked, setLocked] = useState(() => !isUnlocked());
+  const [lockGone, setLockGone] = useState(() => isUnlocked());
+  const [justUnlocked, setJustUnlocked] = useState(false);
 
-  // fit the device(s) to the window
+  // fit the device to the window
   useEffect(() => {
-    const ultra = window.matchMedia("(min-width: 1800px)");
+    const wide = window.matchMedia("(min-width: 1600px)");
     const fit = () => {
-      setDuo(ultra.matches);
+      setDuo(wide.matches);
+      setFitted(true);
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       if (vw < 768 || !section.current) return;
       const big = vw >= 1280;
-      const dw = big ? 458 : 421;
-      const dh = big ? 960 : 880;
-      const count = ultra.matches ? 2 : 1;
+      // frame sizes, bezel included (see .dev-slot / .duo-slot)
+      const [dw, dh] = wide.matches ? [978, 696] : big ? [458, 960] : [421, 880];
       const sideNames = big ? 2 * Math.min(420, vw * 0.22) : 64;
-      const s = Math.min(1, (vh - 120) / dh, (vw - sideNames) / (dw * count + 72 * (count - 1)));
+      const s = Math.min(1, (vh - 120) / dh, (vw - sideNames) / dw);
       section.current.style.setProperty("--s", s.toFixed(4));
-      // the name fills whatever is left either side of the device(s)
-      const side = (vw - (dw * count + 72 * (count - 1)) * s) / 2 - vw * 0.04;
+      // the name fills whatever is left either side of the device
+      const side = (vw - dw * s) / 2 - vw * 0.04;
       section.current.style.setProperty("--name", `${Math.max(48, Math.min(210, side / 2.65)).toFixed(1)}px`);
     };
     fit();
     window.addEventListener("resize", fit);
-    ultra.addEventListener("change", fit);
+    wide.addEventListener("change", fit);
     return () => {
       window.removeEventListener("resize", fit);
-      ultra.removeEventListener("change", fit);
+      wide.removeEventListener("change", fit);
     };
   }, []);
 
@@ -90,6 +99,16 @@ export default function Springboard() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [router]);
+
+  const unlock = useCallback(() => {
+    if (!locked) return;
+    markUnlocked();
+    setLocked(false);
+    setJustUnlocked(true);
+    const wait = reducedMotion() ? 0 : duo ? DUO_MS + 40 : 480;
+    window.setTimeout(() => setLockGone(true), wait);
+    window.setTimeout(() => document.querySelector<HTMLElement>("[data-home] a")?.focus({ preventScroll: true }), wait + 20);
+  }, [locked, duo]);
 
   const openApp = (app: App, tile?: HTMLElement | null) => {
     setSearch(false);
@@ -120,50 +139,109 @@ export default function Springboard() {
         <span>Patel</span>
       </h1>
 
-      <div className="relative md:flex md:items-center md:gap-[calc(72px*var(--s,0.8))]">
-        <Device>
-          <PhoneScreen openApp={openApp} onSearch={() => setSearch(true)} />
-        </Device>
-        {duo && (
-          <Device>
-            <iframe
-              src="/projects/closet-organizer"
-              title="The Closet Organizer case study, running live in a second phone"
-              className="absolute inset-0 w-full h-full border-0 bg-[var(--paper)]"
-            />
-          </Device>
-        )}
-      </div>
+      <Device duo={duo} fitted={fitted} open={!locked} cover={!lockGone} now={now} onUnlock={unlock}>
+        <PhoneScreen
+          duo={duo}
+          now={now}
+          locked={locked}
+          lockGone={lockGone}
+          justUnlocked={justUnlocked}
+          onUnlock={unlock}
+          openApp={openApp}
+          onSearch={() => setSearch(true)}
+        />
+      </Device>
 
       <Spotlight open={search} onClose={() => setSearch(false)} onOpenApp={(a) => openApp(a)} />
     </section>
   );
 }
 
-function Device({ children }: { children: React.ReactNode }) {
+// One component for every frame, so the screen inside stays mounted when the
+// window crosses a breakpoint (the `false` holes keep children in place).
+function Device({
+  duo,
+  fitted,
+  open,
+  cover,
+  now,
+  onUnlock,
+  children,
+}: {
+  duo: boolean;
+  fitted: boolean;
+  open: boolean;
+  cover: boolean;
+  now: Boston | null;
+  onUnlock: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="dev-slot">
-      <div className="dev">
-        <div className="dev-frame" aria-hidden="true" />
-        <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 120, height: 32 }} />
-        <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 180, height: 62 }} />
-        <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 254, height: 62 }} />
-        <span className="dev-btn" aria-hidden="true" style={{ right: -19, top: 210, height: 96 }} />
-        <div className="dev-screen">
-          <div className="dev-island" aria-hidden="true" />
-          {children}
+    <div className={duo ? "duo-slot" : "dev-slot"} data-fitted={fitted || undefined}>
+      <div className={duo ? `duo ${open ? "is-open" : ""}` : "dev"} data-duo={duo ? (open ? "open" : "closed") : undefined}>
+        <div className={duo ? "duo-body" : "contents"}>
+          <div className={duo ? "duo-frame" : "dev-frame"} aria-hidden="true" />
+          {!duo && (
+            <>
+              <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 120, height: 32 }} />
+              <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 180, height: 62 }} />
+              <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 254, height: 62 }} />
+              <span className="dev-btn" aria-hidden="true" style={{ right: -19, top: 210, height: 96 }} />
+            </>
+          )}
+          <div className={duo ? "duo-screen" : "dev-screen"}>
+            {duo ? <div className="duo-crease" aria-hidden="true" /> : <div className="dev-island" aria-hidden="true" />}
+            {children}
+          </div>
         </div>
+        {duo && cover && <DuoCover now={now} locked={!open} onUnlock={onUnlock} />}
       </div>
     </div>
   );
 }
 
-function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLElement | null) => void; onSearch: () => void }) {
-  const now = useBoston();
+// The Duo's cover: the outer display (lock screen) on its front, the left
+// half of the inner display on its back. Unlocking swings it open on the
+// hinge; once it lands, the real left half takes over and the cover goes.
+function DuoCover({ now, locked, onUnlock }: { now: Boston | null; locked: boolean; onUnlock: () => void }) {
+  return (
+    <div className="duo-leaf">
+      <div className="duo-face duo-front">
+        <span className="duo-btn" aria-hidden="true" style={{ top: 96, height: 58 }} />
+        <span className="duo-btn" aria-hidden="true" style={{ top: 170, height: 40 }} />
+        <div className="duo-outer">
+          <div className="duo-island" aria-hidden="true" />
+          <FieldWallpaper />
+          <LockScreen now={now} locked={locked} onUnlock={onUnlock} dark={false} slide={false} />
+        </div>
+      </div>
+      <div className="duo-face duo-back" aria-hidden="true">
+        <div className="duo-back-screen" />
+      </div>
+    </div>
+  );
+}
+
+function PhoneScreen({
+  duo,
+  now,
+  locked,
+  lockGone,
+  justUnlocked,
+  onUnlock,
+  openApp,
+  onSearch,
+}: {
+  duo: boolean;
+  now: Boston | null;
+  locked: boolean;
+  lockGone: boolean;
+  justUnlocked: boolean;
+  onUnlock: () => void;
+  openApp: (a: App, tile?: HTMLElement | null) => void;
+  onSearch: () => void;
+}) {
   const home = useRef<HTMLDivElement>(null);
-  const [locked, setLocked] = useState(() => !isUnlocked());
-  const [lockGone, setLockGone] = useState(() => isUnlocked());
-  const [justUnlocked, setJustUnlocked] = useState(false);
   const [jiggle, setJiggle] = useState(false);
   const [cc, setCc] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -194,17 +272,25 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const unlock = () => {
-    if (!locked) return;
-    markUnlocked();
-    setLocked(false);
-    setJustUnlocked(true);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.setTimeout(() => setLockGone(true), reduce ? 0 : 480);
-    window.setTimeout(() => home.current?.querySelector<HTMLElement>("a")?.focus({ preventScroll: true }), reduce ? 0 : 500);
-  };
-
   const fg = dark ? "text-[var(--paper)]" : "text-[var(--ink)]";
+  const anim = justUnlocked ? "apps-in" : "";
+
+  const widgets = (
+    <>
+      <ProfileWidget i={0} />
+      <ClockWidget now={now} i={1} />
+      <CaseWidget
+        i={2}
+        onOpen={(el) =>
+          openApp({ id: "closet-widget", name: "Closet Organizer", href: "/projects/closet-organizer", tile: "", ink: "", land: CREAM, glyph: "hanger" }, el)
+        }
+      />
+    </>
+  );
+  const icons = GRID.map((a, k) => (
+    <AppIcon key={a.id} app={a} index={k} i={3 + k} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
+  ));
+  const grid = "grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 pointer-events-auto content-start";
 
   return (
     <div className={`relative w-full h-full min-h-[inherit] ${fg}`} style={{ filter: bright < 100 ? `brightness(${bright / 100})` : undefined }}>
@@ -227,9 +313,10 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
       {/* home screen */}
       <div
         ref={home}
-        className={`relative z-10 flex flex-col min-h-[100svh] md:min-h-0 md:h-full px-5 pt-[76px] pb-4 pointer-events-none transition-opacity duration-300 ${
-          locked ? "opacity-0" : "opacity-100"
-        }`}
+        data-home
+        className={`relative z-10 flex flex-col min-h-[100svh] md:min-h-0 md:h-full pb-4 pointer-events-none transition-opacity duration-300 ${
+          duo ? "px-8 pt-[64px]" : "px-5 pt-[76px]"
+        } ${locked ? "opacity-0" : "opacity-100"}`}
       >
         {jiggle && (
           <button
@@ -241,19 +328,19 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
           </button>
         )}
 
-        <div className={`grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 pointer-events-auto ${justUnlocked ? "apps-in" : ""}`}>
-          <ProfileWidget i={0} />
-          <ClockWidget now={now} i={1} />
-          <CaseWidget
-            i={2}
-            onOpen={(el) =>
-              openApp({ id: "closet-widget", name: "Closet Organizer", href: "/projects/closet-organizer", tile: "", ink: "", land: CREAM, glyph: "hanger" }, el)
-            }
-          />
-          {GRID.map((a, k) => (
-            <AppIcon key={a.id} app={a} index={k} i={3 + k} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
-          ))}
-        </div>
+        {duo ? (
+          // open Duo: Today View on the left half, the Home Screen on the right
+          <div className="grid grid-cols-2 gap-x-16">
+            {/* widgets pop in once the cover has landed on this half */}
+            <div className={`${grid} ${anim} [--d:700ms]`}>{widgets}</div>
+            <div className={`${grid} pt-2 ${anim}`}>{icons}</div>
+          </div>
+        ) : (
+          <div className={`${grid} ${anim}`}>
+            {widgets}
+            {icons}
+          </div>
+        )}
 
         <div className="mt-auto pt-6 flex flex-col items-center gap-3 pointer-events-auto">
           <div className="flex items-center gap-2">
@@ -282,10 +369,10 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
           <nav
             aria-label="Dock"
             className={`w-full rounded-[30px] backdrop-blur-xl border shadow-[0_10px_40px_-12px_rgba(13,16,14,0.35)] px-4 py-3 ${
-              dark ? "bg-[rgba(13,16,14,0.45)] border-white/15" : "bg-[rgba(242,234,215,0.55)] border-white/60"
-            }`}
+              duo ? "max-w-[400px]" : ""
+            } ${dark ? "bg-[rgba(13,16,14,0.45)] border-white/15" : "bg-[rgba(242,234,215,0.55)] border-white/60"}`}
           >
-            <ul className={`flex justify-around ${justUnlocked ? "apps-in" : ""}`}>
+            <ul className={`flex justify-around ${anim}`}>
               {DOCK.map((a, k) => (
                 <li key={a.id} style={{ ["--i" as string]: 8 + k } as React.CSSProperties}>
                   <AppIcon app={a} index={k + 10} label={false} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
@@ -297,10 +384,12 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
         </div>
       </div>
 
-      {!lockGone && <LockScreen now={now} locked={locked} onUnlock={unlock} dark={dark} />}
+      {/* on the Duo the lock screen lives on the cover's outer display */}
+      {!duo && !lockGone && <LockScreen now={now} locked={locked} onUnlock={onUnlock} dark={dark} />}
 
       {cc && (
         <ControlCenter
+          duo={duo}
           now={now}
           paused={paused}
           dark={dark}
@@ -314,6 +403,7 @@ function PhoneScreen({ openApp, onSearch }: { openApp: (a: App, tile?: HTMLEleme
     </div>
   );
 }
+
 
 function StatusGlyphs() {
   return (
@@ -334,8 +424,21 @@ function StatusGlyphs() {
 }
 
 // Lock screen: big clock over the wallpaper. Swipe or scroll up, or press
-// the button (Enter/Space), to unlock.
-function LockScreen({ now, locked, onUnlock, dark }: { now: Boston | null; locked: boolean; onUnlock: () => void; dark: boolean }) {
+// the button (Enter/Space), to unlock. `slide`: it slides away on unlock (on
+// the Duo it stays put and swings away with the cover instead).
+function LockScreen({
+  now,
+  locked,
+  onUnlock,
+  dark,
+  slide = true,
+}: {
+  now: Boston | null;
+  locked: boolean;
+  onUnlock: () => void;
+  dark: boolean;
+  slide?: boolean;
+}) {
   const start = useRef<number | null>(null);
   const layer = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState(0);
@@ -357,8 +460,8 @@ function LockScreen({ now, locked, onUnlock, dark }: { now: Boston | null; locke
       ref={layer}
       className="absolute inset-x-0 top-0 h-[100svh] md:h-auto md:bottom-0 z-20 flex flex-col items-center touch-none select-none"
       style={{
-        transform: locked ? `translateY(${drag}px)` : "translateY(-105%)",
-        opacity: locked ? 1 : 0,
+        transform: locked || !slide ? `translateY(${drag}px)` : "translateY(-105%)",
+        opacity: locked || !slide ? 1 : 0,
         transition: start.current !== null ? "none" : "transform 0.48s cubic-bezier(0.32,0.72,0,1), opacity 0.48s ease",
       }}
       onPointerDown={(e) => {
@@ -416,6 +519,7 @@ function LockScreen({ now, locked, onUnlock, dark }: { now: Boston | null; locke
 }
 
 function ControlCenter({
+  duo,
   now,
   paused,
   dark,
@@ -425,6 +529,7 @@ function ControlCenter({
   onBright,
   onClose,
 }: {
+  duo: boolean;
   now: Boston | null;
   paused: boolean;
   dark: boolean;
@@ -456,7 +561,8 @@ function ControlCenter({
       className="absolute inset-0 z-40 bg-[rgba(13,16,14,0.55)] backdrop-blur-2xl text-[var(--paper)] animate-[rise_0.25s_ease-out]"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div ref={panel} className="px-6 pt-[80px] md:pt-[72px] grid grid-cols-4 gap-4">
+      {/* on the wide Duo screen it sits top-right, as on iPad */}
+      <div ref={panel} className={`px-6 pt-[80px] md:pt-[72px] grid grid-cols-4 gap-4 ${duo ? "max-w-[420px] ml-auto" : ""}`}>
         <div className={`${tile} col-span-2 row-span-2 p-4 grid grid-cols-2 gap-3 place-items-center`}>
           <button type="button" aria-pressed={!paused} onClick={() => onPaused(!paused)} className={round(!paused)} aria-label="Live wallpaper">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
