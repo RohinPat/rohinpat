@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import CodeBlock from "@/components/writeup/CodeBlock";
 import LiveMetrics from "@/components/LiveMetrics";
+import OnThisPage from "@/components/writeup/OnThisPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -132,6 +133,7 @@ export default function ColophonPage() {
           </p>
         </div>
       </article>
+      <OnThisPage />
     </main>
   );
 }

@@ -237,6 +237,7 @@ main h1:not(.hero-name) {
 .prose p, .prose ul, .prose ol { margin-top: 0; margin-bottom: 1.25em; }
 .prose p { text-wrap: pretty; }
 .prose h2 {
+  scroll-margin-top: 6rem;       /* land below the floating nav */
   font-size: 1.625rem;
   font-weight: 700;
   font-stretch: 85%;
@@ -340,13 +341,18 @@ main h1:not(.hero-name) {
 .enter-right { animation: enter-right 0.8s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .enter-up { animation: enter-up 0.9s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 
+/* Page entrance (app/template.tsx). `backwards` fill only applies the start
+   state, so no transform lingers to trap position:fixed children. */
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+.page-enter { animation: page-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+
 /* Easter egg */
 @keyframes egg-life { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes egg-pop { from { transform: scale(0.6) translateY(20px); } }
 @keyframes egg-fall { to { transform: translateY(105vh) rotate(540deg); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .enter-left, .enter-right, .enter-up, .scroll-fx,
+  .enter-left, .enter-right, .enter-up, .scroll-fx, .page-enter,
   [class*="animate-["] { animation: none !important; }
   .scroll-fx { transform: none !important; }
 }

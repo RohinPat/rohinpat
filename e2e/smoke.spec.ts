@@ -164,3 +164,16 @@ test("colophon measures this page in the browser: no other domains, no cookies",
   await page.getByRole("button", { name: "Measure again" }).click();
   await expect(stat("Other domains")).toHaveText("0");
 });
+
+test("case study: 'On this page' tracks the section you're reading", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/projects/closet-organizer");
+  const rail = page.getByRole("navigation", { name: "On this page" });
+  // wait for hydration (the rail builds itself from the headings), then scroll
+  await expect(rail.getByRole("link", { name: "Trade-offs" })).toBeAttached();
+  // bring the heading to the top, as clicking its rail link would
+  await page.evaluate(() =>
+    document.querySelector("#trade-offs")?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior }),
+  );
+  await expect(rail.locator("[aria-current]")).toHaveText("Trade-offs");
+});
