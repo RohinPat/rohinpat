@@ -9,7 +9,7 @@ Live at **[rohinpat.vercel.app](https://rohinpat.vercel.app)**.
 - **/** — lock-screen hero, Closet Organizer's architecture as an explorable diagram, selected work
 - **/projects** — things I've made (with code and write-ups) and places I've worked
 - **/projects/closet-organizer** — case study: architecture, code excerpts, trade-offs
-- **/interests** — "Off hours": nine playable pieces that open full screen (a watch you wind and explode, a 1-bit raycaster maze with BFS/DFS/A*/Q-learning solvers, flick-to-shoot hoops, a penalty shootout, a drum machine you scratch on a turntable, a rev-and-shift quarter mile, an exploded keyboard, golf putt/range/green-reader, powder skiing). All sound is Web Audio synthesis.
+- **/interests** — "Off hours": nine playable pieces that open full screen (a 3D watch you wind and explode, a 1-bit raycaster maze with BFS/DFS/A*/Q-learning solvers, flick-to-shoot hoops, a penalty shootout, a drum machine you scratch on a turntable, a rev-and-shift quarter mile plus an exploded 911 GT3 RS / Huracán Performante, a 3D exploded keyboard, golf putt/range/green-reader, powder skiing). All sound is Web Audio synthesis; the 3D views use three.js (loaded on demand) with every model generated in code.
 - **/colophon** — how the site is built, with live numbers measured in the visitor's browser
 - **/contact**, **/privacy** (`/terms` and `/cookies` redirect into it)
 

@@ -44,8 +44,9 @@ export default function ColophonPage() {
           <h2 className="!mt-0">Stack</h2>
           <p>
             Next.js 14 with the App Router, React 18, TypeScript and Tailwind CSS, hosted on
-            Vercel. There are three runtime dependencies: <code>next</code>,{" "}
-            <code>react</code> and <code>react-dom</code>. Two typefaces: Archivo, whose width
+            Vercel. There are four runtime dependencies: <code>next</code>, <code>react</code>,{" "}
+            <code>react-dom</code>, and <code>three</code> for the 3D exploded views, which only loads
+            when one of those pieces is on screen. Two typefaces: Archivo, whose width
             axis does both the condensed titles and the text you&apos;re reading, and DM Mono.
             next/font downloads them at build time and serves them from this domain.
           </p>
@@ -59,10 +60,11 @@ export default function ColophonPage() {
             hold still.
           </p>
 
-          <h2>Nine pieces, no engine</h2>
+          <h2>Nine pieces, written from scratch</h2>
           <p>
-            Each piece on the <Link href="/interests">Off hours</Link> page is written from scratch
-            for the browser, with no game engine, physics or audio library:
+            Each piece on the <Link href="/interests">Off hours</Link> page is written for the
+            browser with no game engine, physics or audio library. The exploded views use three.js
+            for rendering only; every model in them is generated in code:
           </p>
           <ul>
             <li>
@@ -83,8 +85,11 @@ export default function ColophonPage() {
               turning, so scratching it really scratches your beat.
             </li>
             <li>
-              <strong>Watch and keyboard:</strong> plain DOM and SVG in CSS 3D, pulled apart layer
-              by layer.
+              <strong>Watch, keyboard, cars:</strong> physically based 3D in a virtual photo studio
+              (softbox reflections, soft shadows). Every part is built in code: lathe-turned case,
+              crystal and bezel; extruded wheels, bridges and hands; sculpted, dished keycaps; and car
+              bodies lofted from about 150 cross-sections, keyed to each car&apos;s real proportions.
+              Each part explodes along its own vector, and the labels track the parts on screen.
             </li>
           </ul>
           <p>
