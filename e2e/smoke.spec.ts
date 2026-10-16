@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+// Home opens on a lock screen; unlock it the way a visitor would.
+async function unlock(page: import("@playwright/test").Page) {
+  const btn = page.getByRole("button", { name: /swipe up to unlock/i });
+  await btn.click();
+  await expect(btn).toHaveCount(0);
+}
+
 // One smoke per route: page renders, title is right, expected content visible.
 // Catches the worst failure mode for a portfolio — "the site is broken."
 
@@ -27,11 +34,6 @@ for (const { path, titleContains, visibleText } of routes) {
 test("/play returns 404 (route removed)", async ({ page }) => {
   const response = await page.goto("/play");
   expect(response?.status()).toBe(404);
-});
-
-test("hero phone shows the live Boston time", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByLabel(/Boston time \d{1,2}:\d{2}\s?(AM|PM)/i)).toBeVisible();
 });
 
 test("Off hours makes no third-party requests, even when you play", async ({ page }) => {
@@ -75,11 +77,66 @@ test("case-study diagram: focusing a stage explains it", async ({ page }) => {
   await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
 });
 
-test("home is visual: work cards link to the write-up, live pieces render", async ({ page }) => {
+test("home screen: dock and grid point at the right places", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("link", { name: /Closet Organizer/ }).first()).toHaveAttribute("href", "/projects/closet-organizer");
-  await expect(page.getByRole("img", { name: /night highway/i })).toBeAttached();
-  await expect(page.getByRole("button", { name: /watch face/i })).toBeAttached();
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  const dockHrefs = await dock.getByRole("link").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+  expect(dockHrefs).toEqual(["/projects", "/interests", "/contact", "mailto:rohinp1124@gmail.com"]);
+  await expect(page.getByRole("link", { name: /GitHub/ }).first()).toHaveAttribute("href", "https://github.com/RohinPat");
+});
+
+test("home screen: opens locked; unlocking reveals the apps", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /swipe up to unlock/i })).toBeVisible();
+  await expect(page.getByLabel(/Boston time \d{1,2}:\d{2}/).first()).toBeAttached();
+  await unlock(page);
+  await expect(page.getByRole("navigation", { name: "Dock" }).getByRole("link", { name: "Work" })).toBeVisible();
+});
+
+test("home screen: on wide screens it's an iPhone Duo that unfolds on unlock", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/");
+  const duo = page.locator("[data-duo]");
+  await expect(duo).toHaveAttribute("data-duo", "closed");
+  await unlock(page);
+  await expect(duo).toHaveAttribute("data-duo", "open");
+  await expect(page.locator(".duo-leaf")).toHaveCount(0);
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  await expect(dock.getByRole("link", { name: "Work" })).toBeVisible();
+  // the open device fits the window
+  const box = (await duo.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(1920);
+  expect(box.y + box.height).toBeLessThanOrEqual(1080);
+});
+
+test("home screen: Control Center toggles the wallpaper", async ({ page }) => {
+  await page.goto("/");
+  await unlock(page);
+  await page.getByRole("button", { name: "Open Control Center" }).first().click();
+  const cc = page.getByRole("dialog", { name: "Control Center" });
+  await expect(cc).toBeVisible();
+  const dark = cc.getByRole("button", { name: "Dark wallpaper" });
+  await expect(dark).toHaveAttribute("aria-pressed", "false");
+  await dark.click();
+  await expect(dark).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(cc).toHaveCount(0);
+});
+
+test("home screen: long-press an icon to jiggle, Done to stop", async ({ page }) => {
+  await page.goto("/");
+  await unlock(page);
+  const icon = page.locator('[data-tile="colophon"]');
+  const box = (await icon.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  const done = page.getByRole("button", { name: "Done" });
+  await expect(done).toBeVisible();
+  await done.click();
+  await expect(done).toHaveCount(0);
 });
 
 test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {
@@ -145,12 +202,13 @@ test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
   }
 });
 
-test("footer sign-off only on home; inner pages get one quiet line", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toBeVisible();
-  await page.goto("/projects");
-  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toHaveCount(0);
-  await expect(page.locator("footer").getByRole("link", { name: /privacy/i })).toBeVisible();
+test("footer is one quiet line on every page", async ({ page }) => {
+  for (const path of ["/", "/projects"]) {
+    await page.goto(path);
+    const footer = page.locator("footer");
+    await expect(footer.getByRole("link", { name: /say hi/i })).toHaveCount(0);
+    await expect(footer.getByRole("link", { name: /privacy/i })).toBeVisible();
+  }
 });
 
 test("colophon measures this page in the browser: no other domains, no cookies", async ({ page }) => {
@@ -163,4 +221,17 @@ test("colophon measures this page in the browser: no other domains, no cookies",
   await expect(stat("Storage keys")).toHaveText("0");
   await page.getByRole("button", { name: "Measure again" }).click();
   await expect(stat("Other domains")).toHaveText("0");
+});
+
+test("case study: 'On this page' tracks the section you're reading", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/projects/closet-organizer");
+  const rail = page.getByRole("navigation", { name: "On this page" });
+  // wait for hydration (the rail builds itself from the headings), then scroll
+  await expect(rail.getByRole("link", { name: "Trade-offs" })).toBeAttached();
+  // bring the heading to the top, as clicking its rail link would
+  await page.evaluate(() =>
+    document.querySelector("#trade-offs")?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior }),
+  );
+  await expect(rail.locator("[aria-current]")).toHaveText("Trade-offs");
 });

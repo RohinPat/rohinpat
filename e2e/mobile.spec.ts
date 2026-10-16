@@ -32,13 +32,13 @@ test("mobile nav opens and closes", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects$/);
 });
 
-test("name, point of view and the primary action sit on the first screen", async ({ page }) => {
+test("home screen fits a phone: name, point of view and the dock", async ({ page }) => {
   await page.goto("/");
   const vh = page.viewportSize()!.height;
   for (const el of [
     page.getByRole("heading", { level: 1 }),
     page.getByText(/I build iOS apps/),
-    page.getByRole("link", { name: /Read the case study/i }),
+    page.getByRole("navigation", { name: "Dock" }),
   ]) {
     const box = await el.boundingBox();
     expect(box!.y + box!.height).toBeLessThanOrEqual(vh);

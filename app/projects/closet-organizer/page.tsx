@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import OnThisPage from "@/components/writeup/OnThisPage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import CodeBlock from "@/components/writeup/CodeBlock";
@@ -391,6 +392,7 @@ export default function ClosetOrganizerCaseStudy() {
           </p>
         </div>
       </article>
+      <OnThisPage />
     </main>
   );
 }
