@@ -70,11 +70,26 @@ test("case-study diagram: focusing a stage explains it", async ({ page }) => {
   await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
 });
 
-test("home field: hotspots point at the four detailed pages", async ({ page }) => {
+test("home screen: dock and grid point at the right places", async ({ page }) => {
   await page.goto("/");
-  const spots = page.getByRole("navigation", { name: "Sections" });
-  const hrefs = await spots.getByRole("link").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
-  expect(hrefs).toEqual(["/projects", "/projects/closet-organizer", "/interests", "/contact"]);
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  const dockHrefs = await dock.getByRole("link").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+  expect(dockHrefs).toEqual(["/projects", "/interests", "/contact", "mailto:rohinp1124@gmail.com"]);
+  await expect(page.getByRole("link", { name: /GitHub/ }).first()).toHaveAttribute("href", "https://github.com/RohinPat");
+});
+
+test("home screen: long-press an icon to jiggle, Done to stop", async ({ page }) => {
+  await page.goto("/");
+  const icon = page.locator('[data-tile="colophon"]');
+  const box = (await icon.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  const done = page.getByRole("button", { name: "Done" });
+  await expect(done).toBeVisible();
+  await done.click();
+  await expect(done).toHaveCount(0);
 });
 
 test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {

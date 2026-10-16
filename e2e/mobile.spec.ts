@@ -32,15 +32,13 @@ test("mobile nav opens and closes", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects$/);
 });
 
-test("name, point of view and the hotspots sit on the first screen", async ({ page }) => {
+test("home screen fits a phone: name, point of view and the dock", async ({ page }) => {
   await page.goto("/");
   const vh = page.viewportSize()!.height;
-  const spots = page.getByRole("navigation", { name: "Sections" });
   for (const el of [
     page.getByRole("heading", { level: 1 }),
     page.getByText(/I build iOS apps/),
-    spots.getByRole("link", { name: /^Work/ }),
-    spots.getByRole("link", { name: /Say hi/ }),
+    page.getByRole("navigation", { name: "Dock" }),
   ]) {
     const box = await el.boundingBox();
     expect(box!.y + box!.height).toBeLessThanOrEqual(vh);

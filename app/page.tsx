@@ -1,11 +1,10 @@
-import FieldHome from "@/components/home/FieldHome";
+import Springboard from "@/components/home/Springboard";
 
-// Home is one interactive piece — a living field with four doors into the
-// detailed pages (Work, the case study, Off hours, Contact).
+// Home is an iPhone home screen: tap an app to open the detailed page.
 export default function Home() {
   return (
     <main className="relative">
-      <FieldHome />
+      <Springboard />
     </main>
   );
 }

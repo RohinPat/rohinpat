@@ -21,21 +21,29 @@ test("nav links route between top-level pages", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("home field: each hotspot opens its page (mouse and keyboard)", async ({ page }) => {
+test("home screen: apps open their pages (mouse and keyboard)", async ({ page }) => {
   await page.goto("/");
-  const spots = page.getByRole("navigation", { name: "Sections" });
-  await expect(spots.getByRole("link")).toHaveCount(4);
-
-  // click: the ripple plays, then the page opens
-  await spots.getByRole("link", { name: /^Work/ }).click();
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  await dock.getByRole("link", { name: "Work" }).click(); // launch zoom, then navigate
   await expect(page).toHaveURL(/\/projects$/);
 
-  // keyboard: focus a hotspot, press Enter
   await page.goto("/");
-  const cs = spots.getByRole("link", { name: /Closet Organizer/ });
-  await cs.focus();
+  const closet = page.getByRole("link", { name: /^Closet Organizer$/ }).first();
+  await closet.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/projects\/closet-organizer$/);
+});
+
+test("home screen: Spotlight finds and opens a page", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /search/i }).click();
+  const dialog = page.getByRole("dialog", { name: "Search" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("combobox")).toBeFocused();
+  await page.keyboard.type("off");
+  await expect(dialog.getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/interests$/);
 });
 
 test("retired pages redirect to /projects", async ({ page }) => {

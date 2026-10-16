@@ -3,6 +3,7 @@ import { Archivo, DM_Mono } from "next/font/google";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
 import SiteEasterEggs from "@/components/SiteEasterEggs";
+import LaunchTracker from "@/components/LaunchTracker";
 import PersonJsonLd from "@/components/PersonJsonLd";
 import SiteFooter from "@/components/SiteFooter";
 import { description, site } from "@/lib/site";
@@ -94,6 +95,7 @@ export default function RootLayout({
         </div>
         <SiteFooter />
         <SiteEasterEggs />
+        <LaunchTracker />
       </body>
     </html>
   );

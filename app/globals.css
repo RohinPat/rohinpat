@@ -347,6 +347,12 @@ main h1:not(.hero-field) {
   letter-spacing: -0.01em;
 }
 
+/* Home screen: long-press jiggle */
+@keyframes jiggle {
+  0%, 100% { transform: rotate(-1.6deg); }
+  50% { transform: rotate(1.6deg); }
+}
+
 /* Easter egg */
 @keyframes egg-life { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes egg-pop { from { transform: scale(0.6) translateY(20px); } }
