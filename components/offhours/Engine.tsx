@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio, noise, type Audio } from "./audio";
 import { display, mono } from "./font";
-import CarExploded from "./CarExploded";
 
 // A race dash and a quarter mile. The engine is a small physics model
 // (torque curve, gear ratios, drag) and a synthesized V8: detuned saws at
@@ -136,7 +135,7 @@ const freshCar = (best: number | null = null): Car => ({
   pop: 0,
 });
 
-function RevShift({ mode, paused }: PieceProps) {
+export default function EnginePiece({ mode, paused }: PieceProps) {
   const play = mode === "play";
   const car = useRef<Car>(freshCar());
   const eng = useRef<Engine | null>(null);
@@ -491,34 +490,3 @@ function RevShift({ mode, paused }: PieceProps) {
   );
 }
 
-// Two tabs: the drag-strip dash, and the car itself in 3D, taken apart.
-export default function EnginePiece({ mode, paused }: PieceProps) {
-  const [tab, setTab] = useState<"rev" | "exploded">("rev");
-  if (mode !== "play") return <RevShift mode={mode} paused={paused} />;
-  return (
-    <div className="absolute inset-0 flex flex-col bg-[#0b0d0c]">
-      <div role="tablist" aria-label="Cars" className="flex gap-2 px-3 pt-3 pb-2">
-        {(
-          [
-            ["rev", "Rev & shift"],
-            ["exploded", "Exploded"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={`h-9 px-4 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border ${
-              tab === id ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="relative flex-1 min-h-0">{tab === "rev" ? <RevShift mode="play" paused={paused} /> : <CarExploded />}</div>
-    </div>
-  );
-}

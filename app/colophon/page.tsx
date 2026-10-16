@@ -85,10 +85,9 @@ export default function ColophonPage() {
               turning, so scratching it really scratches your beat.
             </li>
             <li>
-              <strong>Watch, keyboard, cars:</strong> physically based 3D in a virtual photo studio
+              <strong>Watch and keyboard:</strong> physically based 3D in a virtual photo studio
               (softbox reflections, soft shadows). Every part is built in code: lathe-turned case,
-              crystal and bezel; extruded wheels, bridges and hands; sculpted, dished keycaps; and car
-              bodies lofted from about 150 cross-sections, keyed to each car&apos;s real proportions.
+              crystal and bezel; extruded wheels, bridges and hands; and sculpted, dished keycaps.
               Each part explodes along its own vector, and the labels track the parts on screen.
             </li>
           </ul>
