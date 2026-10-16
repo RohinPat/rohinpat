@@ -10,7 +10,7 @@ const routes: Array<{
 }> = [
   { path: "/",            titleContains: "Rohin Patel",     visibleText: /I build iOS apps/ },
   { path: "/projects",    titleContains: "Work",            visibleText: /SiPhox Health/ },
-  { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I'm into/ },
+  { path: "/interests",   titleContains: "Off hours",       visibleText: /Nine things I like outside work/ },
   { path: "/contact",     titleContains: "Contact",         visibleText: /rohinp1124@gmail\.com/ },
 ];
 
@@ -66,29 +66,43 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
   expect(keys).toEqual([]);
 });
 
-test("signal lab: heart-rate slider drives the readout", async ({ page }) => {
-  await page.goto("/");
-  const slider = page.getByLabel("Heart rate");
-  await slider.scrollIntoViewIfNeeded();
-  await slider.fill("120");
-  await expect(page.getByText("120 bpm")).toBeVisible();
-  await expect(page.getByRole("img", { name: /120 beats per minute/ })).toBeAttached();
-  await page.getByRole("button", { name: "Reset" }).click();
-  await expect(page.getByText("72 bpm")).toBeVisible();
+test("case-study diagram: focusing a stage explains it", async ({ page }) => {
+  await page.goto("/projects/closet-organizer");
+  const stage = page.getByRole("button", { name: /Tagging/ }).first();
+  await stage.scrollIntoViewIfNeeded();
+  await stage.focus();
+  await expect(stage).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
 });
 
-test("work filmstrip: next/previous step through frames", async ({ page }) => {
+test("home is visual: work cards link to the write-up, live pieces render", async ({ page }) => {
   await page.goto("/");
-  const prev = page.getByRole("button", { name: "Previous project" });
-  const next = page.getByRole("button", { name: "Next project" });
-  await next.scrollIntoViewIfNeeded();
-  await expect(prev).toBeDisabled();
-  await next.click();
-  await expect(prev).toBeEnabled();
-  await expect(page.getByRole("link", { name: /Closet Organizer/ }).last()).toHaveAttribute(
+  await expect(page.getByRole("link", { name: /Closet Organizer/ }).first()).toHaveAttribute("href", "/projects/closet-organizer");
+  await expect(page.getByRole("img", { name: /night highway/i })).toBeAttached();
+  await expect(page.getByRole("button", { name: /watch face/i })).toBeAttached();
+});
+
+test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {
+  const res = await page.goto("/projects/closet-organizer");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveTitle(/Closet Organizer/);
+  await expect(page.getByRole("heading", { level: 1, name: /Closet Organizer/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Read the code on GitHub/ })).toHaveAttribute(
     "href",
-    "/projects#closet-organizer",
+    "https://github.com/RohinPat/Closet-Org",
   );
+  const excerpts = page.locator("figure.code-block figcaption a");
+  expect(await excerpts.count()).toBeGreaterThanOrEqual(2);
+  for (const href of await excerpts.evaluateAll((els) => els.map((e) => e.getAttribute("href")))) {
+    expect(href).toMatch(/^https:\/\/github\.com\/RohinPat\/Closet-Org\/blob\/[0-9a-f]{40}\/.+#L\d+-L\d+$/);
+  }
+});
+
+test("work page links the write-up and the code", async ({ page }) => {
+  await page.goto("/projects");
+  const row = page.locator("#closet-organizer");
+  await expect(row.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/closet-organizer");
+  await expect(row.getByRole("link", { name: /Code/ })).toHaveAttribute("href", "https://github.com/RohinPat/Closet-Org");
 });
 
 test("project deep link lands on that entry", async ({ page }) => {
@@ -129,4 +143,24 @@ test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
   for (const name of [/night highway/i, /Blaugrana/i, /ridgelines/i, /dithered/i, /shot chart/i]) {
     await expect(page.getByRole("img", { name })).toHaveAttribute("tabindex", "0");
   }
+});
+
+test("footer sign-off only on home; inner pages get one quiet line", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toBeVisible();
+  await page.goto("/projects");
+  await expect(page.locator("footer").getByRole("link", { name: /say hi/i })).toHaveCount(0);
+  await expect(page.locator("footer").getByRole("link", { name: /privacy/i })).toBeVisible();
+});
+
+test("colophon measures this page in the browser: no other domains, no cookies", async ({ page }) => {
+  await page.goto("/colophon");
+  await expect(page.getByRole("heading", { level: 1, name: /Colophon/ })).toBeVisible();
+  const stat = (label: string) => page.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd[1]");
+  await expect(stat("Requests")).toHaveText(/^\d+$/);
+  await expect(stat("Other domains")).toHaveText("0");
+  await expect(stat("Cookies")).toHaveText("0");
+  await expect(stat("Storage keys")).toHaveText("0");
+  await page.getByRole("button", { name: "Measure again" }).click();
+  await expect(stat("Other domains")).toHaveText("0");
 });

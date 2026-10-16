@@ -18,7 +18,7 @@ export default async function OG() {
     (
       <div
         style={{
-          background: "#f1eee7",
+          background: "#f2ead7",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -26,7 +26,7 @@ export default async function OG() {
           justifyContent: "space-between",
           padding: 64,
           fontFamily: "system-ui, sans-serif",
-          color: "#0c0c0b",
+          color: "#0d100e",
         }}
       >
         <div
@@ -37,7 +37,7 @@ export default async function OG() {
             textTransform: "uppercase",
             letterSpacing: 5,
             fontFamily: "monospace",
-            color: "#5f5b54",
+            color: "#5c5a4f",
           }}
         >
           <span>{site.location}</span>
@@ -64,7 +64,8 @@ export default async function OG() {
           <div
             style={{
               display: "flex",
-              background: "#ff4a1c",
+              background: "#1d5e3f",
+              color: "#f2ead7",
               padding: "18px 28px",
               fontFamily: "Archivo",
               fontSize: 38,
@@ -77,8 +78,8 @@ export default async function OG() {
             style={{
               display: "flex",
               alignItems: "center",
-              background: "#0c0c0b",
-              color: "#f1eee7",
+              background: "#0d100e",
+              color: "#f2ead7",
               padding: "18px 28px",
               fontSize: 26,
               fontFamily: "monospace",

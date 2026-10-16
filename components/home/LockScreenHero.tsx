@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBostonTime } from "@/lib/clock";
-import { headline, site, teamLine } from "@/lib/site";
+import { now as nowLine, pov, site, teamLine } from "@/lib/site";
 
-// Hero: a giant split name on drafting paper with an iPhone between the two
+// Hero: a giant split name on cream stock with an iPhone between the two
 // halves. The phone's lock screen runs on Boston time and its notifications
 // are real links into the site. Scrolling pulls the name apart and lifts the
-// phone away.
+// phone away. On a phone the order is name → point of view → actions, with
+// the top of the phone peeking in at the bottom of the first screen.
 
 type BostonNow = { full: string; clock: string; date: string };
 
@@ -48,17 +49,29 @@ const notifications = [
     app: "Projects",
     mark: "P",
     title: "Closet Organizer",
-    body: "ResNet50 + color theory. One FastAPI backend, two apps.",
-    href: "/projects#closet-organizer",
+    body: "CLIP tagging, per-pixel colour, a rule-based stylist. How it works →",
+    href: "/projects/closet-organizer",
   },
   {
     app: "Off hours",
     mark: "O",
-    title: "Nine small experiments",
-    body: "Watches, cars, Barça, vinyl, skiing — made interactive.",
+    title: "Nine canvas pieces",
+    body: "Watches, cars, Barça, vinyl, skiing — drawn in code.",
     href: "/interests",
   },
 ];
+
+// Notifications rotate slowly so the phone feels switched on: every few
+// seconds the oldest drops off and the next one slides in on top.
+function useRotation(length: number, ms = 5200) {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setOffset((o) => (o + 1) % length), ms);
+    return () => clearInterval(id);
+  }, [length, ms]);
+  return offset;
+}
 
 export default function LockScreenHero() {
   const ref = useRef<HTMLElement>(null);
@@ -90,20 +103,11 @@ export default function LockScreenHero() {
   return (
     <section
       ref={ref}
-      className="paper paper-grid relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-20 pb-14 lg:pb-8 flex flex-col"
+      className="paper relative min-h-[100svh] overflow-hidden px-4 md:px-10 pt-[4.75rem] md:pt-24 pb-14 lg:pb-8 flex flex-col"
     >
-      {/* Top meta row */}
-      <div className="relative z-20 flex items-start justify-between gap-4 font-mono text-[11px] md:text-xs uppercase tracking-[0.18em] muted">
-        <p className="hidden sm:block">{headline}</p>
-        <p className="sm:text-right">{site.location}</p>
-      </div>
-
       {/* Name */}
       <div className="relative flex lg:flex-1 lg:items-center lg:min-h-[440px]">
-        <h1
-          className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-6 lg:py-2 select-none"
-          style={{ fontSize: "clamp(7rem, 21vw, 22rem)" }}
-        >
+        <h1 className="hero-name display w-full flex flex-col lg:flex-row justify-between items-start lg:items-center pt-2 lg:py-2 select-none">
           {/* Outer span: one-off entrance. Inner span: scroll-linked drift. */}
           <span className="block enter-left">
             <span className="block scroll-fx" style={{ transform: "translateX(calc(var(--p, 0) * -35%))" }}>
@@ -118,32 +122,32 @@ export default function LockScreenHero() {
         </h1>
       </div>
 
-      {/* Tagline + CTAs */}
-      <div className="relative z-20 mt-6 grid md:grid-cols-12 gap-6 items-end">
-        <p className="md:col-span-6 text-lg md:text-2xl leading-snug text-balance max-w-xl">
-          I build iOS apps, ML systems and the occasional toy. This site is one of
-          them.
+      {/* Point of view + actions */}
+      <div className="relative z-20 mt-5 lg:mt-4 grid md:grid-cols-12 gap-5 md:gap-6 items-end">
+        <p className="md:col-span-7 text-[1.1875rem] md:text-2xl leading-snug text-pretty max-w-[34ch] md:max-w-[36ch]">
+          {pov} <span className="muted">{nowLine}</span>
         </p>
-        <div className="md:col-span-6 flex flex-wrap md:justify-end items-center gap-3">
+        <div className="md:col-span-5 flex flex-wrap md:justify-end items-center gap-3">
           <Link
-            href="/projects"
-            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--ink)] text-[var(--paper)] font-medium hover:bg-[var(--signal)] hover:text-[var(--ink)] transition-colors"
+            href="/projects/closet-organizer"
+            className="group inline-flex items-center gap-2 px-5 py-3 bg-[var(--ink)] text-[var(--paper)] font-medium hover:bg-[var(--signal)] hover:text-[var(--on-signal)] transition-colors"
           >
-            See the work
+            Read the case study
             <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
           </Link>
           <Link
-            href="/interests"
+            href="/projects"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--paper)] transition-colors"
           >
-            Off hours
+            All work
           </Link>
         </div>
       </div>
 
-      {/* Phone — after the CTAs in the DOM, so phones read name → CTAs → phone
-          (visual and focus order match); on desktop it floats over the name. */}
-      <div className="relative z-10 mt-10 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
+      {/* Phone — after the actions in the DOM, so phones read name → line →
+          actions → phone (visual and focus order match); on desktop it floats
+          over the name. */}
+      <div className="relative z-10 mt-9 flex justify-center pointer-events-none lg:absolute lg:inset-x-0 lg:top-24 lg:bottom-[7.5rem] lg:mt-0 lg:grid lg:place-items-center">
         <div className="pointer-events-auto enter-up">
           <div
             className="scroll-fx"
@@ -158,9 +162,15 @@ export default function LockScreenHero() {
 }
 
 function Phone({ now }: { now: BostonNow | null }) {
+  const offset = useRotation(notifications.length);
+  // newest first: the item `offset` steps back in the list leads
+  const shown = Array.from({ length: 3 }, (_, i) => {
+    const k = (notifications.length - offset + i) % notifications.length;
+    return notifications[k];
+  });
   return (
     <div
-      className="relative w-[min(60vw,290px)] lg:w-[clamp(240px,calc((100svh_-_250px)*9/19),290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(12,12,11,0.55),0_0_0_1px_rgba(12,12,11,0.9)]"
+      className="relative w-[min(60vw,290px)] lg:w-[clamp(240px,calc((100svh_-_250px)*9/19),290px)] aspect-[9/19] rounded-[2.9rem] bg-[var(--ink)] p-[9px] shadow-[0_40px_80px_-20px_rgba(13,16,14,0.55),0_0_0_1px_rgba(13,16,14,0.9)]"
       role="group"
       aria-label="Phone lock screen with links into the site"
     >
@@ -173,7 +183,7 @@ function Phone({ now }: { now: BostonNow | null }) {
         className="relative h-full w-full rounded-[2.35rem] overflow-hidden text-[var(--paper)] flex flex-col"
         style={{
           background:
-            "radial-gradient(95% 55% at 50% 12%, rgba(255,74,28,0.62) 0%, rgba(255,74,28,0.18) 45%, transparent 75%), #0c0c0b",
+            "radial-gradient(95% 55% at 50% 12%, rgba(138,217,168,0.42) 0%, rgba(29,94,63,0.35) 45%, transparent 75%), #0d100e",
         }}
       >
         {/* dynamic island */}
@@ -211,15 +221,15 @@ function Phone({ now }: { now: BostonNow | null }) {
 
         {/* notifications */}
         <ul className="mt-auto px-2.5 space-y-1.5">
-          {notifications.map((n) => (
-            <li key={n.app}>
+          {shown.map((n, i) => (
+            <li key={n.app} className={i === 0 ? "animate-[notify_0.45s_cubic-bezier(0.2,0.8,0.2,1)]" : ""}>
               <Link
                 href={n.href}
                 className="flex gap-2.5 p-2.5 rounded-[1.1rem] bg-white/[0.13] backdrop-blur-md hover:bg-white/[0.22] transition-colors text-left"
               >
                 <span
                   aria-hidden="true"
-                  className="shrink-0 w-8 h-8 rounded-[0.55rem] bg-[var(--signal)] text-[var(--ink)] grid place-items-center display text-lg"
+                  className="shrink-0 w-8 h-8 rounded-[0.55rem] bg-[var(--signal)] text-[var(--on-signal)] grid place-items-center display text-lg"
                 >
                   {n.mark}
                 </span>
@@ -246,7 +256,7 @@ function Phone({ now }: { now: BostonNow | null }) {
           <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.18em] opacity-80 whitespace-nowrap">Scroll to unlock</span>
           <span className="w-9 h-9 rounded-full bg-white/[0.13] backdrop-blur-md grid place-items-center text-xs">◎</span>
         </div>
-        <span aria-hidden="true" className="mx-auto mb-2 w-[36%] h-[4px] rounded-full bg-[rgba(241,238,231,0.8)]" />
+        <span aria-hidden="true" className="mx-auto mb-2 w-[36%] h-[4px] rounded-full bg-[rgba(242,234,215,0.8)]" />
       </div>
     </div>
   );

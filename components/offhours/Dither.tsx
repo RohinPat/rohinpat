@@ -5,7 +5,7 @@ import { useCanvas } from "./useCanvas";
 
 // 1-bit ordered dithering, like an old handheld. A light source follows the
 // pointer (or drifts on its own) over a slow plasma; each pixel is either
-// ink or signal, decided by an 8×8 Bayer matrix.
+// ink or mint, decided by an 8×8 Bayer matrix.
 
 const BAYER = [
   0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26,
@@ -49,9 +49,10 @@ export default function Dither() {
         const lum = Math.max(0, 1 - dist) ** 1.6 + plasma * 0.07;
         const on = lum > BAYER[(y & 7) * 8 + (x & 7)];
         const i = (y * cols + x) * 4;
-        d[i] = on ? 255 : 12;
-        d[i + 1] = on ? 74 : 12;
-        d[i + 2] = on ? 28 : 11;
+        // mint on ink — a little Game Boy, a little the rest of the site
+        d[i] = on ? 138 : 13;
+        d[i + 1] = on ? 217 : 16;
+        d[i + 2] = on ? 168 : 14;
         d[i + 3] = 255;
       }
     }

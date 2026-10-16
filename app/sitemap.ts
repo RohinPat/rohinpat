@@ -4,11 +4,11 @@ import { site } from "@/lib/site";
 const ROUTES = [
   "",
   "/projects",
+  "/projects/closet-organizer",
   "/interests",
   "/contact",
+  "/colophon",
   "/privacy",
-  "/terms",
-  "/cookies",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

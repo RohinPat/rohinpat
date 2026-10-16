@@ -3,11 +3,13 @@
 import { useRef } from "react";
 import { useCanvas } from "./useCanvas";
 
-// Half court in Hornets teal on purple with a hex-binned shot chart.
+// Half court in Hornets teal on ink with a hex-binned shot chart.
 // Hexes swell under the pointer; click to put up a shot — it arcs to the
 // rim and the hex you shot from lights up.
 
-const PURPLE = "#1d1160";
+// Court sits on the site's ink so the tile belongs to the grid; Hornets
+// teal carries the team.
+const COURT = "#0d100e";
 const TEAL = "#00a0b0";
 
 type Shot = { x: number; y: number; t: number };
@@ -38,7 +40,7 @@ export default function ShotChart() {
   const ref = useCanvas(
     ({ ctx, w, h, t, p }) => {
       const { s, toPx } = layout(w, h);
-      ctx.fillStyle = PURPLE;
+      ctx.fillStyle = COURT;
       ctx.fillRect(0, 0, w, h);
 
       // hex grid
@@ -63,7 +65,7 @@ export default function ShotChart() {
         let k = 0.35 + v * 0.6 + Math.sin(t * 1.5 + x * 0.4 + y * 0.3) * 0.04;
         if (p.inside) k += Math.exp(-((px - p.x) ** 2 + (py - p.y) ** 2) / (2 * 40 * 40)) * 0.45;
         const lit = live.length > 0 && live.some((sh) => Math.hypot(sh.x - x, sh.y - y) < r);
-        ctx.fillStyle = lit ? "#ff4a1c" : v > 0.6 ? TEAL : `rgba(0,160,176,${0.25 + v * 0.5})`;
+        ctx.fillStyle = lit ? "#8ad9a8" : v > 0.6 ? TEAL : `rgba(0,160,176,${0.25 + v * 0.5})`;
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (Math.PI / 3) * i + Math.PI / 6;
@@ -101,7 +103,7 @@ export default function ShotChart() {
       ctx.arc(fx, fy, 6 * s, Math.PI, 0);
       ctx.stroke();
       // rim + backboard
-      ctx.strokeStyle = "#ff4a1c";
+      ctx.strokeStyle = "#ff8a3d"; // rim
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(cx, cy, 0.75 * s, 0, Math.PI * 2);

@@ -1,11 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Pages retired when the site went from job hunt to portfolio.
+  // Retired pages.
   async redirects() {
     return [
       { source: "/experience", destination: "/projects", permanent: true },
       { source: "/skills", destination: "/projects", permanent: true },
+      // Terms and cookies were folded into one privacy page.
+      { source: "/terms", destination: "/privacy#terms", permanent: true },
+      { source: "/cookies", destination: "/privacy#cookies", permanent: true },
     ];
   },
   async headers() {

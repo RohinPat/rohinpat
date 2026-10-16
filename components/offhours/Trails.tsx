@@ -164,7 +164,7 @@ export default function Trails() {
     ctx.moveTo(cx0, cy0);
     ctx.lineTo(cxf, cyf);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(241,238,231,0.16)";
+    ctx.strokeStyle = "rgba(242,234,215,0.16)";
     for (const lane of [-0.5, 0.5]) {
       for (let d = NEAR; d < FAR; d += 9) {
         const [ax, ay] = project(lane, d);
@@ -207,11 +207,11 @@ export default function Trails() {
 
     // shutter indicator while held
     if (p.down) {
-      ctx.fillStyle = "#ff4a1c";
+      ctx.fillStyle = "#8ad9a8";
       ctx.beginPath();
       ctx.arc(14, 14, 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "rgba(241,238,231,0.8)";
+      ctx.fillStyle = "rgba(242,234,215,0.8)";
       ctx.font = "10px var(--font-mono), monospace";
       ctx.fillText("SHUTTER OPEN", 24, 17.5);
     }

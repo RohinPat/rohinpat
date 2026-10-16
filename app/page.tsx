@@ -1,14 +1,16 @@
 import LockScreenHero from "@/components/home/LockScreenHero";
-import SignalLab from "@/components/home/SignalLab";
-import WorkFilmstrip from "@/components/home/WorkFilmstrip";
+import SelectedWork from "@/components/home/SelectedWork";
+import OffHoursPreview from "@/components/home/OffHoursPreview";
 
-// paper → signal → ink → (ink footer)
+// Home is the UI-heavy page: the phone, the work as visual cards, three live
+// pieces. Detail lives on /projects, the case study and the colophon.
+// cream (who) → green (work) → ink (off hours) → ink footer
 export default function Home() {
   return (
     <main className="relative">
       <LockScreenHero />
-      <SignalLab />
-      <WorkFilmstrip />
+      <SelectedWork />
+      <OffHoursPreview />
     </main>
   );
 }

@@ -25,17 +25,25 @@ test("Hero CTAs go to the right places", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("section").first();
 
-  await hero.getByRole("link", { name: /See the work/i }).click();
-  await expect(page).toHaveURL(/\/projects$/);
+  await hero.getByRole("link", { name: /Read the case study/i }).click();
+  await expect(page).toHaveURL(/\/projects\/closet-organizer$/);
 
   await page.goBack();
-  await hero.getByRole("link", { name: /^Off hours$/ }).click();
-  await expect(page).toHaveURL(/\/interests$/);
+  await hero.getByRole("link", { name: /^All work$/ }).click();
+  await expect(page).toHaveURL(/\/projects$/);
 });
 
 test("retired pages redirect to /projects", async ({ page }) => {
   for (const path of ["/experience", "/skills"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/projects$/);
+  }
+});
+
+test("terms and cookies fold into the privacy page", async ({ page }) => {
+  for (const [path, hash] of [["/terms", "#terms"], ["/cookies", "#cookies"]]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(new RegExp(`/privacy${hash}$`));
+    await expect(page.locator(hash)).toBeVisible();
   }
 });

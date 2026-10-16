@@ -54,7 +54,7 @@ export default function Ridgelines() {
     ctx.fillRect(0, 0, w, h);
 
     // low sun
-    ctx.fillStyle = "#ff4a1c";
+    ctx.fillStyle = "#f0a35c"; // golden-hour sun
     ctx.beginPath();
     ctx.arc(w * 0.72 - look.current.x * 8, h * 0.42 - look.current.y * 6, Math.min(w, h) * 0.09, 0, Math.PI * 2);
     ctx.fill();

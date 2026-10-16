@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function ContactPage() {
   return (
-    <main className="relative pt-24">
+    <main className="relative">
       <Contact />
     </main>
   );

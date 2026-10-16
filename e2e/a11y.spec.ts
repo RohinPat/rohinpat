@@ -8,11 +8,11 @@ import AxeBuilder from "@axe-core/playwright";
 const routes = [
   "/",
   "/projects",
+  "/projects/closet-organizer",
   "/interests",
   "/contact",
+  "/colophon",
   "/privacy",
-  "/terms",
-  "/cookies",
 ];
 
 for (const path of routes) {

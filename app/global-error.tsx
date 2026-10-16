@@ -20,7 +20,7 @@ export default function GlobalError({
       <body
         style={{
           background: "#0a0a0a",
-          color: "#ededed",
+          color: "#ece6d6",
           minHeight: "100vh",
           margin: 0,
           padding: "0 24px",
@@ -33,7 +33,7 @@ export default function GlobalError({
         <main style={{ maxWidth: 640, margin: "0 auto" }}>
           <p
             style={{
-              color: "#ff4a1c",
+              color: "#8ad9a8",
               fontFamily: "ui-monospace, monospace",
               textTransform: "uppercase",
               letterSpacing: 4,
@@ -61,7 +61,7 @@ export default function GlobalError({
             onClick={reset}
             style={{
               padding: "12px 20px",
-              background: "#ededed",
+              background: "#ece6d6",
               color: "#0a0a0a",
               border: 0,
               cursor: "pointer",
