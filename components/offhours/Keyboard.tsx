@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PieceProps } from "./useCanvas";
 import { useVisibleLoop } from "./useVisibleLoop";
-import { burst, getAudio, tone } from "./audio";
+import { burst, getAudio, modal, tone } from "./audio";
 
 // The 65% board I built, as the layers it's built from — case, PCB, plate,
 // switches, keycaps — in CSS 3D. Pull it apart with the slider, orbit it by
@@ -103,13 +103,38 @@ export default function Keyboard({ mode, paused }: PieceProps) {
   const explodeRef = useRef(explode);
   explodeRef.current = explode;
 
-  const thock = (code: string) => {
+  // Sound: modal synthesis of a lubed linear on a gasket-mount board. The
+  // bottom-out rings the case and plate (low, damped modes) with a little
+  // plastic clack on top; letting go is a quieter, higher upstroke. Every
+  // key gets its own slight tuning, and the long keys rattle their stabs.
+  const tuning = (code: string) => {
+    let h = 0;
+    for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) >>> 0;
+    return 0.94 + ((h % 1000) / 1000) * 0.12;
+  };
+  const isLong = (code: string) => code === "Space" || code === "Enter" || code.startsWith("Shift") || code === "Backspace";
+  const thock = (code: string, up = false) => {
     if (!play) return;
     const au = getAudio();
     if (!au) return;
-    const big = code === "Space" || code === "Enter" || code.startsWith("Shift") || code === "Backspace";
-    tone(au, { freq: big ? 140 : 190, to: big ? 70 : 95, dur: big ? 0.09 : 0.06, gain: big ? 0.42 : 0.32 });
-    burst(au, { freq: big ? 900 : 1400, q: 1.2, dur: 0.025, gain: 0.22 });
+    const k = tuning(code) * (isLong(code) ? 0.78 : 1) * (0.98 + Math.random() * 0.04);
+    if (up) {
+      modal(au, [[1050 * k, 9, 0.18], [2300 * k, 10, 0.1]], { gain: 0.5, lowpass: 5000 });
+      return;
+    }
+    modal(
+      au,
+      [
+        [210 * k, 5, 1.0],
+        [470 * k, 7, 0.7],
+        [1180 * k, 9, 0.32],
+        [2650 * k, 8, 0.14],
+      ],
+      { gain: isLong(code) ? 0.95 : 0.8, lowpass: 4200 },
+    );
+    tone(au, { freq: 110 * k, to: 70 * k, dur: 0.05, gain: 0.12 });
+    burst(au, { freq: 5200, q: 0.7, type: "highpass", dur: 0.004, gain: 0.05 }); // the clack
+    if (isLong(code)) burst(au, { freq: 3200, q: 3, dur: 0.012, gain: 0.05, at: 0.012 }); // stab wire
   };
 
   const press = (code: string, char?: string) => {

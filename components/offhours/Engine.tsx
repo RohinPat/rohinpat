@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCanvas, type PieceProps } from "./useCanvas";
-import { burst, getAudio, type Audio } from "./audio";
+import { burst, getAudio, noise, type Audio } from "./audio";
 import { display, mono } from "./font";
 
 // A race dash and a quarter mile. The engine is a small physics model
@@ -27,39 +27,70 @@ function torque(rpm: number) {
   return Math.max(0, 420 + 95 * x - 9.5 * x * x - (x > 7 ? (x - 7) * 260 : 0));
 }
 
-type Engine = { saw1: OscillatorNode; saw2: OscillatorNode; sub: OscillatorNode; lp: BiquadFilterNode; amp: GainNode };
+// The V8's voice. One oscillator runs at the engine-cycle rate (rpm / 120:
+// a four-stroke cycle is two turns) with a custom waveform. A V8 fires 8
+// times a cycle, so the 8th harmonic is the firing note; the cross-plane
+// crank fires unevenly, which puts energy into the lower orders too — that
+// lumpy low end is the burble. A second voice an octave down adds weight,
+// noise adds intake, and a waveshaper plus a load-dependent low-pass shape it.
+type Engine = { osc: OscillatorNode; low: OscillatorNode; lp: BiquadFilterNode; amp: GainNode; intake: GainNode; src: AudioBufferSourceNode };
+
+function v8Wave(ctx: BaseAudioContext) {
+  const N = 48;
+  const re = new Float32Array(N), im = new Float32Array(N);
+  for (let h = 1; h < N; h++) {
+    const w = h % 8 === 0 ? 1 : h % 4 === 0 ? 0.75 : h % 2 === 0 ? 0.45 : 0.32;
+    // fixed, uneven phases: the cross-plane lope
+    const ph = (Math.sin(h * 12.9898) * 43758.5453) % (Math.PI * 2);
+    const a = w / Math.pow(h, 0.62);
+    re[h] = a * Math.cos(ph);
+    im[h] = a * Math.sin(ph);
+  }
+  return ctx.createPeriodicWave(re, im);
+}
 
 function startEngine({ ctx, out }: Audio): Engine {
-  const saw1 = ctx.createOscillator();
-  const saw2 = ctx.createOscillator();
-  const sub = ctx.createOscillator();
-  saw1.type = "sawtooth";
-  saw2.type = "sawtooth";
-  sub.type = "square";
+  const wave = v8Wave(ctx);
+  const osc = ctx.createOscillator();
+  osc.setPeriodicWave(wave);
+  const low = ctx.createOscillator();
+  low.setPeriodicWave(wave);
+  const lowG = ctx.createGain();
+  lowG.gain.value = 0.55;
   const shaper = ctx.createWaveShaper();
   const curve = new Float32Array(1024);
-  for (let i = 0; i < 1024; i++) {
-    const x = (i / 1023) * 2 - 1;
-    curve[i] = Math.tanh(x * 2.6);
-  }
+  for (let i = 0; i < 1024; i++) curve[i] = Math.tanh(((i / 1023) * 2 - 1) * 1.8);
   shaper.curve = curve;
   const mix = ctx.createGain();
-  mix.gain.value = 0.35;
-  const subG = ctx.createGain();
-  subG.gain.value = 0.5;
+  mix.gain.value = 0.9;
   const lp = ctx.createBiquadFilter();
   lp.type = "lowpass";
-  lp.Q.value = 3;
+  lp.Q.value = 1.4;
+  const body = ctx.createBiquadFilter(); // exhaust resonance
+  body.type = "peaking";
+  body.frequency.value = 140;
+  body.Q.value = 1.2;
+  body.gain.value = 7;
   const amp = ctx.createGain();
   amp.gain.value = 0;
-  saw1.connect(mix);
-  saw2.connect(mix);
-  sub.connect(subG).connect(mix);
-  mix.connect(shaper).connect(lp).connect(amp).connect(out);
-  saw1.start();
-  saw2.start();
-  sub.start();
-  return { saw1, saw2, sub, lp, amp };
+  osc.connect(mix);
+  low.connect(lowG).connect(mix);
+  mix.connect(shaper).connect(body).connect(lp).connect(amp).connect(out);
+  // intake roar
+  const src = ctx.createBufferSource();
+  src.buffer = noise(ctx);
+  src.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 600;
+  bp.Q.value = 0.8;
+  const intake = ctx.createGain();
+  intake.gain.value = 0;
+  src.connect(bp).connect(intake).connect(out);
+  osc.start();
+  low.start();
+  src.start();
+  return { osc, low, lp, amp, intake, src };
 }
 
 type Car = {
@@ -116,7 +147,8 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
       const e = eng.current;
       if (!e) return;
       e.amp.gain.value = 0;
-      [e.saw1, e.saw2, e.sub].forEach((o) => o.stop());
+      e.intake.gain.value = 0;
+      [e.osc, e.low, e.src].forEach((o) => o.stop());
     },
     [],
   );
@@ -263,15 +295,16 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
     const au = e && getAudio();
     if (!e || !au) return;
     const now = au.ctx.currentTime;
-    const f = c.rpm / 15;
-    e.saw1.frequency.setTargetAtTime(f, now, 0.015);
-    e.saw2.frequency.setTargetAtTime(f * 1.006, now, 0.015);
-    e.sub.frequency.setTargetAtTime(f / 2, now, 0.015);
-    const load = c.throttle ? 1 : 0.25;
+    const cycle = c.rpm / 120;
+    e.osc.frequency.setTargetAtTime(cycle, now, 0.02);
+    e.low.frequency.setTargetAtTime(cycle / 2, now, 0.02);
+    const load = c.throttle ? 1 : 0.3;
     const cut = c.phase === "run" && c.shiftT > 0;
-    e.lp.frequency.setTargetAtTime(300 + c.rpm * 0.35 * load, now, 0.03);
+    // off throttle it goes dull and boomy; on throttle it opens up, but stays low
+    e.lp.frequency.setTargetAtTime(180 + c.rpm * (0.09 + 0.1 * load), now, 0.04);
     const limiterGate = c.rpm >= LIMIT - 40 && c.throttle ? (Math.random() < 0.5 ? 0.15 : 1) : 1;
-    e.amp.gain.setTargetAtTime((cut ? 0.08 : 0.12 + load * 0.2) * limiterGate, now, 0.02);
+    e.amp.gain.setTargetAtTime((cut ? 0.1 : 0.22 + load * 0.28) * limiterGate, now, 0.02);
+    e.intake.gain.setTargetAtTime(c.throttle ? 0.02 + (c.rpm / LIMIT) * 0.05 : 0.008, now, 0.05);
   }
 
   function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number) {
