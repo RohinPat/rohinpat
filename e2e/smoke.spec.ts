@@ -37,6 +37,7 @@ test("/play returns 404 (route removed)", async ({ page }) => {
 });
 
 test("Off hours makes no third-party requests, even when you play", async ({ page }) => {
+  test.setTimeout(60_000); // opens the 3D keyboard, slow in a software renderer
   const thirdParty: string[] = [];
   page.on("request", (req) => {
     const host = new URL(req.url()).hostname;
