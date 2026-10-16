@@ -43,10 +43,14 @@ test("Off hours makes no third-party requests, even when you play", async ({ pag
     if (host !== "localhost" && host !== "127.0.0.1") thirdParty.push(host);
   });
   await page.goto("/interests");
-  await page.getByRole("button", { name: /spin the record/i }).click();
-  await page.mouse.click(4, 420);
+  await page.getByRole("button", { name: /^Play Music/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Play", exact: true }).click();
+  await page.waitForTimeout(800);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Play Keyboards/ }).click();
   await page.keyboard.type("hello");
   await page.waitForTimeout(500);
+  await page.keyboard.press("Escape");
   expect(thirdParty).toEqual([]);
   await expect(page.getByRole("link", { name: /playlist/i })).toHaveAttribute("href", /open\.spotify\.com\/playlist/);
 });
@@ -58,8 +62,9 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
   }
   // even after interacting with the pieces
   await page.goto("/interests");
-  await page.getByRole("button", { name: /spin the record/i }).click();
+  await page.getByRole("button", { name: /^Play Keyboards/ }).click();
   await page.keyboard.type("abc");
+  await page.keyboard.press("Escape");
   const { cookies, keys } = await page.evaluate(() => ({
     cookies: document.cookie,
     keys: Object.keys(localStorage),
@@ -167,39 +172,40 @@ test("project deep link lands on that entry", async ({ page }) => {
   await expect(page.locator("#aimessage")).toBeInViewport();
 });
 
-test("watch lume lights up while held", async ({ page }) => {
+test("watch: turning the crown winds the power reserve", async ({ page }) => {
   await page.goto("/interests");
-  const watch = page.getByRole("button", { name: /watch face/i });
-  await watch.hover();
-  await page.mouse.down();
-  await expect(watch).toHaveAttribute("aria-pressed", "true");
-  await page.mouse.up();
-  await expect(watch).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: /^Play Watches/ }).click();
+  const crown = page.getByRole("slider", { name: /Crown/ });
+  await expect(crown).toBeFocused();
+  const before = Number(await crown.getAttribute("aria-valuenow"));
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowUp");
+  await expect.poll(async () => Number(await crown.getAttribute("aria-valuenow"))).toBeGreaterThan(before);
 });
 
-test("Off hours canvas pieces work from the keyboard", async ({ page }) => {
+test("Off hours: every piece opens full screen from the keyboard and Escape brings you back", async ({ page }) => {
   await page.goto("/interests");
-  const golf = page.getByRole("img", { name: /putting green/i });
-  await golf.focus();
-  await expect(golf).toBeFocused();
-  // focusing scrolls the tile into view (smoothly) — let that finish first
-  let before = -1;
-  await expect
-    .poll(async () => {
-      const y = await page.evaluate(() => window.scrollY);
-      const settled = y === before;
-      before = y;
-      return settled;
-    }, { intervals: [250] })
-    .toBe(true);
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
-  // arrows drive the piece instead of scrolling the page
-  expect(await page.evaluate(() => window.scrollY)).toBe(before);
-  for (const name of [/night highway/i, /Blaugrana/i, /ridgelines/i, /dithered/i, /shot chart/i]) {
-    await expect(page.getByRole("img", { name })).toHaveAttribute("tabindex", "0");
+  await page.waitForLoadState("networkidle");
+  for (const name of ["Watches", "Gaming", "Basketball", "Barça", "Music", "Cars", "Keyboards", "Golf", "Skiing"]) {
+    const tile = page.getByRole("button", { name: new RegExp(`^Play ${name}`) });
+    await tile.focus();
+    await page.keyboard.press("Enter");
+    const stage = page.getByRole("dialog");
+    await expect(stage).toBeVisible();
+    // focus moves into the stage
+    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(stage).toHaveCount(0);
+    await expect(tile).toBeFocused();
   }
+});
+
+test("Off hours: the maze solvers find the exit", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/interests");
+  await page.getByRole("button", { name: /^Play Gaming/ }).click();
+  const stage = page.getByRole("dialog");
+  await stage.getByRole("button", { name: "BFS", exact: true }).click();
+  await expect(stage.locator("[aria-live]")).toHaveText(/BFS: expanded \d+ cells, path \d+ steps/, { timeout: 30_000 });
 });
 
 test("footer is one quiet line on every page", async ({ page }) => {

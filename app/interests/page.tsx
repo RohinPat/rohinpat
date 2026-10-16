@@ -4,7 +4,7 @@ import Interests from "@/components/Interests";
 export const metadata: Metadata = {
   title: "Off hours",
   description:
-    "Watches, cars, Barça, vinyl, skiing and more — each turned into a small interactive piece.",
+    "Watches, a maze the machines learn, hoops, penalties, a drum machine, cars, keyboards, golf and skiing — each built into something you can play.",
 };
 
 export default function InterestsPage() {

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 const LOOP_EXCERPT = `
 const run = () => {
   cancelAnimationFrame(raf);
-  if (visible && !document.hidden && !reduce) {
+  if (visible && !document.hidden && !still() && !optsRef.current.paused) {
     last = performance.now();
     raf = requestAnimationFrame(frame);
   }
@@ -52,55 +52,59 @@ export default function ColophonPage() {
 
           <h2>No animation library</h2>
           <p>
-            Everything that moves is CSS keyframes or <code>requestAnimationFrame</code>. The
-            homepage&apos;s name and phone respond to scrolling through a single CSS variable,
-            written by one passive scroll listener, so nothing re-renders while you scroll. With{" "}
-            <code>prefers-reduced-motion</code> set, the entrances, the scroll effects and the
-            rotating notifications all hold still.
+            Everything that moves is CSS transitions, CSS 3D or <code>requestAnimationFrame</code>.
+            The home screen&apos;s app launch is one element growing from the icon to the window;
+            the Duo&apos;s fold is a two-faced layer turned 180° on its hinge. With{" "}
+            <code>prefers-reduced-motion</code> set, the entrances, the launch and the previews
+            hold still.
           </p>
 
-          <h2>Nine pieces, one hook</h2>
+          <h2>Nine pieces, no engine</h2>
           <p>
-            The <Link href="/interests">Off hours</Link> page has nine interactive pieces. Six
-            are canvases, and they share one hook, <code>useCanvas</code>, which handles
-            everything that isn&apos;t drawing:
+            Each piece on the <Link href="/interests">Off hours</Link> page is written from scratch
+            for the browser, with no game engine, physics or audio library:
           </p>
           <ul>
             <li>
-              <strong>Sharp on dense screens.</strong> The canvas is sized to the device pixel
-              ratio, capped at 2, and redrawn whenever its box changes size.
+              <strong>Maze:</strong> a DDA raycaster with ordered Bayer dithering, and solvers you
+              can watch: BFS, DFS, A*, a wall follower and tabular Q-learning that learns the
+              maze episode by episode.
             </li>
             <li>
-              <strong>Runs only when you can see it.</strong> Pieces that are off screen, or in a
-              background tab, stop their frame loop entirely.
+              <strong>Basketball, penalties, golf, skiing:</strong> small physics models in real
+              units — gravity, rim and glass collisions, a verlet-cloth net, a spring-grid goal
+              net, rolling friction on a height map, drag and lift on a golf ball, powder as 3D
+              particles.
             </li>
             <li>
-              <strong>Reduced motion means still.</strong> Nothing animates on its own; a piece
-              redraws only in response to you.
+              <strong>Sound:</strong> every noise is synthesized with the Web Audio API — the
+              V8&apos;s firing note, the ratchet in the watch, the drum machine, which renders one
+              bar offline and plays it through an AudioWorklet at whatever speed the record is
+              turning, so scratching it really scratches your beat.
             </li>
             <li>
-              <strong>Works from a keyboard.</strong> Every canvas takes focus. Arrow keys move
-              its pointer (hold Shift for bigger steps), and Enter or Space presses.
+              <strong>Watch and keyboard:</strong> plain DOM and SVG in CSS 3D, pulled apart layer
+              by layer.
             </li>
           </ul>
-          <p>The pausing is a few lines:</p>
+          <p>
+            The canvases share one hook, <code>useCanvas</code>: sharp on dense screens, keyboard
+            focus with arrow keys, and a frame loop that only runs while you can see it (the tile
+            previews also pause while a piece is open full screen):
+          </p>
           <CodeBlock
             code={LOOP_EXCERPT}
             lang="ts"
             file="components/offhours/useCanvas.ts"
             href={`${site.repo}/blob/main/components/offhours/useCanvas.ts`}
           />
-          <p>
-            The watch and the record are SVG, so they use a smaller sibling hook with the same
-            on-screen rule. The keyboard is plain HTML.
-          </p>
 
           <h2>Accessibility</h2>
           <p>
             Every page is scanned with axe against the WCAG 2.2 A and AA rules, in Playwright,
             on every pull request and every push to main; one violation fails the run. The same suite checks that the skip
-            link moves focus, that the canvases take keyboard focus, and that arrow keys move a
-            piece instead of scrolling the page. Text and background pairs are chosen to clear
+            link moves focus, and that every Off hours piece opens from the keyboard, takes focus,
+            and gives it back when Escape closes it. Text and background pairs are chosen to clear
             4.5:1. Automated checks catch a fraction of real problems, so they&apos;re a floor,
             not a certificate.
           </p>
