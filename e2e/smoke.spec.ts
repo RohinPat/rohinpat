@@ -66,13 +66,20 @@ test("a plain visit writes nothing to cookies or local storage", async ({ page }
   expect(keys).toEqual([]);
 });
 
-test("home diagram: focusing a stage explains it", async ({ page }) => {
-  await page.goto("/");
+test("case-study diagram: focusing a stage explains it", async ({ page }) => {
+  await page.goto("/projects/closet-organizer");
   const stage = page.getByRole("button", { name: /Tagging/ }).first();
+  await stage.scrollIntoViewIfNeeded();
   await stage.focus();
   await expect(stage).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText(/18 categories and 5 styles/).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/closet-organizer");
+});
+
+test("home is visual: work cards link to the write-up, live pieces render", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /Closet Organizer/ }).first()).toHaveAttribute("href", "/projects/closet-organizer");
+  await expect(page.getByRole("img", { name: /night highway/i })).toBeAttached();
+  await expect(page.getByRole("button", { name: /watch face/i })).toBeAttached();
 });
 
 test("case study: renders, links its code, and every excerpt links to GitHub", async ({ page }) => {

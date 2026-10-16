@@ -69,8 +69,9 @@ export const projects: Entry[] = [
     year: "2024",
     kind: "project",
     tags: ["Next.js", "Pusher", "Prisma"],
-    // Demo link removed: the live demo is a sign-in wall with nothing to see.
-    links: [{ label: "Code", href: "https://github.com/RohinPat/ai-message" }],
+    // No links for now: the public repo holds files that shouldn't be public
+    // (a SQL backup, a debug-env endpoint). Re-add the Code link once it's
+    // cleaned up; the demo is a sign-in wall either way.
   },
   {
     slug: "bluebikes",
