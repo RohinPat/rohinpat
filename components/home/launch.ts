@@ -12,6 +12,12 @@ const EASE = "cubic-bezier(0.32, 0.72, 0, 1)"; // close to iOS's spring
 const MS = 420;
 
 let open: { app: string; href: string; color: string } | null = null;
+let unlocked = false; // once unlocked, the home screen stays unlocked this visit
+
+export const isUnlocked = () => unlocked;
+export const markUnlocked = () => {
+  unlocked = true;
+};
 
 export function forgetLaunch() {
   open = null;

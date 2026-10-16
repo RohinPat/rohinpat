@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+// Home opens on a lock screen; unlock it the way a visitor would.
+async function unlock(page: import("@playwright/test").Page) {
+  const btn = page.getByRole("button", { name: /swipe up to unlock/i });
+  await btn.click();
+  await expect(btn).toHaveCount(0);
+}
+
 test("nav links route between top-level pages", async ({ page }) => {
   await page.goto("/");
 
@@ -23,11 +30,13 @@ test("nav links route between top-level pages", async ({ page }) => {
 
 test("home screen: apps open their pages (mouse and keyboard)", async ({ page }) => {
   await page.goto("/");
+  await unlock(page);
   const dock = page.getByRole("navigation", { name: "Dock" });
   await dock.getByRole("link", { name: "Work" }).click(); // launch zoom, then navigate
   await expect(page).toHaveURL(/\/projects$/);
 
   await page.goto("/");
+  await unlock(page);
   const closet = page.getByRole("link", { name: /^Closet Organizer$/ }).first();
   await closet.focus();
   await page.keyboard.press("Enter");
@@ -36,7 +45,8 @@ test("home screen: apps open their pages (mouse and keyboard)", async ({ page })
 
 test("home screen: Spotlight finds and opens a page", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /search/i }).click();
+  await unlock(page);
+  await page.getByRole("button", { name: /^search$/i }).click();
   const dialog = page.getByRole("dialog", { name: "Search" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("combobox")).toBeFocused();

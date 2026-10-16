@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+// Home opens on a lock screen; unlock it the way a visitor would.
+async function unlock(page: import("@playwright/test").Page) {
+  const btn = page.getByRole("button", { name: /swipe up to unlock/i });
+  await btn.click();
+  await expect(btn).toHaveCount(0);
+}
+
 // One smoke per route: page renders, title is right, expected content visible.
 // Catches the worst failure mode for a portfolio — "the site is broken."
 
@@ -78,8 +85,31 @@ test("home screen: dock and grid point at the right places", async ({ page }) =>
   await expect(page.getByRole("link", { name: /GitHub/ }).first()).toHaveAttribute("href", "https://github.com/RohinPat");
 });
 
+test("home screen: opens locked; unlocking reveals the apps", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /swipe up to unlock/i })).toBeVisible();
+  await expect(page.getByLabel(/Boston time \d{1,2}:\d{2}/).first()).toBeAttached();
+  await unlock(page);
+  await expect(page.getByRole("navigation", { name: "Dock" }).getByRole("link", { name: "Work" })).toBeVisible();
+});
+
+test("home screen: Control Center toggles the wallpaper", async ({ page }) => {
+  await page.goto("/");
+  await unlock(page);
+  await page.getByRole("button", { name: "Open Control Center" }).first().click();
+  const cc = page.getByRole("dialog", { name: "Control Center" });
+  await expect(cc).toBeVisible();
+  const dark = cc.getByRole("button", { name: "Dark wallpaper" });
+  await expect(dark).toHaveAttribute("aria-pressed", "false");
+  await dark.click();
+  await expect(dark).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(cc).toHaveCount(0);
+});
+
 test("home screen: long-press an icon to jiggle, Done to stop", async ({ page }) => {
   await page.goto("/");
+  await unlock(page);
   const icon = page.locator('[data-tile="colophon"]');
   const box = (await icon.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

@@ -8,8 +8,16 @@ import { useEffect, useRef } from "react";
 
 type Particle = { x: number; y: number; life: number; age: number };
 
-export default function FieldWallpaper() {
+export default function FieldWallpaper({ paused = false, dark = false }: { paused?: boolean; dark?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  // Control Center flips these; the loop reads them live instead of restarting.
+  const opts = useRef({ paused, dark });
+  const update = useRef<(wipe: boolean) => void>(() => {});
+  useEffect(() => {
+    const wipe = opts.current.dark !== dark;
+    opts.current = { paused, dark };
+    update.current(wipe);
+  }, [paused, dark]);
 
   useEffect(() => {
     const el = canvas.current;
@@ -33,6 +41,9 @@ export default function FieldWallpaper() {
       p.life = 120 + Math.random() * 260;
     };
 
+    const bg = () => (opts.current.dark ? "13,16,14" : "242,234,215");
+    const ink = () => (opts.current.dark ? "rgba(242,234,215,0.16)" : "rgba(13,16,14,0.13)");
+
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       w = host.clientWidth;
@@ -40,7 +51,7 @@ export default function FieldWallpaper() {
       el.width = Math.round(w * dpr);
       el.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = "#f2ead7";
+      ctx.fillStyle = `rgb(${bg()})`;
       ctx.fillRect(0, 0, w, h);
       const n = Math.min(2000, Math.round((w * h) / 560));
       particles = Array.from({ length: n }, () => {
@@ -57,10 +68,10 @@ export default function FieldWallpaper() {
 
     const step = () => {
       t += 1 / 60;
-      ctx.fillStyle = "rgba(242,234,215,0.06)";
+      ctx.fillStyle = `rgba(${bg()},0.06)`;
       ctx.fillRect(0, 0, w, h);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(13,16,14,0.13)";
+      ctx.strokeStyle = ink();
       ctx.beginPath();
       for (const p of particles) {
         const a = angleAt(p.x, p.y);
@@ -96,10 +107,20 @@ export default function FieldWallpaper() {
     };
     const run = () => {
       cancelAnimationFrame(raf);
-      if (!reduce && visible && !document.hidden) raf = requestAnimationFrame(loop);
+      if (!reduce && visible && !document.hidden && !opts.current.paused) raf = requestAnimationFrame(loop);
     };
     const still = () => {
       for (let i = 0; i < 260; i++) step();
+    };
+
+    update.current = (wipe) => {
+      if (wipe) {
+        // colour change: wipe to the new background
+        ctx.fillStyle = `rgb(${bg()})`;
+        ctx.fillRect(0, 0, w, h);
+        if (reduce || opts.current.paused) still();
+      }
+      run(); // starts or stops the loop for pause/resume
     };
 
     resize();
@@ -116,9 +137,10 @@ export default function FieldWallpaper() {
     io.observe(host);
     const onMove = (e: PointerEvent) => {
       const r = host.getBoundingClientRect();
-      pointer.x = e.clientX - r.left;
-      pointer.y = e.clientY - r.top;
-      pointer.on = pointer.y >= 0 && pointer.y <= r.height;
+      const k = w / (r.width || 1); // the device frame may be scaled down
+      pointer.x = (e.clientX - r.left) * k;
+      pointer.y = (e.clientY - r.top) * k;
+      pointer.on = e.clientY >= r.top && e.clientY <= r.bottom && e.clientX >= r.left && e.clientX <= r.right;
     };
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("visibilitychange", run);

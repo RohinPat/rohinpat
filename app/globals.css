@@ -347,6 +347,90 @@ main h1:not(.hero-field) {
   letter-spacing: -0.01em;
 }
 
+/* ---------------------------------------------------------------------------
+   Home device. Phones: full-bleed (your phone is the device). From 768px
+   the home screen sits in a frame: "pro" (393×852 screen), and from 1280px
+   "pro max" (430×932). JS sets --s so the whole device fits the window.
+   ------------------------------------------------------------------------ */
+.dev-screen { position: relative; width: 100%; min-height: 100svh; overflow: hidden; }
+.dev-frame, .dev-btn, .dev-island { display: none; }
+@media (min-width: 768px) {
+  .dev {
+    /* centred exactly in its slot, then scaled — no overflow drift */
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(var(--s, 0.8));
+    transform-origin: center;
+  }
+  .dev-frame {
+    display: block;
+    position: absolute;
+    inset: -14px;
+    border-radius: 72px;
+    background: linear-gradient(145deg, #d9d3c6 0%, #8f897e 30%, #cfc8ba 55%, #7d786e 80%, #c7c0b2 100%);
+    box-shadow:
+      0 50px 100px -30px rgba(13, 16, 14, 0.55),
+      0 0 0 1px rgba(13, 16, 14, 0.35),
+      inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+  }
+  .dev-frame::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: 68px;
+    background: #050605; /* the black bezel */
+  }
+  .dev-btn {
+    display: block;
+    position: absolute;
+    width: 5px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #7d786e, #cfc8ba);
+  }
+  .dev-island {
+    display: block;
+    position: absolute;
+    top: 11px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 126px;
+    height: 37px;
+    border-radius: 999px;
+    background: #000;
+    z-index: 40;
+  }
+  .dev-screen {
+    width: 393px;
+    height: 852px;
+    min-height: 0;
+    border-radius: 56px;
+    isolation: isolate;
+  }
+}
+@media (min-width: 1280px) {
+  .dev-screen { width: 430px; height: 932px; border-radius: 60px; }
+  .dev-frame { border-radius: 76px; }
+  .dev-frame::after { border-radius: 72px; }
+}
+/* The slot a scaled device occupies, so layout matches what you see. */
+.dev-slot { width: 100%; }
+@media (min-width: 768px) {
+  .dev-slot {
+    --dw: 421px; --dh: 880px;
+    width: calc(var(--dw) * var(--s, 0.8));
+    height: calc(var(--dh) * var(--s, 0.8));
+    position: relative;
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 1280px) {
+  .dev-slot { --dw: 458px; --dh: 960px; }
+}
+
+@keyframes app-in { from { opacity: 0; transform: scale(1.18); } }
+.apps-in > * { animation: app-in 0.55s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: calc(var(--i, 0) * 28ms); }
+
 /* Home screen: long-press jiggle */
 @keyframes jiggle {
   0%, 100% { transform: rotate(-1.6deg); }
@@ -359,7 +443,7 @@ main h1:not(.hero-field) {
 @keyframes egg-fall { to { transform: translateY(105vh) rotate(540deg); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-enter,
+  .page-enter, .apps-in > *,
   [class*="animate-["] { animation: none !important; }
 }
 
