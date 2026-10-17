@@ -14,15 +14,14 @@ import type { WatchState } from "./three/watch";
 // The model and the movement's motion live in three/watch.ts.
 
 const RESERVE = 75;
-const DIALS = [
-  ["silver", "Silver", "#e6e3db"],
-  ["blue", "Blue", "#2a4c97"],
-  ["mint", "Mint", "#9fd6bd"],
+const BEZELS = [
+  ["green", "Green", "#1f7a46"],
   ["black", "Black", "#202225"],
+  ["blue", "Blue", "#2a55b0"],
 ] as const;
 const PARTS = [
   ["crystal", "Crystal"],
-  ["bezel", "Fluted bezel"],
+  ["bezel", "Dive bezel"],
   ["second", "Seconds hand"],
   ["minute", "Minute hand"],
   ["hour", "Hour hand"],
@@ -46,8 +45,17 @@ export default function Watch({ mode, paused }: PieceProps) {
   const [reserve, setReserve] = useState(play ? 0.15 : 0.7);
   const [solo, setSolo] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [dial, setDial] = useState("silver");
-  const model = useRef<{ setDial: (k: string) => void } | null>(null);
+  const [bezel, setBezel] = useState("green");
+  const model = useRef<{ setBezel: (k: string) => void } | null>(null);
+  // turn the dive bezel five minutes, one click at a time
+  const turnBezel = () => {
+    for (let i = 0; i < 10; i++)
+      window.setTimeout(() => {
+        state.current.bezel = (state.current.bezel ?? 0) + 3;
+        const au = getAudio();
+        if (au) modal(au, [[3200, 10, 0.2], [6400, 8, 0.08]], { excite: 0.0015, gain: 0.6, lowpass: 11000 });
+      }, i * 45);
+  };
   const state = useRef<WatchState>({ power: play ? 0.15 : 0.7, crown: 0, rotorKick: 0, flip: false });
   const knob = useRef<HTMLDivElement>(null);
   const knobA = useRef<number | null>(null);
@@ -112,7 +120,7 @@ export default function Watch({ mode, paused }: PieceProps) {
           paused={paused}
           onReady={(m, v) => {
             state.current.impulse = v.orbitImpulse;
-            model.current = m as unknown as { setDial: (k: string) => void };
+            model.current = m as unknown as { setBezel: (k: string) => void };
             setNotes(Object.fromEntries(m.parts.map((p) => [p.id, p.note])));
           }}
         />
@@ -178,23 +186,30 @@ export default function Watch({ mode, paused }: PieceProps) {
             <input type="range" min={0} max={100} value={Math.round(explode * 100)} onChange={(e) => setExplode(Number(e.target.value) / 100)} className="mt-2 w-full accent-[#8ad9a8]" />
           </label>
           <div className="w-full">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Dial</p>
-            <div className="flex gap-2" role="group" aria-label="Dial colour">
-              {DIALS.map(([id, name, hex]) => (
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Bezel</p>
+            <div className="flex items-center gap-2" role="group" aria-label="Bezel colour">
+              {BEZELS.map(([id, name, hex]) => (
                 <button
                   key={id}
                   type="button"
-                  aria-pressed={dial === id}
-                  aria-label={`${name} dial`}
+                  aria-pressed={bezel === id}
+                  aria-label={`${name} bezel`}
                   title={name}
                   onClick={() => {
-                    setDial(id);
-                    model.current?.setDial(id);
+                    setBezel(id);
+                    model.current?.setBezel(id);
                   }}
-                  className={`w-7 h-7 rounded-full border-2 ${dial === id ? "border-[var(--paper)]" : "border-white/10"}`}
+                  className={`w-7 h-7 rounded-full border-2 ${bezel === id ? "border-[var(--paper)]" : "border-white/10"}`}
                   style={{ background: `radial-gradient(circle at 35% 30%, #ffffff55, transparent 60%), ${hex}` }}
                 />
               ))}
+              <button
+                type="button"
+                onClick={turnBezel}
+                className="ml-auto h-8 px-3 rounded-full border border-white/20 font-mono text-[10px] uppercase tracking-[0.14em] hover:bg-white/10"
+              >
+                Turn bezel ↺
+              </button>
             </div>
           </div>
           <button type="button" onClick={() => setFlip((f) => !f)} aria-pressed={flip} className="h-9 px-4 rounded-full border border-white/20 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10">
