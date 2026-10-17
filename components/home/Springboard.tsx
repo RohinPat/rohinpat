@@ -19,7 +19,7 @@ import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 // bar; Spotlight on Search or ⌘/Ctrl-K; long-press to jiggle.
 
 const CREAM = "#f2ead7";
-const DUO_MS = 720; // the cover's swing; matches .duo-leaf in globals.css
+const DUO_MS = 820; // the cover's swing; matches .duo-leaf in globals.css
 
 type Boston = { h: number; m: number; s: number; label: string; date: string };
 
@@ -211,8 +211,8 @@ function DuoCover({ now, locked, onUnlock }: { now: Boston | null; locked: boole
         <span className="duo-btn" aria-hidden="true" style={{ top: 170, height: 40 }} />
         <div className="duo-outer">
           <div className="duo-island" aria-hidden="true" />
-          <FieldWallpaper />
-          <LockScreen now={now} locked={locked} onUnlock={onUnlock} dark={false} slide={false} />
+          <FieldWallpaper dark />
+          <LockScreen now={now} locked={locked} onUnlock={onUnlock} dark slide={false} />
         </div>
       </div>
       <div className="duo-face duo-back" aria-hidden="true">
@@ -245,7 +245,7 @@ function PhoneScreen({
   const [jiggle, setJiggle] = useState(false);
   const [cc, setCc] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true); // the phone starts in dark mode
   const [bright, setBright] = useState(100);
 
   // coming back from an app: close into its icon
@@ -288,9 +288,9 @@ function PhoneScreen({
     </>
   );
   const icons = GRID.map((a, k) => (
-    <AppIcon key={a.id} app={a} index={k} i={3 + k} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
+    <AppIcon key={a.id} app={a} index={k} i={3 + k} dark={dark} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
   ));
-  const grid = "grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 pointer-events-auto content-start";
+  const grid = "grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 [@media(max-height:720px)]:auto-rows-[64px] [@media(max-height:720px)]:gap-y-2 md:!auto-rows-[76px] md:!gap-y-3 pointer-events-auto content-start";
 
   return (
     <div className={`relative w-full h-full min-h-[inherit] ${fg}`} style={{ filter: bright < 100 ? `brightness(${bright / 100})` : undefined }}>
@@ -315,7 +315,7 @@ function PhoneScreen({
         ref={home}
         data-home
         className={`relative z-10 flex flex-col min-h-[100svh] md:min-h-0 md:h-full pb-4 pointer-events-none transition-opacity duration-300 ${
-          duo ? "px-8 pt-[64px]" : "px-5 pt-[76px]"
+          duo ? "px-8 pt-[64px]" : "px-5 pt-[76px] [@media(max-height:720px)]:pt-[64px] md:!pt-[76px]"
         } ${locked ? "opacity-0" : "opacity-100"}`}
       >
         {jiggle && (
@@ -332,7 +332,7 @@ function PhoneScreen({
           // open Duo: Today View on the left half, the Home Screen on the right
           <div className="grid grid-cols-2 gap-x-16">
             {/* widgets pop in once the cover has landed on this half */}
-            <div className={`${grid} ${anim} [--d:700ms]`}>{widgets}</div>
+            <div className={`${grid} ${anim} [--d:520ms]`}>{widgets}</div>
             <div className={`${grid} pt-2 ${anim}`}>{icons}</div>
           </div>
         ) : (
@@ -342,21 +342,23 @@ function PhoneScreen({
           </div>
         )}
 
-        <div className="mt-auto pt-6 flex flex-col items-center gap-3 pointer-events-auto">
+        <div className="mt-auto pt-6 [@media(max-height:720px)]:pt-3 md:!pt-6 flex flex-col items-center gap-3 [@media(max-height:720px)]:gap-2 md:!gap-3 pointer-events-auto">
           <div className="flex items-center gap-2">
             {/* phones: Control Center lives beside Search (no status bar here) */}
             <button
               type="button"
               onClick={() => setCc(true)}
               aria-label="Open Control Center"
-              className="md:hidden flex items-center px-2.5 py-2 rounded-full bg-[rgba(13,16,14,0.12)] backdrop-blur-md"
+              className={`md:hidden flex items-center px-2.5 py-2 rounded-full backdrop-blur-md ${dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"}`}
             >
               <StatusGlyphs />
             </button>
             <button
               type="button"
               onClick={onSearch}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[rgba(13,16,14,0.12)] backdrop-blur-md text-sm font-medium hover:bg-[rgba(13,16,14,0.18)] transition-colors"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full backdrop-blur-md text-sm font-medium transition-colors ${
+                dark ? "bg-[rgba(242,234,215,0.14)] hover:bg-[rgba(242,234,215,0.22)]" : "bg-[rgba(13,16,14,0.12)] hover:bg-[rgba(13,16,14,0.18)]"
+              }`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
                 <circle cx="11" cy="11" r="7" />
@@ -368,7 +370,7 @@ function PhoneScreen({
 
           <nav
             aria-label="Dock"
-            className={`w-full rounded-[30px] backdrop-blur-xl border shadow-[0_10px_40px_-12px_rgba(13,16,14,0.35)] px-4 py-3 ${
+            className={`w-full rounded-[30px] backdrop-blur-xl border shadow-[0_10px_40px_-12px_rgba(13,16,14,0.35)] px-4 py-3 [@media(max-height:720px)]:py-2 md:!py-3 ${
               duo ? "max-w-[400px]" : ""
             } ${dark ? "bg-[rgba(13,16,14,0.45)] border-white/15" : "bg-[rgba(242,234,215,0.55)] border-white/60"}`}
           >
@@ -638,6 +640,7 @@ function AppIcon({
   index,
   i,
   label = true,
+  dark = false,
   jiggle,
   onJiggle,
   onOpen,
@@ -646,6 +649,7 @@ function AppIcon({
   index: number;
   i?: number;
   label?: boolean;
+  dark?: boolean;
   jiggle: boolean;
   onJiggle: () => void;
   onOpen: (app: App, tile?: HTMLElement | null) => void;
@@ -680,17 +684,29 @@ function AppIcon({
         ref={tile}
         data-tile={app.id}
         aria-hidden="true"
-        className={`grid place-items-center w-14 h-14 md:w-[62px] md:h-[62px] rounded-[22.5%] shadow-[0_6px_16px_-6px_rgba(13,16,14,0.45),inset_0_0_0_1px_rgba(13,16,14,0.08)] transition-transform duration-150 group-active:scale-90 ${
+        className={`grid place-items-center w-14 h-14 [@media(max-height:720px)]:w-12 [@media(max-height:720px)]:h-12 md:!w-[62px] md:!h-[62px] rounded-[22.5%] shadow-[0_6px_16px_-6px_rgba(13,16,14,0.45),inset_0_0_0_1px_rgba(13,16,14,0.08)] transition-transform duration-150 group-active:scale-90 ${
           jiggle ? "animate-[jiggle_0.3s_ease-in-out_infinite]" : ""
         }`}
-        style={{ background: app.tile, color: app.ink, animationDelay: `${-(index % 5) * 0.06}s` }}
+        style={{
+          background: dark && app.tile === "#0d100e" ? "#1e2320" : app.tile,
+          color: app.ink,
+          boxShadow: dark ? "0 6px 16px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(242,234,215,0.12)" : undefined,
+          animationDelay: `${-(index % 5) * 0.06}s`,
+        }}
       >
         <svg width="56%" height="56%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           {GLYPHS[app.glyph]}
         </svg>
       </span>
       {label ? (
-        <span className="text-[12px] font-medium leading-tight text-center [text-shadow:0_1px_3px_rgba(242,234,215,0.9)]">{app.name}</span>
+        <span
+          className={`text-[12px] font-medium leading-tight text-center whitespace-nowrap ${
+            dark ? "[text-shadow:0_1px_3px_rgba(13,16,14,0.9)]" : "[text-shadow:0_1px_3px_rgba(242,234,215,0.9)]"
+          }`}
+        >
+          <span aria-hidden={app.short ? true : undefined}>{app.short ?? app.name}</span>
+          {app.short && <span className="sr-only">{app.name}</span>}
+        </span>
       ) : (
         <span className="sr-only">{app.name}</span>
       )}
@@ -728,7 +744,7 @@ function ProfileWidget({ i }: { i: number }) {
         {site.role} · {site.employer}
       </p>
       <div>
-        <p className="hero-field" style={{ fontSize: "2.6rem" }}>
+        <p className="hero-field text-[2.6rem] [@media(max-height:720px)]:text-[2rem] md:!text-[2.6rem]">
           {site.name}
         </p>
         <p className="mt-1.5 text-sm leading-snug text-pretty">{pov}</p>
@@ -750,7 +766,7 @@ function CaseWidget({ onOpen, i }: { onOpen: (el: HTMLElement | null) => void; i
         onOpen(ref.current);
       }}
       style={{ ["--i" as string]: i } as React.CSSProperties}
-      className="col-span-2 row-span-2 rounded-[24px] p-4 flex flex-col justify-between bg-[var(--ink)] text-[var(--paper)] shadow-[0_10px_30px_-14px_rgba(13,16,14,0.5)] transition-transform active:scale-95"
+      className="col-span-2 row-span-2 rounded-[24px] p-4 [@media(max-height:720px)]:p-3 md:!p-4 flex flex-col justify-between bg-[#1e2320] text-[var(--paper)] shadow-[0_10px_30px_-14px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(242,234,215,0.12)] transition-transform active:scale-95"
     >
       <span className="flex items-start justify-between">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mint)]">Case study</span>
@@ -758,7 +774,7 @@ function CaseWidget({ onOpen, i }: { onOpen: (el: HTMLElement | null) => void; i
       </span>
       <span>
         <span className="block font-semibold leading-tight text-[15px]">Closet Organizer</span>
-        <span className="block mt-1 text-[11px] text-[#b5b6ab]">CLIP · FastAPI · Expo</span>
+        <span className="block mt-1 text-[11px] text-[#b5b6ab] whitespace-nowrap">CLIP · FastAPI</span>
       </span>
     </Link>
   );

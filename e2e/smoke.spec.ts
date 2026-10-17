@@ -124,9 +124,10 @@ test("home screen: Control Center toggles the wallpaper", async ({ page }) => {
   const cc = page.getByRole("dialog", { name: "Control Center" });
   await expect(cc).toBeVisible();
   const dark = cc.getByRole("button", { name: "Dark wallpaper" });
-  await expect(dark).toHaveAttribute("aria-pressed", "false");
-  await dark.click();
+  // the phone starts in dark mode
   await expect(dark).toHaveAttribute("aria-pressed", "true");
+  await dark.click();
+  await expect(dark).toHaveAttribute("aria-pressed", "false");
   await page.keyboard.press("Escape");
   await expect(cc).toHaveCount(0);
 });
@@ -201,6 +202,15 @@ test("Off hours: every piece opens full screen from the keyboard and Escape brin
     await expect(stage).toHaveCount(0);
     await expect(tile).toBeFocused();
   }
+});
+
+test("Off hours: clicking a game's buttons doesn't take the keyboard away from the game", async ({ page }) => {
+  await page.goto("/interests");
+  await page.getByRole("button", { name: /^Play Gaming/ }).click();
+  const stage = page.getByRole("dialog");
+  await stage.getByRole("button", { name: "You", exact: true }).click();
+  // focus is handed back to the maze, so arrow keys walk it
+  await expect(stage.locator("canvas[data-autofocus]")).toBeFocused();
 });
 
 test("Off hours: the maze solvers find the exit", async ({ page }) => {

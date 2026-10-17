@@ -44,3 +44,13 @@ test("home screen fits a phone: name, point of view and the dock", async ({ page
     expect(box!.y + box!.height).toBeLessThanOrEqual(vh);
   }
 });
+
+test("home screen fits a small phone too (iPhone SE): the dock stays on screen", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto("/");
+  await page.getByRole("button", { name: /swipe up to unlock/i }).click();
+  const dock = page.getByRole("navigation", { name: "Dock" });
+  await expect(dock).toBeVisible();
+  const box = (await dock.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(667);
+});

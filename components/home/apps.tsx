@@ -7,6 +7,8 @@ import { site } from "@/lib/site";
 export type App = {
   id: string;
   name: string;
+  /** shorter label under the icon, so names never wrap */
+  short?: string;
   href: string;
   external?: boolean;
   tile: string; // icon background
@@ -21,7 +23,7 @@ const GREEN = "#1d5e3f";
 const MINT = "#8ad9a8";
 
 export const GRID: App[] = [
-  { id: "closet", name: "Closet Organizer", href: "/projects/closet-organizer", tile: INK, ink: MINT, land: CREAM, glyph: "hanger" },
+  { id: "closet", name: "Closet Organizer", short: "Closet", href: "/projects/closet-organizer", tile: INK, ink: MINT, land: CREAM, glyph: "hanger" },
   { id: "colophon", name: "Colophon", href: "/colophon", tile: CREAM, ink: INK, land: CREAM, glyph: "braces" },
   { id: "github", name: "GitHub", href: site.github, external: true, tile: INK, ink: CREAM, glyph: "branch" },
   { id: "linkedin", name: "LinkedIn", href: site.linkedin, external: true, tile: GREEN, ink: CREAM, glyph: "badge" },
