@@ -448,7 +448,7 @@ main h1:not(.hero-field) {
   flex-shrink: 0;
 }
 .duo {
-  --swing: 720ms cubic-bezier(0.65, 0, 0.35, 1);
+  --swing: 820ms cubic-bezier(0.32, 0.72, 0, 1);
   position: absolute;
   left: 50%;
   top: 50%;
@@ -456,7 +456,7 @@ main h1:not(.hero-field) {
   height: 696px;
   transform: translate(-50%, -50%) scale(var(--s, 0.8)) translateX(-25%);
   transition: transform var(--swing);
-  perspective: 2600px;
+  perspective: 5200px;
 }
 .duo.is-open { transform: translate(-50%, -50%) scale(var(--s, 0.8)); }
 /* the left half isn't there until the cover lands on it */
@@ -464,7 +464,7 @@ main h1:not(.hero-field) {
   position: absolute;
   inset: 0;
   clip-path: inset(-120px -120px -120px 50%);
-  transition: clip-path 0s linear 700ms;
+  transition: clip-path 0s linear 560ms;
 }
 .duo.is-open .duo-body { clip-path: inset(-120px); }
 .duo-frame, .duo-face {
@@ -570,10 +570,10 @@ main h1:not(.hero-field) {
   inset: 14px 0 14px 14px;
   border-radius: 38px 0 0 38px;
   /* the wallpaper's tone, with a hint of its strokes, under hinge shading */
+  /* the inner screen's left half, dark like the wallpaper, shaded toward the hinge */
   background:
-    linear-gradient(90deg, transparent 70%, rgba(13, 16, 14, 0.08)),
-    repeating-linear-gradient(115deg, rgba(13, 16, 14, 0.035) 0 1px, transparent 1px 7px),
-    var(--paper);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03), transparent 40%, rgba(0, 0, 0, 0.35)),
+    radial-gradient(120% 80% at 30% 30%, #1a1d1b, #0d100e);
   z-index: 1;
 }
 /* light falls off the cover as it turns past edge-on */

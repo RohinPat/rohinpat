@@ -76,11 +76,46 @@ export default function Stage({
       }
     };
     window.addEventListener("keydown", onKey, true);
+    // Keys belong to the game. A mouse click on a button or a slider inside
+    // the stage (pick a solver, a club, Play...) would leave focus on that
+    // control and the game would stop hearing the keyboard, so hand focus
+    // back. Keyboard users tabbing through controls keep their focus.
+    const game = () => root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? null;
+    const refocus = (e: Event) => {
+      const t = e.target as HTMLElement;
+      const ctl = t.closest("button, input, [role=slider]");
+      if (!ctl || ctl === closeBtn.current || ctl.getAttribute("role") === "slider") return;
+      const g = game();
+      if (g && g !== ctl && !g.contains(ctl)) window.setTimeout(() => g.focus({ preventScroll: true }), 0);
+    };
+    const onClick = (e: MouseEvent) => e.detail > 0 && refocus(e);
+    const onPointerUp = (e: PointerEvent) => (e.target as HTMLElement).matches?.("input[type=range]") && refocus(e);
+    // and if focus has fallen out to the page, the next key goes to the game
+    const onStray = (e: KeyboardEvent) => {
+      const a = document.activeElement;
+      if (e.key === "Escape" || e.key === "Tab" || !root.current) return;
+      if (a === document.body || a === root.current) {
+        const g = game();
+        if (!g) return;
+        e.preventDefault();
+        g.focus({ preventScroll: true });
+        g.dispatchEvent(new KeyboardEvent(e.type, { key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat, bubbles: true, cancelable: true }));
+      }
+    };
+    const el = root.current;
+    el?.addEventListener("click", onClick, true);
+    el?.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("keydown", onStray);
+    window.addEventListener("keyup", onStray);
     return () => {
       html.style.overflow = prev;
       cancelAnimationFrame(id);
       window.clearTimeout(f);
       window.removeEventListener("keydown", onKey, true);
+      el?.removeEventListener("click", onClick, true);
+      el?.removeEventListener("pointerup", onPointerUp, true);
+      window.removeEventListener("keydown", onStray);
+      window.removeEventListener("keyup", onStray);
     };
   }, [reduce]);
 
