@@ -32,3 +32,8 @@ export function mono(ctx: CanvasRenderingContext2D, px: number) {
   if ("fontStretch" in c) c.fontStretch = "normal";
   if ("letterSpacing" in c) c.letterSpacing = `${(px * 0.12).toFixed(1)}px`;
 }
+
+/** the resolved CSS font-family stacks, for canvases drawn into textures */
+export function fontFamilies() {
+  return resolve();
+}

@@ -37,6 +37,7 @@ test("/play returns 404 (route removed)", async ({ page }) => {
 });
 
 test("Off hours makes no third-party requests, even when you play", async ({ page }) => {
+  test.setTimeout(60_000); // opens the 3D keyboard, slow in a software renderer
   const thirdParty: string[] = [];
   page.on("request", (req) => {
     const host = new URL(req.url()).hostname;
@@ -56,6 +57,7 @@ test("Off hours makes no third-party requests, even when you play", async ({ pag
 });
 
 test("a plain visit writes nothing to cookies or local storage", async ({ page }) => {
+  test.setTimeout(90_000); // opens the 3D keyboard, slow in a software renderer
   for (const path of ["/", "/interests", "/contact"]) {
     await page.goto(path);
     await page.waitForTimeout(500);
@@ -173,16 +175,18 @@ test("project deep link lands on that entry", async ({ page }) => {
 });
 
 test("watch: turning the crown winds the power reserve", async ({ page }) => {
+  test.setTimeout(60_000); // 3D in a software renderer is slow to start
   await page.goto("/interests");
   await page.getByRole("button", { name: /^Play Watches/ }).click();
   const crown = page.getByRole("slider", { name: /Crown/ });
-  await expect(crown).toBeFocused();
+  await expect(crown).toBeFocused({ timeout: 15_000 });
   const before = Number(await crown.getAttribute("aria-valuenow"));
   for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowUp");
   await expect.poll(async () => Number(await crown.getAttribute("aria-valuenow"))).toBeGreaterThan(before);
 });
 
 test("Off hours: every piece opens full screen from the keyboard and Escape brings you back", async ({ page }) => {
+  test.setTimeout(150_000); // nine pieces, three of them 3D in a software renderer
   await page.goto("/interests");
   await page.waitForLoadState("networkidle");
   for (const name of ["Watches", "Gaming", "Basketball", "Barça", "Music", "Cars", "Keyboards", "Golf", "Skiing"]) {
@@ -192,7 +196,7 @@ test("Off hours: every piece opens full screen from the keyboard and Escape brin
     const stage = page.getByRole("dialog");
     await expect(stage).toBeVisible();
     // focus moves into the stage
-    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement)), { timeout: 15_000 }).toBe(true);
     await page.keyboard.press("Escape");
     await expect(stage).toHaveCount(0);
     await expect(tile).toBeFocused();

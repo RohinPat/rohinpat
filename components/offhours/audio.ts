@@ -97,3 +97,39 @@ export function tone(
   o.start(t);
   o.stop(t + dur + 0.02);
 }
+
+/**
+ * Modal synthesis: a very short noise impulse rung through a bank of
+ * resonant band-pass filters (each "mode" is a frequency, Q and level).
+ * High Q rings longer. Good for anything struck: keys, cases, wood, metal.
+ */
+export function modal(
+  { ctx: c, out }: Audio,
+  modes: [freq: number, q: number, level: number][],
+  { excite = 0.003, gain = 1, at = 0, lowpass = 6000 } = {},
+) {
+  const t = c.currentTime + at;
+  const src = c.createBufferSource();
+  src.buffer = noise(c);
+  const env = c.createGain();
+  env.gain.setValueAtTime(1, t);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + excite);
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = lowpass;
+  const sum = c.createGain();
+  sum.gain.value = gain;
+  src.connect(env);
+  for (const [f, q, level] of modes) {
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = f;
+    bp.Q.value = q;
+    const g = c.createGain();
+    g.gain.value = level * Math.sqrt(q); // a narrow band passes less energy; make up for it
+    env.connect(bp).connect(g).connect(sum);
+  }
+  sum.connect(lp).connect(out);
+  src.start(t, Math.random());
+  src.stop(t + excite + 0.25);
+}
