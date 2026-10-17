@@ -57,6 +57,7 @@ test("Off hours makes no third-party requests, even when you play", async ({ pag
 });
 
 test("a plain visit writes nothing to cookies or local storage", async ({ page }) => {
+  test.setTimeout(90_000); // opens the 3D keyboard, slow in a software renderer
   for (const path of ["/", "/interests", "/contact"]) {
     await page.goto(path);
     await page.waitForTimeout(500);
