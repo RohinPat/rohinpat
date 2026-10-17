@@ -8,7 +8,9 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // turn to ghosts), and reports where each part's label anchor lands on
 // screen so the page can draw leader lines. It only renders while visible.
 
-export type Mover = { obj: THREE.Object3D; dir: THREE.Vector3; home?: THREE.Vector3 };
+// dir moves with the explode; late only joins in near the end (and leaves
+// first on the way back), for sub-assemblies that come apart last
+export type Mover = { obj: THREE.Object3D; dir: THREE.Vector3; late?: THREE.Vector3; home?: THREE.Vector3 };
 export type Part = { id: string; label: string; note: string; movers: Mover[]; anchor: THREE.Object3D };
 export type Model = {
   root: THREE.Object3D;
@@ -228,7 +230,12 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
     const n = model.parts.length;
     model.parts.forEach((p, i) => {
       const e = model.ease ? model.ease(cur, i, n) : cur;
-      for (const m of p.movers) m.obj.position.copy(m.home!).addScaledVector(m.dir, e);
+      const l = Math.max(0, Math.min(1, (cur - 0.55) / 0.4));
+      const late = l * l * (3 - 2 * l);
+      for (const m of p.movers) {
+        m.obj.position.copy(m.home!).addScaledVector(m.dir, e);
+        if (m.late) m.obj.position.addScaledVector(m.late, late);
+      }
     });
     model.update?.(dt, t);
     // follow the model's centre as it comes apart

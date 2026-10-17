@@ -383,6 +383,10 @@ export default function Decks({ mode, paused }: PieceProps) {
           s.grabRate = down ? (e.key === "ArrowLeft" ? -2.5 : 2.5) : 0;
           return true;
         }
+        if (e.key === " " || e.key === "Enter") {
+          if (down && !e.repeat) void toggleRun();
+          return true;
+        }
         if (e.key.toLowerCase() === "c") {
           setCut(down);
           return true;
@@ -403,8 +407,9 @@ export default function Decks({ mode, paused }: PieceProps) {
       <div className="relative flex-1 min-h-[45%] md:min-h-0">
         <canvas
           ref={ref}
+          data-autofocus={play || undefined}
           role={play ? "img" : undefined}
-          aria-label={play ? "A turntable playing your beat. Drag the record to scratch; left and right arrows scratch from the keyboard; hold C to cut." : undefined}
+          aria-label={play ? "A turntable playing your beat. Space plays and stops; drag the record, or hold the left and right arrows, to scratch; hold C to cut." : undefined}
           className="absolute inset-0 w-full h-full outline-none touch-none"
         />
       </div>
@@ -413,7 +418,6 @@ export default function Decks({ mode, paused }: PieceProps) {
           <div className="flex items-center gap-3 flex-wrap">
             <button
               type="button"
-              data-autofocus
               onClick={toggleRun}
               className="h-10 px-5 rounded-full bg-[#f2ead7] text-[#0d100e] font-mono text-xs uppercase tracking-[0.18em]"
             >

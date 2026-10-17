@@ -81,10 +81,10 @@ const PARTS: Omit<Part, "movers" | "anchor">[] = [
   { id: "casefoam", label: "Case foam", note: "Poron between the PCB and the case. Kills the hollow ping." },
   { id: "pcb", label: "Hot-swap PCB", note: "Sockets underneath so switches pull out without soldering, a diode and LED per key, the MCU running QMK, USB-C." },
   { id: "platefoam", label: "Plate foam", note: "Thin foam between plate and PCB. Tightens up the bottom-out." },
-  { id: "bottoms", label: "Switch bottoms", note: "Nylon bottom housings. Nylon is the deeper, rounder sounding half." },
   { id: "plate", label: "Brass plate", note: "Holds the switches. The flex cuts let it give a little under your fingers." },
   { id: "gaskets", label: "Gasket strips", note: "Rubber tabs the plate sits on. Gasket mount: soft, even, no hard metal-on-metal." },
   { id: "stabs", label: "Stabilisers", note: "Keep the long keys level. Clipped, lubed and band-aid modded so they don't rattle." },
+  { id: "bottoms", label: "Switch bottoms", note: "Nylon bottom housings. Nylon is the deeper, rounder sounding half." },
   { id: "springs", label: "Springs", note: "62 g, slow-curve. Lubed so they don't ping." },
   { id: "stems", label: "Stems", note: "POM stems: smooth, self-lubricating, and the cross mount the keycap sits on." },
   { id: "tops", label: "Switch tops", note: "Polycarbonate top housings, clear so the per-key LEDs shine through." },
@@ -402,21 +402,30 @@ export function buildKeyboard(state: KeyboardState): Model {
   }
 
   // ---------- parts: stack by thickness for the explode
-  const THICK: Record<string, number> = { weight: 0.15, case: 1.1, casefoam: 0.1, pcb: 0.25, platefoam: 0.06, bottoms: 0.2, plate: 0.08, gaskets: 0.1, stabs: 0.35, springs: 0.32, stems: 0.3, tops: 0.24, caps: 0.45 };
+  // The four switch pieces travel as one switch (keeping their assembled
+  // spacing) and only come apart near the end: on the way back, they snap
+  // together first, then the layers close up.
+  const SWITCH = ["bottoms", "springs", "stems", "tops"];
+  const THICK: Record<string, number> = { weight: 0.15, case: 1.1, casefoam: 0.1, pcb: 0.25, platefoam: 0.06, plate: 0.08, gaskets: 0.1, stabs: 0.35, switch: 0.6, caps: 0.45 };
+  const SPREAD: Record<string, number> = { bottoms: -0.75, springs: -0.15, stems: 0.45, tops: 1.05 };
   const GAP = 0.6;
+  const slots = PARTS.map((p) => (SWITCH.includes(p.id) ? "switch" : p.id)).filter((id, i, a) => a.indexOf(id) === i);
   let cum = 0;
-  const target = PARTS.map((p) => {
-    const y = cum;
-    cum += THICK[p.id] + GAP;
-    return y;
-  });
-  const home = PARTS.map((p) => R[p.id].position.y);
-  const shift = target.reduce((a, b) => a + b, 0) / target.length - home.reduce((a, b) => a + b, 0) / home.length;
-  const parts: Part[] = PARTS.map((p, i) => {
+  const slotY: Record<string, number> = {};
+  for (const id of slots) {
+    slotY[id] = cum;
+    cum += THICK[id] + GAP;
+  }
+  const home = Object.fromEntries(PARTS.map((p) => [p.id, R[p.id].position.y]));
+  const switchBase = home.bottoms;
+  const target = Object.fromEntries(PARTS.map((p) => [p.id, SWITCH.includes(p.id) ? slotY.switch + (home[p.id] - switchBase) : slotY[p.id]]));
+  const shift = slots.reduce((a, id) => a + slotY[id], 0) / slots.length - Object.values(home).reduce((a, b) => a + b, 0) / PARTS.length;
+  const parts: Part[] = PARTS.map((p) => {
     const anchor = new THREE.Object3D();
     anchor.position.set(8.4, 0.1, -2.2);
     R[p.id].add(anchor);
-    return { ...p, movers: [{ obj: R[p.id], dir: new THREE.Vector3(0, target[i] - shift - home[i], 0) }], anchor };
+    const late = SWITCH.includes(p.id) ? new THREE.Vector3(0, SPREAD[p.id], 0) : undefined;
+    return { ...p, movers: [{ obj: R[p.id], dir: new THREE.Vector3(0, target[p.id] - shift - home[p.id], 0), late }], anchor };
   });
 
   // ---------- presses + underglow

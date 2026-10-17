@@ -1,0 +1,10 @@
+import { chromium } from "@playwright/test";
+const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+await p.goto("http://localhost:3000/interests", { waitUntil: "networkidle" });
+await p.waitForTimeout(4000);
+console.log("tile", await p.evaluate(() => window.__wm));
+await p.getByRole("button", { name: /^Play Watches/ }).click();
+await p.waitForTimeout(6000);
+console.log("stage", await p.evaluate(() => window.__wm));
+await b.close();

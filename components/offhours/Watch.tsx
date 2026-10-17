@@ -14,14 +14,21 @@ import type { WatchState } from "./three/watch";
 // The model and the movement's motion live in three/watch.ts.
 
 const RESERVE = 75;
+const DIALS = [
+  ["silver", "Silver", "#e6e3db"],
+  ["blue", "Blue", "#2a4c97"],
+  ["mint", "Mint", "#9fd6bd"],
+  ["black", "Black", "#202225"],
+] as const;
 const PARTS = [
   ["crystal", "Crystal"],
-  ["bezel", "Bezel"],
+  ["bezel", "Fluted bezel"],
   ["second", "Seconds hand"],
   ["minute", "Minute hand"],
   ["hour", "Hour hand"],
   ["dial", "Dial"],
   ["case", "Case + crown"],
+  ["bracelet", "Bracelet"],
   ["plate", "Main plate"],
   ["barrel", "Barrel + mainspring"],
   ["train", "Gear train"],
@@ -39,6 +46,8 @@ export default function Watch({ mode, paused }: PieceProps) {
   const [reserve, setReserve] = useState(play ? 0.15 : 0.7);
   const [solo, setSolo] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [dial, setDial] = useState("silver");
+  const model = useRef<{ setDial: (k: string) => void } | null>(null);
   const state = useRef<WatchState>({ power: play ? 0.15 : 0.7, crown: 0, rotorKick: 0, flip: false });
   const knob = useRef<HTMLDivElement>(null);
   const knobA = useRef<number | null>(null);
@@ -103,6 +112,7 @@ export default function Watch({ mode, paused }: PieceProps) {
           paused={paused}
           onReady={(m, v) => {
             state.current.impulse = v.orbitImpulse;
+            model.current = m as unknown as { setDial: (k: string) => void };
             setNotes(Object.fromEntries(m.parts.map((p) => [p.id, p.note])));
           }}
         />
@@ -167,6 +177,26 @@ export default function Watch({ mode, paused }: PieceProps) {
             Explode
             <input type="range" min={0} max={100} value={Math.round(explode * 100)} onChange={(e) => setExplode(Number(e.target.value) / 100)} className="mt-2 w-full accent-[#8ad9a8]" />
           </label>
+          <div className="w-full">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Dial</p>
+            <div className="flex gap-2" role="group" aria-label="Dial colour">
+              {DIALS.map(([id, name, hex]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={dial === id}
+                  aria-label={`${name} dial`}
+                  title={name}
+                  onClick={() => {
+                    setDial(id);
+                    model.current?.setDial(id);
+                  }}
+                  className={`w-7 h-7 rounded-full border-2 ${dial === id ? "border-[var(--paper)]" : "border-white/10"}`}
+                  style={{ background: `radial-gradient(circle at 35% 30%, #ffffff55, transparent 60%), ${hex}` }}
+                />
+              ))}
+            </div>
+          </div>
           <button type="button" onClick={() => setFlip((f) => !f)} aria-pressed={flip} className="h-9 px-4 rounded-full border border-white/20 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10">
             {flip ? "Show the dial" : "Flip it over"}
           </button>
