@@ -464,7 +464,7 @@ export function buildKeyboard(state: KeyboardState): Model {
   return {
     root,
     parts,
-    view: { position: [1.5, 10.5, 15.5], target: [0, 0.8, 0.3], fov: 30, near: 0.5, far: 400, minDistance: 8, maxDistance: 60 },
+    view: { position: [1.5, 10.5, 15.5], target: [0, 0.8, 0.3], fov: 30, near: 0.5, far: 400, minDistance: 8, maxDistance: 60, fit: true },
     background: "#f2ead7",
     floorY: -4.6,
     shadowSize: 14,
