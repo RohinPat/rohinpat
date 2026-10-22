@@ -65,6 +65,8 @@ export class Game {
   runs = 0;
   hintAge = 0;
   skierSX = 0;
+  /** where the start banner's top edge landed on screen this frame (the ready card sits above it) */
+  startTop = Infinity;
   mpp = 0.01; // metres across the screen per pixel, at the skier's depth
   // tracks: x of each ski, how hard it was edged, and whether a ski was there
   tl: Float32Array;
