@@ -63,7 +63,7 @@ const PIECES: Piece[] = [
     label: "Barça",
     line: "Més que un club.",
     title: "Penalty shootout",
-    how: ["Aim with the pointer", "Hold to power up, let go to shoot", "Best of five"],
+    how: ["Pick a shot: placed, driven, curl, dipper, knuckle, Panenka (keys 1-7)", "Aim with the pointer, hold to power up, let go", "Beat a keeper who reads you. Best of five, then sudden death"],
     span: "md:col-span-3 lg:col-span-3",
     Component: Penalty,
   },
