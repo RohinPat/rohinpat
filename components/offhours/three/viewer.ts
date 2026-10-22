@@ -19,6 +19,8 @@ export type Model = {
   background: string;
   floorY: number;
   shadowSize: number;
+  /** reflection studio: "watch" has more contrast bands for polished steel */
+  studio?: "watch";
   update?: (dt: number, t: number) => void;
   /** pointer picking: the hit under the pointer on down/up */
   onPointer?: (hit: THREE.Intersection | null, kind: "down" | "up") => void;
@@ -45,7 +47,8 @@ export type Viewer = {
 // A photo studio for reflections: a dark room with big softboxes overhead,
 // strip lights either side and a warm bounce below. Polished metal reads as
 // metal because it reflects contrast — bright bands against dark.
-function studio() {
+function studio(style?: "watch") {
+  if (style === "watch") return watchStudio();
   const s = new THREE.Scene();
   const room = new THREE.Mesh(new THREE.BoxGeometry(20, 12, 20), new THREE.MeshBasicMaterial({ color: 0x2c2d30, side: THREE.BackSide }));
   room.position.y = 4;
@@ -68,6 +71,44 @@ function studio() {
   return s;
 }
 
+// Polished steel needs bands of bright and dark to read as steel: big
+// softboxes, thin strips at several heights, a pale sweep below with dark
+// flags across it so curved flanks pick up stripes instead of a flat colour.
+function watchStudio() {
+  const s = new THREE.Scene();
+  const room = new THREE.Mesh(new THREE.BoxGeometry(24, 14, 24), new THREE.MeshBasicMaterial({ color: 0x2b2d30, side: THREE.BackSide }));
+  room.position.y = 5;
+  s.add(room);
+  const panel = (w: number, h: number, x: number, y: number, z: number, rx: number, ry: number, k: number, color = 0xffffff) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, 0);
+    s.add(m);
+  };
+  panel(7, 5, 0, 11.8, -1, Math.PI / 2, 0, 2.0); // overhead softbox
+  panel(1.4, 9, -11.8, 5, 0, 0, Math.PI / 2, 3.0); // left strip
+  panel(1.4, 9, 11.8, 5, 0, 0, -Math.PI / 2, 2.4); // right strip
+  panel(18, 7, 0, 7, -11.8, 0, 0, 1.3); // big softbox behind
+  panel(18, 0.6, 0, 2.2, -11.7, 0, 0, 3.2); // low strip behind: bright band on vertical flanks
+  panel(14, 0.5, 0, 4.2, 11.8, 0, Math.PI, 2.2, 0xfff2dd); // front strip
+  panel(8, 3, 0, 9, 11.8, 0, Math.PI, 1.4, 0xfff2dd); // front-high kicker
+  panel(16, 5, 0, 3, 11.8, 0, Math.PI, 0.7, 0xf4f1ea); // soft front fill so hanging links aren't black
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), new THREE.MeshBasicMaterial({ color: 0xb9b6b0 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -1.9;
+  s.add(floor);
+  const flag = (w: number, d: number, x: number, z: number, c: number) => {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: c }));
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(x, -1.85, z);
+    s.add(f);
+  };
+  flag(5, 24, -6.5, 0, 0x46474b);
+  flag(3, 24, 5, 0, 0x6a6b6e);
+  flag(24, 3.5, 0, 6.5, 0x4a4b4e);
+  return s;
+}
+
 export function createViewer(container: HTMLElement, model: Model, opts: { interactive: boolean; preview: boolean; breathe?: boolean }): Viewer {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.preview ? 1.5 : 2));
@@ -85,7 +126,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(model.background);
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = pmrem.fromScene(studio(), 0.02).texture;
+  const env = pmrem.fromScene(studio(model.studio), 0.02).texture;
   scene.environment = env;
 
   const camera = new THREE.PerspectiveCamera(model.view.fov ?? 32, 1, model.view.near ?? 0.05, model.view.far ?? 2000);
@@ -123,7 +164,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     // glass doesn't cast a hard shadow
-    const glass = ((m.material as THREE.MeshPhysicalMaterial).transmission ?? 0) > 0.5;
+    const glass = ((m.material as THREE.MeshPhysicalMaterial).transmission ?? 0) > 0.5 || !!m.userData.noShadow;
     m.castShadow = !glass;
     m.receiveShadow = true;
   });
@@ -186,7 +227,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
           } else if (mesh.userData.mat) {
             mesh.material = mesh.userData.mat;
             mesh.userData.mat = undefined;
-            mesh.castShadow = ((mesh.material as THREE.MeshPhysicalMaterial).transmission ?? 0) <= 0.5;
+            mesh.castShadow = ((mesh.material as THREE.MeshPhysicalMaterial).transmission ?? 0) <= 0.5 && !mesh.userData.noShadow;
           }
         }),
       );
