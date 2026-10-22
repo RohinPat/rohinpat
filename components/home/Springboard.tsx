@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pov, site } from "@/lib/site";
+import { burst, getAudio } from "@/components/offhours/audio";
 import FieldWallpaper from "./FieldWallpaper";
 import Motif from "./Motif";
 import Spotlight from "./Spotlight";
@@ -443,7 +444,35 @@ function LockScreen({
 }) {
   const start = useRef<number | null>(null);
   const layer = useRef<HTMLDivElement>(null);
+  const beam = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState(0);
+  const [torch, setTorch] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const router = useRouter();
+
+  // the two lock-screen buttons do what they do on a phone: the torch lights
+  // a pool on the wallpaper that follows the pointer; the camera fires the
+  // shutter and opens the one app here that's about taking photos
+  const click = (freq: number) => {
+    const au = getAudio();
+    if (au) burst(au, { freq, q: 4, dur: 0.025, gain: 0.35 });
+  };
+  const aim = (e: React.PointerEvent) => {
+    const r = layer.current?.getBoundingClientRect();
+    if (!r || !beam.current) return;
+    beam.current.style.setProperty("--bx", `${e.clientX - r.left}px`);
+    beam.current.style.setProperty("--by", `${e.clientY - r.top}px`);
+  };
+  const shoot = () => {
+    if (flash) return;
+    const au = getAudio();
+    if (au) {
+      burst(au, { freq: 5200, q: 2, dur: 0.03, gain: 0.5 });
+      burst(au, { freq: 2600, q: 2, dur: 0.05, gain: 0.4, at: 0.07 });
+    }
+    setFlash(true);
+    window.setTimeout(() => router.push("/projects/closet-organizer"), reducedMotion() ? 0 : 380);
+  };
 
   // scrolling over the lock screen unlocks it (and doesn't scroll the page)
   useEffect(() => {
@@ -468,10 +497,12 @@ function LockScreen({
       }}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
+        if (torch) aim(e);
         start.current = e.clientY;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
+        if (torch) aim(e);
         if (start.current === null) return;
         setDrag(Math.min(0, e.clientY - start.current));
       }}
@@ -483,6 +514,17 @@ function LockScreen({
         if (unlocking) onUnlock();
       }}
     >
+      <div
+        ref={beam}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 transition-opacity duration-200"
+        style={{
+          opacity: torch ? 1 : 0,
+          mixBlendMode: "screen",
+          background: "radial-gradient(circle 190px at var(--bx, 50%) var(--by, 42%), rgba(255,246,222,0.55), rgba(255,240,205,0.18) 55%, transparent 75%)",
+        }}
+      />
+      {flash && <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 bg-white opacity-0 [animation:shutter_380ms_ease-out]" />}
       <div className="mt-[132px] md:mt-[96px] text-center">
         <p className="text-[17px] font-semibold opacity-90">{now?.date ?? " "}</p>
         <p
@@ -501,15 +543,35 @@ function LockScreen({
       </div>
 
       <div className="mt-auto w-full px-10 pb-5 flex flex-col items-center gap-4">
-        <div className="w-full flex justify-between" aria-hidden="true">
-          {["✦", "◎"].map((g) => (
-            <span
-              key={g}
-              className={`w-12 h-12 rounded-full grid place-items-center text-sm backdrop-blur-xl ${dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"}`}
-            >
-              {g}
-            </span>
-          ))}
+        <div className="w-full flex justify-between">
+          <button
+            type="button"
+            aria-label="Flashlight"
+            aria-pressed={torch}
+            onClick={() => {
+              click(torch ? 1800 : 2400);
+              setTorch((t) => !t);
+            }}
+            className={`w-12 h-12 rounded-full grid place-items-center backdrop-blur-xl transition-[transform,background-color,color] duration-150 active:scale-90 ${
+              torch ? "bg-[var(--paper)] text-[var(--ink)]" : dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"
+            }`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 2h8v4l-2 4v11a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V10L8 6z" fill={torch ? "currentColor" : "none"} />
+              <path d="M8 6h8M12 13v2" stroke={torch ? "var(--paper)" : "currentColor"} />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Camera: opens the Closet Organizer, the photo app"
+            onClick={shoot}
+            className={`w-12 h-12 rounded-full grid place-items-center backdrop-blur-xl transition-transform duration-150 active:scale-90 ${dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"}`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <circle cx="12" cy="13" r="3.5" />
+            </svg>
+          </button>
         </div>
         <button type="button" onClick={onUnlock} className="text-sm font-semibold opacity-80 hover:opacity-100 px-3 py-1 rounded-full">
           Swipe up to unlock

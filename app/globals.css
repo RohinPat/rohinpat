@@ -595,6 +595,7 @@ main h1:not(.hero-field) {
 .duo.is-open .duo-back::before { opacity: 0; }
 
 @keyframes app-in { from { opacity: 0; transform: scale(1.18); } }
+@keyframes shutter { from { opacity: 1; } to { opacity: 0; } }
 .apps-in > * { animation: app-in 0.55s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: calc(var(--d, 0ms) + var(--i, 0) * 28ms); }
 
 /* Home screen: long-press jiggle */
