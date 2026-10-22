@@ -600,8 +600,9 @@ function updateCamera(r: Range, dt: number, w: number, h: number) {
     const land = sh.bounces[0] ? ([sh.bounces[0].x, 0, sh.bounces[0].z] as V) : ([ball[0], 0, ball[2]] as V);
     const dist = Math.hypot(land[0], land[2]);
     const e = dist < 30 ? 0 : smooth(clamp((r.shotT - sh.apexT * 0.55) / Math.max(0.5, sh.landT - sh.apexT * 0.55), 0, 1));
-    const back = Math.min(38, 8 + dist * 0.2);
-    const c1: V = [land[0] - a[0] * back + rt[0] * 8, 4.6, land[2] - a[2] * back + rt[2] * 8];
+    const back = Math.min(58, 12 + dist * 0.26);
+    const side = Math.min(16, 4 + dist * 0.06);
+    const c1: V = [land[0] - a[0] * back + rt[0] * side, 6, land[2] - a[2] * back + rt[2] * side];
     const c0: V = [dx, dy, dz];
     dx = c0[0] + (c1[0] - c0[0]) * e;
     dy = c0[1] + (c1[1] - c0[1]) * e;
@@ -676,19 +677,57 @@ export function rangeDraw(ctx: CanvasRenderingContext2D, r: Range, w: number, h:
       ctx.strokeStyle = style;
       ctx.lineWidth = lw;
       ctx.beginPath();
-      let started = false;
+      // camera-space polyline, clipped against the near plane so nothing behind
+      // (or beside) the camera can wrap around the screen
+      const NEARZ = 1.2;
+      let prev: V | null = null;
+      let pen = false;
+      const emit = (c: V, first: boolean) => {
+        const k = cam.F / c[2];
+        const x = cam.cx + c[0] * k, y = cam.cy - c[1] * k;
+        if (first) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      };
+      const toCam = (x: number, y: number, z: number): V => {
+        const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
+        return [dx * cam.rx + dy * cam.ry + dz * cam.rz, dx * cam.ux + dy * cam.uy + dz * cam.uz, dx * cam.fx + dy * cam.fy + dz * cam.fz];
+      };
+      const feed = (x: number, y: number, z: number) => {
+        const c = toCam(x, Math.max(0, y), z);
+        if (prev) {
+          const a = prev, inA = a[2] >= NEARZ, inB = c[2] >= NEARZ;
+          if (inA !== inB) {
+            const u = (NEARZ - a[2]) / (c[2] - a[2]);
+            const m: V = [a[0] + (c[0] - a[0]) * u, a[1] + (c[1] - a[1]) * u, NEARZ];
+            if (inA) {
+              if (!pen) emit(a, true);
+              emit(m, false);
+              pen = false;
+            } else {
+              emit(m, true);
+              pen = true;
+            }
+          }
+          if (inB) {
+            if (!pen) {
+              emit(c, true);
+              pen = true;
+            } else emit(c, false);
+          } else pen = false;
+        } else if (c[2] >= NEARZ) {
+          emit(c, true);
+          pen = true;
+        }
+        prev = c;
+      };
       for (let i = 0; i < n; i++) {
         const i4 = i * 4;
         if (pts[i4] > upTo) break;
-        if (!project(cam, pts[i4 + 1], pts[i4 + 2], pts[i4 + 3], pp) || pp.d < 5) {
-          started = false;
-          continue;
-        }
-        if (started) ctx.lineTo(pp.x, pp.y);
-        else {
-          ctx.moveTo(pp.x, pp.y);
-          started = true;
-        }
+        feed(pts[i4 + 1], pts[i4 + 2], pts[i4 + 3]);
+      }
+      if (upTo < pts[(n - 1) * 4]) {
+        const e = at(sh!, upTo);
+        feed(e[0], e[1], e[2]);
       }
       ctx.stroke();
     };
