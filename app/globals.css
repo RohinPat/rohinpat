@@ -616,6 +616,12 @@ main h1:not(.hero-field) {
   clip-path: circle(var(--vr, 0px) at var(--vx, 50%) var(--vy, 50%));
   transition: clip-path 380ms cubic-bezier(0.3, 0.7, 0, 1);
 }
+/* over a dark block the white symbiote floods it instead */
+.venom-on.venom-white { color: #0d100e !important; }
+.venom-on.venom-white::before {
+  background: radial-gradient(130% 110% at 28% 16%, #ffffff 0%, #eeece6 45%, #c9c8c2 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -10px 16px rgba(13, 16, 14, 0.25);
+}
 .apps-in > * { animation: app-in 0.55s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: calc(var(--d, 0ms) + var(--i, 0) * 28ms); }
 
 /* Home screen: long-press jiggle */
