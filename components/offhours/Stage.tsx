@@ -7,7 +7,9 @@ import { isMuted, onMuteChange, setMuted } from "./audio";
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
 // (a clip-path from the tile's rect to the whole window) and shrinks back on
 // close. A modal dialog: focus moves in and is kept in, Escape closes, the
-// page behind doesn't scroll.
+// page behind doesn't scroll. On phones nothing pans, bounces or zooms either:
+// a drag inside a game would otherwise scroll the page, collapse the browser
+// bar and resize the canvas mid-shot.
 
 export type StageMeta = { index: number; label: string; title: string; how: string[] };
 
@@ -46,8 +48,14 @@ export default function Stage({
 
   useEffect(() => {
     const html = document.documentElement;
-    const prev = html.style.overflow;
+    const body = document.body;
+    const y = window.scrollY;
+    const prev = [html.style.overflow, body.style.position, body.style.top, body.style.width];
+    // overflow alone doesn't stop iOS Safari; pinning the body does
     html.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${y}px`;
+    body.style.width = "100%";
     const id = requestAnimationFrame(() => setShown(true));
     // focus the piece once it has grown in
     const f = window.setTimeout(
@@ -102,16 +110,35 @@ export default function Stage({
         g.dispatchEvent(new KeyboardEvent(e.type, { key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat, bubbles: true, cancelable: true }));
       }
     };
+    // the only touch drags allowed are inside something that really scrolls
+    // (a panel of controls) or on a slider; no pinch zoom
+    const scrolls = (n: Element | null) => {
+      for (; n && n !== root.current; n = n.parentElement) {
+        if (n instanceof HTMLInputElement) return true;
+        const cs = getComputedStyle(n);
+        if ((/auto|scroll/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) || (/auto|scroll/.test(cs.overflowX) && n.scrollWidth > n.clientWidth)) return true;
+      }
+      return false;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 1 || !scrolls(e.target as Element)) e.preventDefault();
+    };
+    const noGesture = (e: Event) => e.preventDefault();
     const el = root.current;
+    el?.addEventListener("touchmove", onTouchMove, { passive: false });
+    el?.addEventListener("gesturestart", noGesture);
     el?.addEventListener("click", onClick, true);
     el?.addEventListener("pointerup", onPointerUp, true);
     window.addEventListener("keydown", onStray);
     window.addEventListener("keyup", onStray);
     return () => {
-      html.style.overflow = prev;
+      [html.style.overflow, body.style.position, body.style.top, body.style.width] = prev;
+      window.scrollTo({ top: y, behavior: "instant" });
       cancelAnimationFrame(id);
       window.clearTimeout(f);
       window.removeEventListener("keydown", onKey, true);
+      el?.removeEventListener("touchmove", onTouchMove);
+      el?.removeEventListener("gesturestart", noGesture);
       el?.removeEventListener("click", onClick, true);
       el?.removeEventListener("pointerup", onPointerUp, true);
       window.removeEventListener("keydown", onStray);
@@ -136,6 +163,11 @@ export default function Stage({
       style={{
         clipPath: open || reduce ? "inset(0px 0px 0px 0px round 0px)" : from,
         transition: reduce ? "none" : `clip-path ${MS}ms ${EASE}`,
+        touchAction: "manipulation",
+        overscrollBehavior: "contain",
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
+        userSelect: "none",
       }}
     >
       <header className="flex items-start justify-between gap-4 px-4 md:px-8 pt-4 md:pt-5 pb-3">

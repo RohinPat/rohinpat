@@ -43,7 +43,7 @@ const PIECES: Piece[] = [
     label: "Gaming",
     line: "1-bit, and the machines play too.",
     title: "Solve the maze, or watch them learn",
-    how: ["Pick a solver: you, BFS, DFS, A*, wall follower, Q-learning", "You: arrows or WASD to walk", "New maze any time"],
+    how: ["Pick a solver: you, BFS, DFS, A*, wall follower, Q-learning", "You: arrows, WASD, or drag to walk", "New maze any time"],
     span: "md:col-span-6 lg:col-span-7",
     Component: Maze,
   },
