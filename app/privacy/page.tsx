@@ -36,6 +36,12 @@ export default function PrivacyPage() {
         stays in my inbox for as long as it&apos;s useful for keeping in touch, and I&apos;ll
         delete our correspondence if you ask.
       </p>
+      <p>
+        <strong>The home screen&apos;s camera.</strong> Its camera button can name the colours of
+        whatever you point it at. It only turns on if you tap it and your browser asks and you
+        say yes. Frames are read inside your browser, never uploaded or saved, and the camera
+        stops when you close it. A photo you pick instead is handled the same way.
+      </p>
 
       <h2>Hosting logs</h2>
       <p>

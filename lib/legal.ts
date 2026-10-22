@@ -1,2 +1,2 @@
 // One place to bump when any policy page changes.
-export const LEGAL_UPDATED = "October 15, 2026";
+export const LEGAL_UPDATED = "October 22, 2026";

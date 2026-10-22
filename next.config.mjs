@@ -25,6 +25,17 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // the home screen's camera names colours on request; the later rule
+        // wins, so only "/" may ask for the camera, and nothing may embed it
+        source: "/",
+        headers: [
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+          },
+        ],
+      },
     ];
   },
 };
