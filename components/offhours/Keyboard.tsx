@@ -10,7 +10,7 @@ import type { KeyboardState } from "./three/keyboard";
 // loaded only when this piece is on screen): sculpted PBT caps, clear
 // polycarbonate switch tops, red POM stems and steel springs, a brass plate
 // with flex cuts, foams, the PCB with its MCU and LEDs, the anodised case
-// and its brass weight. Type (or click keys) and each one goes down with a
+// and its brass weight. Type (or click or tap keys) and each one goes down with a
 // synthesized thock and comes back with its upstroke, and every keystroke
 // presses the stack back together. The Konami code lights the underglow.
 // The model lives in three/keyboard.ts.
@@ -34,8 +34,16 @@ const PARTS = [
 const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "KeyB", "KeyA"];
 const CHARS: Record<string, string> = { Space: " " };
 
+// a touch screen has no click, and no physical keys to speak of
+function useTouch() {
+  const [touch, setTouch] = useState(false);
+  useEffect(() => setTouch(window.matchMedia("(pointer: coarse)").matches), []);
+  return touch;
+}
+
 export default function Keyboard({ mode, paused }: PieceProps) {
   const play = mode === "play";
+  const touch = useTouch();
   const [explode, setExplode] = useState(play ? 0 : 0.5);
   const [typed, setTyped] = useState("");
   const [solo, setSolo] = useState<string | null>(null);
@@ -176,24 +184,27 @@ export default function Keyboard({ mode, paused }: PieceProps) {
 
       {play && (
         <div className="shrink-0 flex flex-col gap-2 px-4 py-3 bg-[var(--ink)] text-[var(--paper)]">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="font-mono text-[12px] tracking-[0.2em] text-[var(--mint)] min-w-[16ch]">
-              {typed || "TYPE ANYTHING"}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="font-mono text-[12px] tracking-[0.2em] text-[var(--mint)] min-w-0 max-w-full truncate md:min-w-[16ch]">
+              {typed || (touch ? "TAP A KEY" : "TYPE ANYTHING")}
               <span className="animate-pulse">▍</span>
             </span>
-            <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] ml-auto">
-              Explode
-              <input type="range" min={0} max={100} value={Math.round(explode * 100)} onChange={(e) => setExplode(Number(e.target.value) / 100)} className="w-40 accent-[#8ad9a8]" />
-            </label>
-            <button
-              type="button"
-              onClick={() => setExplode(explode > 0.5 ? 0 : 1)}
-              className="h-9 px-4 rounded-full border border-white/20 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
-            >
-              {explode > 0.5 ? "Assemble" : "Take apart"}
-            </button>
+            <div className="flex items-center gap-3 w-full md:w-auto md:ml-auto">
+              <label className="flex flex-1 md:flex-none items-center gap-2 min-w-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab]">
+                Explode
+                <input type="range" min={0} max={100} value={Math.round(explode * 100)} onChange={(e) => setExplode(Number(e.target.value) / 100)} className="flex-1 min-w-0 md:w-40 md:flex-none accent-[#8ad9a8]" />
+              </label>
+              <button
+                type="button"
+                onClick={() => setExplode(explode > 0.5 ? 0 : 1)}
+                className="h-9 px-4 shrink-0 whitespace-nowrap rounded-full border border-white/20 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
+              >
+                {explode > 0.5 ? "Assemble" : "Take apart"}
+              </button>
+            </div>
           </div>
-          <div className="hidden md:flex flex-wrap items-center gap-1">
+          {/* on phones: one row that scrolls sideways, so the parts never push the canvas small */}
+          <div className="flex items-center gap-1 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:px-0 md:flex-wrap md:overflow-visible">
             {PARTS.map(([id, label]) => (
               <button
                 key={id}
@@ -203,14 +214,14 @@ export default function Keyboard({ mode, paused }: PieceProps) {
                   setSolo(solo === id ? null : id);
                   if (explode < 0.5) setExplode(0.85);
                 }}
-                className={`h-7 px-2.5 rounded-full text-[11px] ${solo === id ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#cfd0c6] hover:bg-white/10"}`}
+                className={`h-8 md:h-7 px-3 md:px-2.5 shrink-0 whitespace-nowrap rounded-full text-[11px] ${solo === id ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#cfd0c6] bg-white/[0.06] md:bg-transparent hover:bg-white/10"}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <p aria-live="polite" className="hidden md:block text-[12px] text-[#cfd0c6] min-h-[1.4em]">
-            {(solo && notes[solo]) || "Pick a part to isolate it. Type, or click keys, to put it back together."}
+          <p aria-live="polite" className="text-[11px] md:text-[12px] leading-snug text-[#cfd0c6] min-h-[2.75em] line-clamp-2 md:min-h-[1.4em] md:line-clamp-none">
+            {(solo && notes[solo]) || (touch ? "Pick a part to isolate it. Tap keys to put it back together." : "Pick a part to isolate it. Type, or click keys, to put it back together.")}
           </p>
         </div>
       )}

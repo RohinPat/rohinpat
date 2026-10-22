@@ -322,7 +322,9 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
     ctx.fillStyle = "#f2ead7";
     const dash = 60;
     const off = -((c.x * 30) % (dash * 2));
-    for (let x = off; x < w; x += dash * 2) ctx.fillRect(x, ry + roadH / 2 - 2, dash, 4);
+    // the tile's PLAY pill sits in the bottom-right corner: the road's centre line stops short of it
+    const roadEnd = play ? w : Math.max(0, w - 124);
+    for (let x = off; x < roadEnd; x += dash * 2) ctx.fillRect(x, ry + roadH / 2 - 2, Math.min(dash, roadEnd - x), 4);
     // quarter-mile progress
     ctx.fillStyle = "rgba(138,217,168,0.25)";
     ctx.fillRect(0, ry, w, 3);
@@ -331,8 +333,15 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
 
     // tach
     const area = ry;
-    const R = Math.min(w * 0.3, area * 0.42);
-    const cx = Math.min(w * 0.36, w / 2 - R * 0.2), cy = area * 0.55;
+    // narrow (a phone, played): the dial is centred and big, speed and the
+    // stats sit in a row under it, the prompt under that. Nothing shares a line.
+    const stacked = play && w < 560;
+    const ledY = Math.max(16, area * 0.07);
+    const dialTop = ledY + 24;
+    const foot = 100; // stats block (64) + prompt row + gaps
+    const R = stacked ? Math.max(36, Math.min(w * 0.38, (area - dialTop - foot) / 1.8)) : Math.min(w * 0.3, area * 0.42);
+    const cx = stacked ? w / 2 : Math.min(w * 0.36, w / 2 - R * 0.2);
+    const cy = stacked ? dialTop + R * 1.06 : area * 0.55;
     const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
     const ang = (r: number) => a0 + (r / 9000) * (a1 - a0);
     ctx.lineWidth = R * 0.07;
@@ -389,31 +398,51 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
       const col = i < 4 ? "#3ddc84" : i < 8 ? "#ffd23f" : "#ff4d4d";
       ctx.fillStyle = on ? (flashBlue ? "#5ab0ff" : col) : "#1c211e";
       ctx.beginPath();
-      ctx.arc(lx + i * lw * 1.3 + lw / 2, Math.max(16, area * 0.07), lw * 0.38, 0, Math.PI * 2);
+      ctx.arc(lx + i * lw * 1.3 + lw / 2, ledY, lw * 0.38, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // right column: speed, time, splits, tree
-    const rx = Math.min(Math.max(cx + R * 1.2, w * 0.62), w - (play ? 150 : 110));
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#f2ead7";
-    display(ctx, Math.round(Math.min(h * 0.2, w * 0.11)), 800);
-    ctx.fillText(String(Math.round(c.v * 2.237)).padStart(3, " "), rx, area * 0.42);
-    mono(ctx, play ? 12 : 9);
-    ctx.fillStyle = "#b5b6ab";
-    ctx.fillText("MPH", rx + 4, area * 0.42 + 16);
     const lines = [
       `TIME   ${c.phase === "run" || c.phase === "done" ? c.t.toFixed(2) : "—"}`,
       `0–60   ${c.split60 ? c.split60.toFixed(2) : "—"}`,
       `DIST   ${Math.round(c.x)} / 402 m`,
       `BEST   ${c.best ? c.best.toFixed(2) : "—"}`,
     ];
-    lines.forEach((l, i) => ctx.fillText(l, rx + 4, area * 0.42 + 40 + i * (play ? 18 : 13)));
+    const speed = String(Math.round(c.v * 2.237)).padStart(3, " ");
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    let rx: number;
+    if (stacked) {
+      const top = area - foot + 4;
+      const big = 46;
+      display(ctx, big, 800);
+      const sw = ctx.measureText("888").width;
+      mono(ctx, 12);
+      const tw = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      const gap = 22;
+      rx = Math.max(12, (w - (sw + gap + tw)) / 2);
+      ctx.fillStyle = "#f2ead7";
+      display(ctx, big, 800);
+      ctx.fillText(speed, rx, top + 40);
+      mono(ctx, 12);
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText("MPH", rx + 3, top + 58);
+      lines.forEach((l, i) => ctx.fillText(l, rx + sw + gap, top + 12 + i * 16));
+    } else {
+      rx = Math.min(Math.max(cx + R * 1.2, w * 0.62), w - (play ? 150 : 110));
+      ctx.fillStyle = "#f2ead7";
+      display(ctx, Math.round(Math.min(h * 0.2, w * 0.11)), 800);
+      ctx.fillText(speed, rx, area * 0.42);
+      mono(ctx, play ? 12 : 9);
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText("MPH", rx + 4, area * 0.42 + 16);
+      lines.forEach((l, i) => ctx.fillText(l, rx + 4, area * 0.42 + 40 + i * (play ? 18 : 13)));
+    }
 
     // christmas tree while staging
     if (c.phase === "tree" || c.phase === "idle") {
-      const tx = rx + (play ? 190 : 120), ty = area * 0.22;
+      const tx = stacked ? w - 16 : rx + (play ? 190 : 120), ty = stacked ? dialTop + 4 : area * 0.22;
       for (let i = 0; i < 4; i++) {
         const lit = c.phase === "tree" && (i < 3 ? c.tree >= i * 0.5 : c.tree >= 1.6);
         ctx.fillStyle = lit ? (i < 3 ? "#ffb300" : "#3ddc84") : "#1c211e";

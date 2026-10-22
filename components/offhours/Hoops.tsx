@@ -321,7 +321,14 @@ export default function Hoops({ mode, paused }: PieceProps) {
       mono(ctx, play ? 11 : 9);
       ctx.fillStyle = "#b5b6ab";
       const fire = s.streak >= 3;
-      ctx.fillText(`${s.makes}/${s.shots}${fire ? "  ·  ON FIRE ×2" : s.streak ? `  ·  STREAK ${s.streak}` : ""}${s.score >= 10 && !s.over ? "  ·  HOOP MOVING" : ""}`, 18, play ? 72 : 46);
+      const status = `${fire ? "ON FIRE ×2" : s.streak ? `STREAK ${s.streak}` : ""}${s.score >= 10 && !s.over ? `${fire || s.streak ? "  ·  " : ""}HOOP MOVING` : ""}`;
+      // narrow: the status can't sit beside the score without running under the backboard, so it drops to the bottom-left
+      const narrow = w < 520;
+      ctx.fillText(narrow ? `${s.makes}/${s.shots}` : `${s.makes}/${s.shots}${status ? `  ·  ${status}` : ""}`, 18, play ? 72 : 46);
+      if (narrow && status && !s.over) {
+        ctx.fillStyle = fire ? "#ffb347" : "#b5b6ab";
+        ctx.fillText(status, 18, h - 10);
+      }
       if (play) {
         display(ctx, 28);
         ctx.textAlign = "right";
@@ -357,7 +364,15 @@ export default function Hoops({ mode, paused }: PieceProps) {
         ctx.fillText(String(s.score), w / 2, h * 0.36 + Math.min(w, h) * 0.22);
         mono(ctx, 12);
         ctx.fillStyle = "#b5b6ab";
-        ctx.fillText(`${s.makes} OF ${s.shots}  ·  BEST ${s.best}  ·  TAP TO GO AGAIN`, w / 2, h * 0.36 + Math.min(w, h) * 0.3);
+        const stats = `${s.makes} OF ${s.shots}  ·  BEST ${s.best}`;
+        const again = play ? "TAP TO GO AGAIN" : "";
+        const sy = h * 0.36 + Math.min(w, h) * 0.3;
+        // a narrow canvas: the prompt drops to its own line rather than running off both edges
+        if (!again || ctx.measureText(`${stats}  ·  ${again}`).width <= w - 24) ctx.fillText(again ? `${stats}  ·  ${again}` : stats, w / 2, sy);
+        else {
+          ctx.fillText(stats, w / 2, sy);
+          ctx.fillText(again, w / 2, sy + 20);
+        }
       }
       ctx.textAlign = "left";
     },
