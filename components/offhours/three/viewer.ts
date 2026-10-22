@@ -15,13 +15,13 @@ export type Part = { id: string; label: string; note: string; movers: Mover[]; a
 export type Model = {
   root: THREE.Object3D;
   parts: Part[];
-  view: { position: [number, number, number]; target: [number, number, number]; fov?: number; near?: number; far?: number; minDistance?: number; maxDistance?: number };
+  view: { position: [number, number, number]; target: [number, number, number]; fov?: number; previewScale?: number; near?: number; far?: number; minDistance?: number; maxDistance?: number };
   background: string;
   floorY: number;
   shadowSize: number;
   /** reflection studio: "watch" has more contrast bands for polished steel */
   studio?: "watch";
-  update?: (dt: number, t: number) => void;
+  update?: (dt: number, t: number, camera?: THREE.Camera) => void;
   /** pointer picking: the hit under the pointer on down/up */
   onPointer?: (hit: THREE.Intersection | null, kind: "down" | "up") => void;
   /** camera distance multiplier when fully exploded */
@@ -76,7 +76,7 @@ function studio(style?: "watch") {
 // flags across it so curved flanks pick up stripes instead of a flat colour.
 function watchStudio() {
   const s = new THREE.Scene();
-  const room = new THREE.Mesh(new THREE.BoxGeometry(24, 14, 24), new THREE.MeshBasicMaterial({ color: 0x2b2d30, side: THREE.BackSide }));
+  const room = new THREE.Mesh(new THREE.BoxGeometry(24, 14, 24), new THREE.MeshBasicMaterial({ color: 0x4a4d52, side: THREE.BackSide }));
   room.position.y = 5;
   s.add(room);
   const panel = (w: number, h: number, x: number, y: number, z: number, rx: number, ry: number, k: number, color = 0xffffff) => {
@@ -89,6 +89,8 @@ function watchStudio() {
   panel(1.4, 9, -11.8, 5, 0, 0, Math.PI / 2, 3.0); // left strip
   panel(1.4, 9, 11.8, 5, 0, 0, -Math.PI / 2, 2.4); // right strip
   panel(18, 7, 0, 7, -11.8, 0, 0, 1.3); // big softbox behind
+  panel(14, 8, -11.7, 4, 0, 0, Math.PI / 2, 0.9, 0xf2f0ea); // broad side fills so tilted links never go black
+  panel(14, 8, 11.7, 4, 0, 0, -Math.PI / 2, 0.8, 0xf2f0ea);
   panel(18, 0.6, 0, 2.2, -11.7, 0, 0, 3.2); // low strip behind: bright band on vertical flanks
   panel(14, 0.5, 0, 4.2, 11.8, 0, Math.PI, 2.2, 0xfff2dd); // front strip
   panel(8, 3, 0, 9, 11.8, 0, Math.PI, 1.4, 0xfff2dd); // front-high kicker
@@ -133,7 +135,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
   camera.position.set(...model.view.position);
   const target = new THREE.Vector3(...model.view.target);
   // tiles are small: stand back a little
-  if (opts.preview) camera.position.sub(target).multiplyScalar(1.3).add(target);
+  if (opts.preview) camera.position.sub(target).multiplyScalar(model.view.previewScale ?? 1.3).add(target);
   camera.lookAt(target);
 
   // key light + shadow catcher
@@ -278,7 +280,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
         if (m.late) m.obj.position.addScaledVector(m.late, late);
       }
     });
-    model.update?.(dt, t);
+    model.update?.(dt, t, camera);
     // follow the model's centre as it comes apart
     if (model.explodeLift) {
       const want = new THREE.Vector3(...model.explodeLift).multiplyScalar(cur);
