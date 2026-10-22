@@ -73,7 +73,7 @@ export default function Springboard() {
       // frame sizes, bezel included (see .dev-slot / .duo-slot)
       const [dw, dh] = wide.matches ? [978, 696] : big ? [458, 960] : [421, 880];
       const sideNames = big ? 2 * Math.min(420, vw * 0.22) : 64;
-      const s = Math.min(1, (vh - 120) / dh, (vw - sideNames) / dw);
+      const s = Math.min(1, (vh - 150) / dh, (vw - sideNames) / dw);
       section.current.style.setProperty("--s", s.toFixed(4));
       // the name fills whatever is left either side of the device
       const side = (vw - dw * s) / 2 - vw * 0.04;
@@ -377,7 +377,7 @@ function PhoneScreen({
             <ul className={`flex justify-around ${anim}`}>
               {DOCK.map((a, k) => (
                 <li key={a.id} style={{ ["--i" as string]: 8 + k } as React.CSSProperties}>
-                  <AppIcon app={a} index={k + 10} label={false} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
+                  <AppIcon app={a} index={k + 10} label={false} dark={dark} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
                 </li>
               ))}
             </ul>
