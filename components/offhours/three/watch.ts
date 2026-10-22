@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { brushedTex, cotesTex, drawnTex, mats, perlageTex } from "./materials";
 import { fontFamilies } from "../font";
 import type { Model, Part } from "./viewer";
@@ -90,6 +91,110 @@ const extrude = (shape: THREE.Shape, depth: number, bevel = 0) =>
   flat(new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 24 }));
 const lathe = (pts: [number, number][], seg = 128) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
 
+const spow = (v: number, p: number) => Math.sign(v) * Math.pow(Math.abs(v), p);
+
+type Station = { c: THREE.Vector3; a: number; b: number };
+/**
+ * Loft a rounded section (a super-ellipse, half-widths a along U and b along V)
+ * through a list of stations. Faces on the flat of the section go to group 0
+ * (brushed), the rolled corners to group 1 (polished bevel). The last station
+ * gets a flat cap.
+ */
+function loft(st: Station[], U: THREE.Vector3, V: THREE.Vector3, n = 3.4, ring = 48, polT = 0.72) {
+  const pos: number[] = [], uv: number[] = [];
+  const flat: number[] = [], pol_: number[] = [];
+  const W = new THREE.Vector3().crossVectors(U, V);
+  const D = st[st.length - 1].c.clone().sub(st[0].c).normalize();
+  const fwd = D.dot(W) > 0;
+  let acc = 0;
+  st.forEach((s, i) => {
+    if (i) acc += s.c.distanceTo(st[i - 1].c);
+    for (let j = 0; j <= ring; j++) {
+      const th = (j / ring) * Math.PI * 2;
+      const x = spow(Math.cos(th), 2 / n) * s.a, y = spow(Math.sin(th), 2 / n) * s.b;
+      pos.push(s.c.x + U.x * x + V.x * y, s.c.y + U.y * x + V.y * y, s.c.z + U.z * x + V.z * y);
+      uv.push(acc / 6, (j / ring) * 3);
+    }
+  });
+  for (let i = 0; i < st.length - 1; i++)
+    for (let j = 0; j < ring; j++) {
+      const a = i * (ring + 1) + j, b = a + 1, c = a + ring + 1, d = c + 1;
+      const th = ((j + 0.5) / ring) * Math.PI * 2;
+      // polished only where the section rolls round a corner, so the flats stay satin
+      const dst = Math.min(Math.abs(spow(Math.cos(th), 2 / n)), Math.abs(spow(Math.sin(th), 2 / n))) > polT ? pol_ : flat;
+      if (fwd) dst.push(a, b, c, b, d, c);
+      else dst.push(a, c, b, b, c, d);
+    }
+  // flat end cap (own vertices so the edge stays crisp)
+  const last = st[st.length - 1];
+  const base = pos.length / 3;
+  pos.push(last.c.x, last.c.y, last.c.z);
+  uv.push(0.5, 0.5);
+  for (let j = 0; j <= ring; j++) {
+    const k = (st.length - 1) * (ring + 1) + j;
+    pos.push(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]);
+    uv.push(0.5 + Math.cos((j / ring) * Math.PI * 2) * 0.3, 0.5 + Math.sin((j / ring) * Math.PI * 2) * 0.3);
+  }
+  for (let j = 0; j < ring; j++) flat.push(...(fwd ? [base, base + 1 + j, base + 2 + j] : [base, base + 2 + j, base + 1 + j]));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex([...flat, ...pol_]);
+  g.addGroup(0, flat.length, 0);
+  g.addGroup(flat.length, pol_.length, 1);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** a rounded rectangle in the XY plane */
+function roundRect(w: number, h: number, r: number, hole?: [number, number, number]) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  if (hole) {
+    const [hw, hh, hr] = hole;
+    const p = new THREE.Path();
+    const a = -hw / 2, b = -hh / 2;
+    p.moveTo(a + hr, b);
+    p.lineTo(a + hw - hr, b);
+    p.quadraticCurveTo(a + hw, b, a + hw, b + hr);
+    p.lineTo(a + hw, b + hh - hr);
+    p.quadraticCurveTo(a + hw, b + hh, a + hw - hr, b + hh);
+    p.lineTo(a + hr, b + hh);
+    p.quadraticCurveTo(a, b + hh, a, b + hh - hr);
+    p.lineTo(a, b + hr);
+    p.quadraticCurveTo(a, b, a + hr, b);
+    s.holes.push(p);
+  }
+  return s;
+}
+
+/** an extruded slab with a bevel: flat faces are group 0 (brushed), bevel and edges group 1 (polished) */
+function slab(shape: THREE.Shape, t: number, bevel: number, dome = 0, hw = 1) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: t - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 10 });
+  g.translate(0, 0, -(t - bevel * 2) / 2);
+  g.rotateX(-Math.PI / 2); // shape y → -z (length), depth z → up
+  // brushing runs along the length: UVs in tiles, length first
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i) * 0.1, uv.getX(i) * 0.1);
+  if (dome) {
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      if (y > 0) pos.setY(i, y + dome * Math.max(0, 1 - (pos.getX(i) / hw) ** 2));
+    }
+  }
+  return toCreasedNormals(g, 0.9);
+}
+
 class Spiral extends THREE.Curve<THREE.Vector3> {
   constructor(private turns: number, private r0: number, private r1: number) {
     super();
@@ -109,6 +214,9 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
   const goldStripe = new THREE.MeshPhysicalMaterial({ map: cotesTex("#d9b366", 0.08), metalness: 1, roughness: 0.28 });
   const perlage = new THREE.MeshPhysicalMaterial({ map: perlageTex("#cfa75a", 0.09), metalness: 1, roughness: 0.38 });
   const brushed = new THREE.MeshPhysicalMaterial({ color: 0xdedede, metalness: 1, roughness: 0.3, roughnessMap: brushedTex(1) });
+  const satin = new THREE.MeshPhysicalMaterial({ color: 0xc4c5c8, metalness: 1, roughness: 0.46, roughnessMap: brushedTex(2), bumpMap: brushedTex(2), bumpScale: 0.3, anisotropy: 0.6, envMapIntensity: 0.95 });
+  // lofted parts have coarse UVs: they get the grain through roughness only
+  const satinL = new THREE.MeshPhysicalMaterial({ color: 0xc4c5c8, metalness: 1, roughness: 0.4, roughnessMap: brushedTex(2), envMapIntensity: 0.75 });
   const fonts = fontFamilies();
 
   const root = new THREE.Group();
@@ -123,7 +231,7 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
     R[id] = g;
     return g;
   };
-  const mesh = (g: THREE.BufferGeometry, m: THREE.Material, parent: THREE.Object3D, pos?: THREE.Vector3) => {
+  const mesh = (g: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], parent: THREE.Object3D, pos?: THREE.Vector3) => {
     const o = new THREE.Mesh(g, m);
     if (pos) o.position.copy(pos);
     parent.add(o);
@@ -355,57 +463,83 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
     mesh(extrude(lever, 0.3), M.steel, g, new THREE.Vector3(0, 0.45, 0));
   }
 
-  // ---------- case + crown (y 0)
+  // ---------- case + crown (y 0): turned flanks in satin, polished chamfers,
+  // lugs and crown guards lofted so they grow out of the case
   {
     const g = group("case", 0);
-    mesh(
-      lathe([[14.6, 0.8], [19.6, 0.8], [20.4, 2], [20.6, 4.5], [20.2, 6.6], [19.2, 7.2], [15.2, 7.2], [15.2, 6.6], [14.6, 6.6], [14.6, 0.8]]),
-      M.steel,
-      g,
-    );
-    const lug = new THREE.Shape();
-    lug.moveTo(17, 1.2);
-    lug.lineTo(23.6, 1.6);
-    lug.quadraticCurveTo(24.4, 1.7, 24.3, 2.6);
-    lug.quadraticCurveTo(23, 6.4, 18, 6.8);
-    lug.lineTo(17, 6.8);
-    lug.closePath();
-    const lg = new THREE.ExtrudeGeometry(lug, { depth: 2.4, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 3 });
-    for (const sz of [-1, 1])
-      for (const sx of [-1, 1]) {
-        const m = mesh(lg, brushed, g);
-        m.rotation.y = sz < 0 ? Math.PI / 2 : -Math.PI / 2;
-        m.position.x = sx * 8.6 + (sz < 0 ? -1.2 : 1.2);
-        if (sz > 0) m.position.x = sx * 8.6 - 1.2 + 2.4;
+    mesh(lathe([[14.6, 0.8], [19.5, 0.8], [20.2, 1.35]]), M.steel, g);
+    mesh(lathe([[20.2, 1.35], [20.55, 2.2], [20.66, 3.5], [20.6, 5.2], [20.35, 6.2]]), satin, g);
+    mesh(lathe([[20.35, 6.2], [20.05, 6.8], [19.2, 7.2], [15.2, 7.2], [15.2, 6.6], [14.6, 6.6], [14.6, 0.8]]), M.steel, g);
+    const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+    // lug: top rolls down toward the tip, underside lifts, outer face narrows
+    const lugGeo = (() => {
+      const N = 14;
+      const st: Station[] = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const top = 6.65 - 1.75 * Math.pow(Math.max(0, (t - 0.4) / 0.6), 1.6);
+        const bot = 1.0 + 0.9 * Math.pow(t, 2.2);
+        const xo = 15.4 - 1.2 * Math.pow(t, 1.3), xi = 9.55;
+        st.push({ c: new THREE.Vector3((xi + xo) / 2, (top + bot) / 2, 12 + t * 12.6), a: (xo - xi) / 2, b: (top - bot) / 2 });
       }
-    // stem + knurled crown at 3 o'clock
-    mesh(new THREE.CylinderGeometry(0.45, 0.45, 4, 16).rotateZ(Math.PI / 2), M.steel, g, new THREE.Vector3(21, 4, 0));
+      const e = st[N];
+      st.push({ c: e.c.clone().add(new THREE.Vector3(0, 0, 0.35)), a: e.a * 0.8, b: e.b * 0.8 });
+      return loft(st, X, Y, 5.5, 72, 0.7);
+    })();
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        const m = mesh(lugGeo, [satinL, M.steel], g);
+        m.scale.set(sx, 1, sz);
+      }
+    // crown guards: shoulders either side of the crown
+    const guardGeo = (() => {
+      const N = 8;
+      const st: Station[] = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const a = 1.55 - 0.3 * t, b = 2.8 - 0.75 * t;
+        st.push({ c: new THREE.Vector3(17 + t * 6.0, 4, 3.4 + a), a, b });
+      }
+      const e = st[N];
+      st.push({ c: e.c.clone().add(new THREE.Vector3(0.3, 0, 0)), a: e.a * 0.8, b: e.b * 0.8 });
+      return loft(st, Z, Y, 5, 56, 0.7);
+    })();
+    for (const sz of [-1, 1]) mesh(guardGeo, [satinL, M.steel], g).scale.set(1, 1, sz);
+    // stem + knurled screw-down crown at 3 o'clock
+    mesh(new THREE.CylinderGeometry(0.9, 0.9, 4, 24).rotateZ(Math.PI / 2), M.steel, g, new THREE.Vector3(21, 4, 0));
     const crown = new THREE.Group();
     crown.position.set(22.6, 4, 0);
     g.add(crown);
-    mesh(new THREE.CylinderGeometry(3, 3, 2.4, 48).rotateZ(Math.PI / 2), M.steel, crown);
-    for (let i = 0; i < 30; i++) {
-      const a = (i / 30) * Math.PI * 2;
-      const rib = mesh(new THREE.BoxGeometry(2.2, 0.35, 0.3), M.steel, crown, new THREE.Vector3(0, Math.cos(a) * 3, Math.sin(a) * 3));
-      rib.rotation.x = a;
+    const cg = lathe(
+      [[0, -1.4], [1.9, -1.4], [2.1, -1.0], [2.9, -0.8], [3.0, -0.55], [3.0, 0.7], [2.85, 0.95], [2.4, 1.15], [2.2, 1.2], [2.1, 1.1], [0, 1.1]],
+      192,
+    );
+    {
+      const pos = cg.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const r = Math.hypot(x, z);
+        if (r < 2.99 || y < -0.6 || y > 0.75) continue;
+        const th = Math.atan2(z, x);
+        const tri = Math.abs(((((th / (Math.PI * 2)) * 24) % 1) + 1) % 1 - 0.5) * 2;
+        const k = (r - 0.2 * tri) / r;
+        pos.setX(i, x * k);
+        pos.setZ(i, z * k);
+      }
+      cg.computeVertexNormals();
     }
-    mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.3, 48).rotateZ(Math.PI / 2), M.brushed, crown, new THREE.Vector3(1.25, 0, 0));
+    mesh(cg.rotateZ(-Math.PI / 2), M.steel, crown);
     R.crown = crown;
-    // crown guards
-    for (const sz of [-1, 1]) {
-      const guard = mesh(new RoundedBoxGeometry(2.8, 3.6, 2.2, 3, 0.7), M.steel, g, new THREE.Vector3(21.0, 4, sz * 4.1));
-      guard.rotation.y = sz * 0.25;
-    }
   }
 
   // ---------- dial (y 5.8): black lacquer, applied round lume plots in
   // white-gold surrounds, bars at 6 and 9, a triangle at 12, date at 3.
   const today = new Date().getDate();
-  const dialTex = drawnTex(1024, (c, s) => {
+  const dialTex = drawnTex(2048, (c, s) => {
     const cx = s / 2;
     const g = c.createRadialGradient(cx * 0.8, cx * 0.7, s * 0.05, cx, cx, s * 0.55);
-    g.addColorStop(0, "#121314");
-    g.addColorStop(1, "#030303");
+    g.addColorStop(0, "#08090a");
+    g.addColorStop(1, "#010101");
     c.fillStyle = g;
     c.fillRect(0, 0, s, s);
     c.translate(cx, cx);
@@ -431,10 +565,12 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
   {
     const g = group("dial", 5.8);
     mesh(new THREE.CylinderGeometry(15, 15, 0.3, 128), M.darkSteel, g);
-    const face = mesh(new THREE.CircleGeometry(15, 128), new THREE.MeshPhysicalMaterial({ map: dialTex, roughness: 0.45, metalness: 0, specularIntensity: 0.35, clearcoat: 0.45, clearcoatRoughness: 0.08, envMapIntensity: 0.3 }), g);
+    const face = mesh(new THREE.CircleGeometry(15, 128), new THREE.MeshPhysicalMaterial({ map: dialTex, roughness: 0.5, metalness: 0, specularIntensity: 0.25, clearcoat: 0.25, clearcoatRoughness: 0.06, envMapIntensity: 0.25 }), g);
     face.rotation.x = -Math.PI / 2;
     face.position.y = 0.22;
     const surround = M.steel;
+    // applied frame round the date window
+    mesh(slab(roundRect(3.6, 2.6, 0.3, [3.1, 2.1, 0.16]), 0.34, 0.07), [satin, M.steel], g, new THREE.Vector3(10.5, 0.38, 0));
     for (let i = 0; i < 12; i++) {
       if (i === 3) continue; // the date sits at 3
       const a = (i / 12) * Math.PI * 2;
@@ -522,7 +658,7 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
   // ---------- dive bezel: coin-edged steel ring with a green ceramic insert,
   // unidirectional (it only turns anticlockwise), 120 clicks a turn
   const BEZELS: Record<string, { a: string; b: string }> = {
-    green: { a: "#169a4c", b: "#075c2b" },
+    green: { a: "#0f9a45", b: "#04532a" },
     black: { a: "#26292c", b: "#0b0c0d" },
     blue: { a: "#2a55b0", b: "#13285e" },
   };
@@ -585,7 +721,7 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
     }
     bg.computeVertexNormals();
     mesh(bg, M.steel, spin);
-    const insert = mesh(new THREE.RingGeometry(16.1, 19.6, 180, 1), new THREE.MeshPhysicalMaterial({ map: insertTex, roughness: 0.14, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 0.55 }), spin);
+    const insert = mesh(new THREE.RingGeometry(16.1, 19.6, 180, 1), new THREE.MeshPhysicalMaterial({ map: insertTex, roughness: 0.2, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.03, envMapIntensity: 0.15 }), spin);
     insert.rotation.x = -Math.PI / 2;
     insert.position.y = 8.32;
     // the lume pip in the triangle at 12
@@ -593,43 +729,150 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
     mesh(new THREE.TorusGeometry(0.46, 0.08, 8, 24).rotateX(Math.PI / 2), M.steel, spin, new THREE.Vector3(0, 8.5, -18.85));
     R.bezelSpin = spin;
     const c = group("crystal", 0);
-    const pts: [number, number][] = [];
+    // sapphire with an anti-reflective coating: it only adds a faint, sharp
+    // reflection, so the black dial stays black
+    const glass = new THREE.MeshPhysicalMaterial({ color: 0x000000, roughness: 0.02, metalness: 0, ior: 1.5, envMapIntensity: 0.55, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const dome: [number, number][] = [];
     for (let i = 0; i <= 24; i++) {
       const f = i / 24;
-      pts.push([f * 15.5, 8.9 - f * f * 1.0]);
+      dome.push([f * 15.5, 8.9 - f * f * 1.0]);
     }
-    pts.push([15.5, 7.6], [0, 7.6]);
-    mesh(lathe(pts, 96), M.sapphire, c);
-    // the magnifier over the date
-    const lens = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0, transmission: 1, thickness: 1.2, ior: 1.52, specularIntensity: 0.3, transparent: true });
-    mesh(new RoundedBoxGeometry(6.0, 0.9, 4.4, 5, 0.44), lens, c, new THREE.Vector3(10.5, 8.85, 0));
+    dome.push([15.5, 7.6]);
+    const crystal = mesh(lathe(dome, 96), glass, c);
+    crystal.userData.noShadow = true;
+    crystal.renderOrder = 2;
+    // the magnifier over the date: a rounded convex lens, with the date drawn
+    // large beneath it
+    const lensG = new THREE.Group();
+    const cx0 = 10.5;
+    const sag = 8.9 - (cx0 / 15.5) ** 2;
+    lensG.position.set(cx0, sag, 0);
+    lensG.rotation.z = Math.atan(-(2 * cx0) / (15.5 * 15.5));
+    c.add(lensG);
+    R.lens = lensG;
+    const lensGeo = (() => {
+      const A = 3.05, B = 2.2, H = 1.0, rings = 14, seg = 48, n = 4;
+      const pos: number[] = [], idx: number[] = [];
+      for (let r = 0; r <= rings; r++) {
+        const u = r / rings;
+        for (let j = 0; j <= seg; j++) {
+          const ph = (j / seg) * Math.PI * 2;
+          pos.push(spow(Math.cos(ph), 2 / n) * A * u, H * Math.pow(1 - u * u, 0.6), spow(Math.sin(ph), 2 / n) * B * u);
+        }
+      }
+      for (let r = 0; r < rings; r++)
+        for (let j = 0; j < seg; j++) {
+          const a = r * (seg + 1) + j, b = a + 1, cc = a + seg + 1, d = cc + 1;
+          idx.push(a, b, cc, b, d, cc);
+        }
+      const gg = new THREE.BufferGeometry();
+      gg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      gg.setIndex(idx);
+      gg.computeVertexNormals();
+      return gg;
+    })();
+    const lens = mesh(lensGeo, glass, lensG);
+    lens.position.y = 0.03;
+    lens.userData.noShadow = true;
+    lens.renderOrder = 2;
+    const bigDate = drawnTex(512, (c2, sz) => {
+      c2.fillStyle = "#080808";
+      c2.fillRect(0, 0, sz, sz);
+      c2.fillStyle = "#e9e9e4";
+      c2.fillRect(sz * 0.1, sz * 0.12, sz * 0.8, sz * 0.76);
+      c2.fillStyle = "#101010";
+      c2.save();
+      c2.translate(sz / 2, sz / 2);
+      c2.scale(0.72, 1);
+      c2.font = `700 ${sz * 0.56}px ${fonts.display}`;
+      c2.textAlign = "center";
+      c2.textBaseline = "middle";
+      c2.fillText(String(today), 0, sz * 0.03);
+      c2.restore();
+    });
+    const dq = mesh(new THREE.PlaneGeometry(6.0, 4.3), new THREE.MeshStandardMaterial({ map: bigDate, roughness: 0.6, metalness: 0 }), lensG);
+    dq.rotation.x = -Math.PI / 2;
+    dq.position.y = 0.025;
+    dq.userData.noShadow = true;
   }
 
-  // ---------- bracelet: Oyster-style three-piece links, brushed, with a
-  // polished bevel on the centre link
+  // ---------- bracelet: Oyster-style three-piece links. Satin tops with
+  // polished bevels, a solid end link that fits the case, tapering to the
+  // clasp and draping gently the way it sits on a wrist.
   {
     const g = group("bracelet", 0);
-    const outer: THREE.Matrix4[] = [];
-    const inner: THREE.Matrix4[] = [];
-    const rows = 14, R = 21, step = 0.19;
-    const q = new THREE.Quaternion(), sc = new THREE.Vector3(), p3 = new THREE.Vector3();
-    for (const side of [-1, 1]) {
-      const cz = side * 23.6, cy = 3.2 - R;
-      for (let k = 0; k < rows; k++) {
-        const ph = k * step + 0.05;
-        const y = cy + R * Math.cos(ph), z = cz + side * R * Math.sin(ph);
-        q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), side * ph);
-        const W = 20 - (4 * k) / rows;
-        for (const sx of [-1, 1]) outer.push(new THREE.Matrix4().compose(p3.set(sx * (W / 2 - W * 0.16), y, z), q, sc.set(W * 0.31, 1, 1)));
-        inner.push(new THREE.Matrix4().compose(p3.set(0, y + 0.12, z), q, sc.set(W * 0.36, 1.05, 1)));
+    const spine = new THREE.MeshStandardMaterial({ color: 0x17181a, metalness: 0.6, roughness: 0.55 });
+    const T = 2.3, P = 9.4, LEN = 9.0, ROWS = 5, K = 1 / 38, PHI0 = 0.1, OUT0 = 24, Y0 = 3.3;
+    const BW = 19.0, WC = 5.6, WO = 6.3, GAP = 0.4;
+    // outer links are longer than wide (about 1.4:1); the centre link is
+    // narrower, a touch thicker and domed
+    const oLink = slab(roundRect(WO, LEN, 1.1), T, 0.3);
+    const cLink = slab(roundRect(WC, LEN, 1.1), T + 0.4, 0.3, 0.35, WC / 2);
+    // end link: its inner edge is cut to the curve of the case
+    const endLink = (() => {
+      const s = new THREE.Shape();
+      const Rc = 20.9, hw = BW / 2 - 0.1, o = 2.4;
+      const arc: [number, number][] = [];
+      for (let i = 0; i <= 28; i++) {
+        const x = -hw + (i / 28) * 2 * hw;
+        arc.push([x, Math.sqrt(Rc * Rc - x * x) - OUT0]);
       }
-    }
-    const link = new RoundedBoxGeometry(1, 2.5, 3.6, 3, 0.4);
-    const io = new THREE.InstancedMesh(link, brushed, outer.length);
-    outer.forEach((mm, i) => io.setMatrixAt(i, mm));
-    const ii = new THREE.InstancedMesh(link, brushed, inner.length);
-    inner.forEach((mm, i) => ii.setMatrixAt(i, mm));
-    g.add(io, ii);
+      s.moveTo(arc[0][0], arc[0][1]);
+      for (const [x, y] of arc) s.lineTo(x, y);
+      s.lineTo(hw, o - 0.9);
+      s.quadraticCurveTo(hw, o, hw - 0.9, o);
+      s.lineTo(-hw + 0.9, o);
+      s.quadraticCurveTo(-hw, o, -hw, o - 0.9);
+      s.closePath();
+      return slab(s, 3.0, 0.3);
+    })();
+    const clasp = slab(roundRect(BW * 0.8, 4.6, 1.3), T + 0.7, 0.4);
+    const spineGeo = new THREE.BoxGeometry(1, 1.5, P);
+    const side = (rot: number) => {
+      const sg = new THREE.Group();
+      sg.rotation.y = rot;
+      g.add(sg);
+      const q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+      const ax = new THREE.Vector3(1, 0, 0);
+      // end link, hinged at the pin
+      const el = mesh(endLink, [satin, M.steel], sg);
+      el.position.set(0, Y0, -OUT0);
+      el.rotation.x = -PHI0;
+      const cm: THREE.Matrix4[] = [], om: THREE.Matrix4[] = [], sm: THREE.Matrix4[] = [];
+      const pose = (s: number) => {
+        const ph = PHI0 + K * s;
+        return { ph, z: -(OUT0 + (Math.sin(ph) - Math.sin(PHI0)) / K), y: Y0 + (Math.cos(ph) - Math.cos(PHI0)) / K };
+      };
+      const width = (s: number) => (BW - (4 * s) / 50) / BW;
+      for (let j = 0; j < ROWS; j++) {
+        const s = 2.4 + GAP + P / 2 + j * P;
+        const { ph, z, y } = pose(s);
+        q.setFromAxisAngle(ax, -ph);
+        const f = width(s);
+        // lift the raised centre link along the link's own up axis
+        const up = new THREE.Vector3(0, 0.2, 0).applyQuaternion(q);
+        cm.push(new THREE.Matrix4().compose(p.set(0, y + up.y, z + up.z), q, sc.set(f, 1, 1)));
+        for (const sx of [-1, 1]) om.push(new THREE.Matrix4().compose(p.set(sx * ((WC + WO) / 2 + GAP) * f, y, z), q, sc.set(f, 1, 1)));
+        sm.push(new THREE.Matrix4().compose(p.set(0, y, z), q, sc.set((BW - 1) * f, 1, 1)));
+      }
+      const inst = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], ms: THREE.Matrix4[]) => {
+        const im = new THREE.InstancedMesh(geo, mat, ms.length);
+        ms.forEach((m, i) => im.setMatrixAt(i, m));
+        sg.add(im);
+      };
+      inst(cLink, [satin, M.steel], cm);
+      inst(oLink, [satin, M.steel], om);
+      inst(spineGeo, spine, sm);
+      // folded clasp at the end
+      const se = 2.4 + GAP + P * ROWS + 1.2;
+      const e = pose(se);
+      const cl = mesh(clasp, [satin, M.steel], sg);
+      cl.position.set(0, e.y, e.z);
+      cl.rotation.x = -e.ph;
+      cl.scale.x = width(se);
+    };
+    side(0); // 12 o'clock
+    side(Math.PI); // 6 o'clock
   }
 
   // ---------- parts, explode vectors, label anchors
@@ -674,7 +917,45 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
   let springPower = -1;
   let flipA = 0;
 
-  const update = (dt: number) => {
+  const lensTarget = new THREE.Vector2(10.5, 0);
+  const lensUp = new THREE.Vector3(0, 1, 0);
+  const lensQ = new THREE.Quaternion();
+  const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
+  const homeGap = R.crystal.position.y - R.dial.position.y;
+  // The magnifier sits on the crystal, the date sits on the dial. Slide the
+  // lens along your line of sight so it always sits over the date from
+  // wherever you're looking, the way a real cyclops does.
+  const alignLens = (dt: number, camera: THREE.Camera) => {
+    const lens = R.lens, cr = R.crystal;
+    const apart = Math.abs(cr.position.y - R.dial.position.y - homeGap) > 0.25 || flipA > 0.02;
+    let tx = 10.5, tz = 0;
+    if (!apart) {
+      const P = cr.worldToLocal(R.dial.localToWorld(v1.set(10.5, 0.3, 0)));
+      const C = cr.worldToLocal(v2.copy(camera.position));
+      if (C.y - P.y > 8) {
+        let x = P.x, z = P.z;
+        for (let i = 0; i < 3; i++) {
+          const ly = 8.9 - (x * x + z * z) / 240.25;
+          const t = (C.y - ly) / (C.y - P.y);
+          x = C.x + (P.x - C.x) * t;
+          z = C.z + (P.z - C.z) * t;
+        }
+        const dx = x - 10.5, dz = z, d = Math.hypot(dx, dz);
+        const k = d > 4.5 ? 4.5 / d : 1;
+        tx = 10.5 + dx * k;
+        tz = dz * k;
+      }
+    }
+    const a = Math.min(1, dt * 14);
+    lensTarget.x += (tx - lensTarget.x) * a;
+    lensTarget.y += (tz - lensTarget.y) * a;
+    const x = lensTarget.x, z = lensTarget.y;
+    lens.position.set(x, 8.9 - (x * x + z * z) / 240.25, z);
+    lensQ.setFromUnitVectors(lensUp, v3.set((2 * x) / 240.25, 1, (2 * z) / 240.25).normalize());
+    lens.quaternion.copy(lensQ);
+  };
+
+  const update = (dt: number, _t?: number, camera?: THREE.Camera) => {
     const s = state;
     const running = s.power > 0;
     if (running) {
@@ -725,12 +1006,17 @@ export function buildWatch(state: WatchState): Model & { setBezel: (key: string)
     }
     flipA += ((s.flip ? Math.PI : 0) - flipA) * Math.min(1, dt * 5);
     watch.rotation.z = flipA;
+    if (camera) {
+      watch.updateWorldMatrix(true, true);
+      alignLens(dt, camera);
+    }
   };
 
   return {
     root,
     parts,
-    view: { position: [0, 66, 106], target: [0, 5, 0], fov: 30, near: 4, far: 1500, minDistance: 45, maxDistance: 300 },
+    view: { position: [0, 68, 112], target: [0, 0, 12], fov: 30, previewScale: 1.55, near: 4, far: 1500, minDistance: 45, maxDistance: 300 },
+    studio: "watch",
     background: "#f2ead7",
     floorY: -46,
     explodeZoom: 1.9,
