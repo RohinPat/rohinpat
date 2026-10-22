@@ -858,50 +858,49 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   }
   if (!play) return;
 
-  // reading chip
+  // The hint / reading chip and the key power meter sit top centre only while
+  // that clears the hole card. On a narrow canvas they go to the bottom, just
+  // above the scorecard, so they never cover the HUD box at any width.
+  const topFree = (width: number) => w / 2 - width / 2 >= 10 + cw + 8;
+  const chipBottom = h - 64 - 8 - 24;
+  const chip = (msgs: string[], color: string) => {
+    mono(ctx, 10);
+    const room = w - 20 - 20;
+    const msg = msgs.find((m) => ctx.measureText(m).width <= room) ?? msgs[msgs.length - 1];
+    const tw = ctx.measureText(msg).width + 20;
+    const y = topFree(tw) ? 12 : chipBottom;
+    ctx.fillStyle = "rgba(13,16,14,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - tw / 2, y, tw, 24, 5);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(msg, w / 2, y + 16);
+    ctx.textAlign = "left";
+  };
   if (p.reading) {
-    mono(ctx, 10);
-    const msg = "READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL";
-    const tw = ctx.measureText(msg).width + 20;
-    const x = w / 2 - Math.min(tw, w - 20) / 2;
-    ctx.fillStyle = "rgba(13,16,14,0.78)";
-    ctx.beginPath();
-    ctx.roundRect(x, 12, Math.min(tw, w - 20), 24, 5);
-    ctx.fill();
-    ctx.fillStyle = "#a0dcff";
-    ctx.textAlign = "center";
-    ctx.fillText(msg, w / 2, 28, w - 36);
-    ctx.textAlign = "left";
+    chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"], "#a0dcff");
   } else if (H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
-    mono(ctx, 10);
-    const msg = compact ? "PULL BACK FROM THE BALL, LET GO" : "PULL BACK FROM THE BALL AND LET GO · OR ← → AND HOLD SPACE";
-    const tw = ctx.measureText(msg).width + 20;
-    ctx.fillStyle = "rgba(13,16,14,0.78)";
-    ctx.beginPath();
-    ctx.roundRect(w / 2 - Math.min(tw, w - 20) / 2, 12, Math.min(tw, w - 20), 24, 5);
-    ctx.fill();
-    ctx.fillStyle = "#f2ead7";
-    ctx.textAlign = "center";
-    ctx.fillText(msg, w / 2, 28, w - 36);
-    ctx.textAlign = "left";
+    chip(["PULL BACK FROM THE BALL AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK FROM THE BALL, LET GO", "PULL BACK, LET GO"], "#f2ead7");
   }
 
   // power meter while charging by key
   if (p.kCharging) {
+    const my = topFree(140) ? 46 : chipBottom + 8;
     ctx.fillStyle = "rgba(13,16,14,0.7)";
-    ctx.fillRect(w / 2 - 70, 46, 140, 8);
+    ctx.fillRect(w / 2 - 70, my, 140, 8);
     ctx.fillStyle = p.kPower > 0.9 ? "#e5484d" : "#8ad9a8";
-    ctx.fillRect(w / 2 - 70, 46, 140 * p.kPower, 8);
+    ctx.fillRect(w / 2 - 70, my, 140 * p.kPower, 8);
   }
 
   // scorecard
   const cells = HOLES;
   const cwid = compact ? 28 : 40;
   const lab = compact ? 0 : 46;
-  const tw = lab + cells * cwid + (compact ? 36 : 52);
+  const tw = lab + cells * cwid + (compact ? 44 : 52);
   const x0 = w / 2 - tw / 2, y0 = h - 58;
   panel(x0 - 8, y0 - 6, tw + 16, 54);
-  mono(ctx, 8);
+  mono(ctx, 10);
   const rows = ["HOLE", "PAR", "YOU"];
   rows.forEach((r, i) => {
     if (lab) {
@@ -927,7 +926,7 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
       tot += sc;
       par += p.pars[i];
       const d = sc - p.pars[i];
-      mono(ctx, 11);
+      mono(ctx, 12);
       ctx.fillStyle = d < 0 ? "#edbb00" : d === 0 ? "#f2ead7" : "#e5484d";
       ctx.fillText(String(sc), cx, y0 + 42);
       if (d < 0) {
@@ -940,12 +939,12 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
         ctx.strokeStyle = "#e5484d";
         ctx.strokeRect(cx - 7.5, y0 + 31, 15, 15);
       }
-      mono(ctx, 8);
+      mono(ctx, 10);
     } else if (cur) {
-      mono(ctx, 11);
+      mono(ctx, 12);
       ctx.fillStyle = "#f2ead7";
       ctx.fillText(String(p.strokes || "·"), cx, y0 + 42);
-      mono(ctx, 8);
+      mono(ctx, 10);
     }
     ctx.textAlign = "left";
   }
@@ -953,11 +952,11 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   const txr = x0 + lab + cells * cwid + 6;
   ctx.fillStyle = "#b5b6ab";
   ctx.fillText("TOT", txr, y0 + 9);
-  mono(ctx, 11);
+  mono(ctx, 12);
   ctx.fillStyle = "#f2ead7";
   ctx.fillText(tot ? `${tot}` : "·", txr, y0 + 42);
   ctx.fillStyle = dv < 0 ? "#edbb00" : dv > 0 ? "#e5484d" : "#8ad9a8";
-  if (tot) ctx.fillText(dv === 0 ? "E" : dv > 0 ? `+${dv}` : `${dv}`, txr + (compact ? 18 : 26), y0 + 42);
+  if (tot) ctx.fillText(dv === 0 ? "E" : dv > 0 ? `+${dv}` : `${dv}`, txr + (compact ? 20 : 26), y0 + 42);
 
   // the call
   if (p.call && t - p.callT < 1.7) {

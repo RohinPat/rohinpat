@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { seeded, useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio, tone } from "./audio";
 import { display, mono } from "./font";
@@ -44,6 +44,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
   const [shot, setShotState] = useState<ShotId>("placed");
   const [status, setStatus] = useState("");
   const [hasKick, setHasKick] = useState(false);
+  const pills = useRef<HTMLDivElement>(null);
   const S = useRef({
     phase: "aim" as Phase,
     shot: "placed" as ShotId,
@@ -757,22 +758,27 @@ export default function Penalty({ mode, paused }: PieceProps) {
 
     // scoreboard
     const goals = s.kicks.filter((k) => k === "goal").length;
-    const sw = play ? 220 : 150;
+    // a narrow canvas gets a smaller board (it was over half a phone's width),
+    // with "sudden death" on a line of its own
+    const cp = play && w < 520;
+    const sw = play ? (cp ? 128 : 220) : 150;
+    const sh = play ? (cp ? (s.kicks.length > 5 ? 62 : 46) : 54) : 38;
     ctx.fillStyle = "rgba(8,18,38,0.75)";
-    ctx.fillRect(12, 12, sw, play ? 54 : 38);
+    ctx.fillRect(12, 12, sw, sh);
     ctx.fillStyle = "#a50044";
-    ctx.fillRect(12, 12, 5, play ? 54 : 38);
+    ctx.fillRect(12, 12, 5, sh);
     ctx.fillStyle = "#004d98";
-    ctx.fillRect(17, 12, 5, play ? 54 : 38);
+    ctx.fillRect(17, 12, 5, sh);
     ctx.fillStyle = "#f2ead7";
-    display(ctx, play ? 22 : 15, 800);
-    ctx.fillText(`BARÇA ${goals}`, 32, play ? 38 : 30);
+    display(ctx, play ? (cp ? 18 : 22) : 15, 800);
+    ctx.fillText(`BARÇA ${goals}`, 32, play ? (cp ? 33 : 38) : 30);
     const shown = Math.max(5, s.kicks.length);
     const step = play ? Math.min(16, (sw - 44) / shown) : 11;
+    const dotY = play ? (cp ? 46 : 54) : 42;
     for (let i = 0; i < shown; i++) {
       const k = s.kicks[i];
       ctx.beginPath();
-      ctx.arc(32 + i * step + 4, play ? 54 : 42, play ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(32 + i * step + 4, dotY, play ? (cp ? 4 : 5) : 3.5, 0, Math.PI * 2);
       if (k === "goal") {
         ctx.fillStyle = "#8ad9a8";
         ctx.fill();
@@ -788,7 +794,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
     if (play && s.kicks.length > 5) {
       mono(ctx, 10);
       ctx.fillStyle = "#edbb00";
-      ctx.fillText("SUDDEN DEATH", 130, 38);
+      ctx.fillText("SUDDEN DEATH", cp ? 32 : 130, cp ? 66 : 38);
     }
 
     // result call
@@ -968,6 +974,11 @@ export default function Penalty({ mode, paused }: PieceProps) {
     ctx.fill();
   }
 
+  // keep the picked shot in view when the row scrolls (keys 1-7, or X / Z)
+  useEffect(() => {
+    pills.current?.querySelector<HTMLElement>("[aria-pressed=true]")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [shot]);
+
   const def = shotById(shot);
   const body = (
     <canvas
@@ -985,33 +996,41 @@ export default function Penalty({ mode, paused }: PieceProps) {
   if (!play) return body;
   return (
     <div className="absolute inset-0 flex flex-col bg-[#081226]">
-      <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1 bg-[#0d100e]">
-        {SHOTS.map((sh, i) => (
-          <button
-            key={sh.id}
-            type="button"
-            aria-pressed={shot === sh.id}
-            onClick={() => pickShot(sh.id)}
-            className={`h-8 px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] border ${
-              shot === sh.id ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"
-            }`}
-          >
-            <span className="opacity-50 mr-1.5">{i + 1}</span>
-            {sh.name}
-          </button>
-        ))}
+      {/* Phones: the shots are one swipeable row (Replay stays put beside it) and the
+          blurb one line, so the pitch keeps the height. Touch screens have no keys 1-7 or R,
+          so those hints go. */}
+      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1 bg-[#0d100e]">
+        <div
+          ref={pills}
+          className="flex flex-1 min-w-0 gap-1.5 overflow-x-auto snap-x snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible"
+        >
+          {SHOTS.map((sh, i) => (
+            <button
+              key={sh.id}
+              type="button"
+              aria-pressed={shot === sh.id}
+              onClick={() => pickShot(sh.id)}
+              className={`h-8 shrink-0 snap-start px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] border ${
+                shot === sh.id ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"
+              }`}
+            >
+              <span className="opacity-50 mr-1.5 [@media(hover:none)]:hidden [@media(pointer:coarse)]:hidden">{i + 1}</span>
+              {sh.name}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           disabled={!hasKick}
           onClick={() => {
             S.current.replayReq = true;
           }}
-          className="h-8 px-3 ml-auto rounded-full font-mono text-[11px] uppercase tracking-[0.12em] border border-white/15 text-[#b5b6ab] hover:text-[#f2ead7] disabled:opacity-35 disabled:hover:text-[#b5b6ab]"
+          className="h-8 shrink-0 px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] border border-white/15 text-[#b5b6ab] hover:text-[#f2ead7] disabled:opacity-35 disabled:hover:text-[#b5b6ab]"
         >
-          Replay <span className="opacity-50">R</span>
+          Replay <span className="opacity-50 [@media(hover:none)]:hidden [@media(pointer:coarse)]:hidden">R</span>
         </button>
       </div>
-      <p className="px-3 pb-2 bg-[#0d100e] font-mono text-[11px] leading-snug text-[#b5b6ab] min-h-[2.4em] sm:min-h-[1.4em]">{def.blurb}</p>
+      <p className="px-3 pb-2 bg-[#0d100e] font-mono text-[11px] leading-snug text-[#b5b6ab] truncate sm:whitespace-normal sm:overflow-visible sm:min-h-[1.4em]">{def.blurb}</p>
       <p aria-live="polite" className="sr-only">
         {status}
       </p>

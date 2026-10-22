@@ -866,16 +866,37 @@ function panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   ctx.stroke();
 }
 
+/** the first of `opts` that fits `max` px in the current font (the last one if none do) */
+function fitText(ctx: CanvasRenderingContext2D, opts: string[], max: number) {
+  return opts.find((o) => ctx.measureText(o).width <= max) ?? opts[opts.length - 1];
+}
+
 function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: number) {
   const compact = w < 640;
   const club = CLUBS[r.club];
   const pad = compact ? 8 : 14;
 
+  // ---- layout. Left column: the shot card. Right column: wind (and the map on
+  // wide canvases). The middle is only free when both columns leave room for
+  // it, so on a phone the challenge status takes a full-width row of its own
+  // (pushing the columns down) and the hints sit at the bottom instead.
+  const cardW = compact ? 158 : 220;
+  const sideW = Math.max(cardW, 112);
+  const midRoom = w - 2 * (pad + sideW + 10);
+  const stack = r.mode === "challenge" && midRoom < (compact ? 300 : 380);
+  const statusH = compact ? 44 : 52;
+  const topY = stack ? pad + statusH + 8 : pad;
+  const gw = Math.min(compact ? w - 2 * pad : 470, w - 2 * pad);
+  const gh = 58;
+  const gy = h - gh - (compact ? 8 : 14);
+  const slot0 = gy - 28; // the prompt pill
+  const slot1 = gy - 54; // the pill above it
+
   // ---- shot data card
-  if (r.card) {
+  if (r.card && !(compact && r.mode === "challenge" && r.ch.done)) {
     const c = r.card;
     const a = clamp(c.t / 0.25, 0, 1);
-    const cw = compact ? 158 : 220;
+    const cw = cardW;
     const x = pad - (1 - a) * 30;
     ctx.globalAlpha = a;
     const all: [string, string][] = [
@@ -887,23 +908,23 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
       ["CURVE", curveLabel(c.shot)],
     ];
     const rows = compact ? [all[0], all[1], all[5]] : all;
-    const rh = compact ? 15 : 17;
+    const rh = compact ? 16 : 17;
     const ch = (compact ? 74 : 92) + rows.length * rh;
-    panel(ctx, x, pad, cw, ch);
-    mono(ctx, compact ? 9 : 10);
+    panel(ctx, x, topY, cw, ch);
+    mono(ctx, 10);
     ctx.fillStyle = MINT;
-    ctx.fillText(`${c.club.name.toUpperCase()} · ${c.label}`, x + 12, pad + 18);
+    ctx.fillText(fitText(ctx, [`${c.club.name.toUpperCase()} · ${c.label}`, `${c.club.short.toUpperCase()} · ${c.label}`], cw - 24), x + 12, topY + 18);
     display(ctx, compact ? 38 : 46, 800);
     ctx.fillStyle = PAPER;
     const n = Math.round(c.shot.carry * clamp(c.t / 0.5, 0, 1));
-    ctx.fillText(String(n), x + 12, pad + (compact ? 54 : 64));
+    ctx.fillText(String(n), x + 12, topY + (compact ? 54 : 64));
     const nw = ctx.measureText(String(n)).width;
-    mono(ctx, compact ? 9 : 10);
+    mono(ctx, 10);
     ctx.fillStyle = DIM;
-    ctx.fillText("YD CARRY", x + 18 + nw, pad + (compact ? 54 : 64));
+    ctx.fillText("YD CARRY", x + 18 + nw, topY + (compact ? 54 : 64));
     rows.forEach(([k, v], i) => {
-      const yy = pad + (compact ? 76 : 90) + i * rh;
-      mono(ctx, compact ? 8 : 9);
+      const yy = topY + (compact ? 76 : 90) + i * rh;
+      mono(ctx, 10);
       ctx.fillStyle = DIM;
       ctx.fillText(k, x + 12, yy);
       ctx.fillStyle = PAPER;
@@ -918,10 +939,10 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
   if (r.mode === "challenge") {
     const tg = TARGETS[r.ch.target];
     const sg = suggest(tg.yd);
-    const bw = compact ? Math.min(w - 2 * pad, 300) : 380;
+    const bw = stack ? Math.min(w - 2 * pad, 380) : compact ? Math.min(w - 2 * pad, 300) : 380;
     const x = w / 2 - bw / 2;
-    panel(ctx, x, pad, bw, compact ? 44 : 52);
-    mono(ctx, compact ? 9 : 10);
+    panel(ctx, x, pad, bw, statusH);
+    mono(ctx, 10);
     ctx.fillStyle = MINT;
     ctx.fillText(r.ch.done ? "ROUND OVER" : `SHOT ${Math.min(SHOTS_PER_ROUND, r.ch.n + 1)} OF ${SHOTS_PER_ROUND}`, x + 12, pad + 17);
     ctx.fillStyle = PAPER;
@@ -932,22 +953,25 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
       display(ctx, compact ? 15 : 18, 800);
       ctx.fillStyle = PAPER;
       ctx.fillText(`TARGET ${tg.yd} YD`, x + 12, pad + (compact ? 36 : 42));
-      mono(ctx, compact ? 8 : 9);
+      const tw0 = ctx.measureText(`TARGET ${tg.yd} YD`).width;
+      mono(ctx, 10);
       ctx.fillStyle = DIM;
       ctx.textAlign = "right";
-      ctx.fillText(`TRY ${CLUBS[sg.club].short} · ${Math.round(sg.power * 100)}% SWING`, x + bw - 12, pad + (compact ? 36 : 41));
+      ctx.fillText(fitText(ctx, [`TRY ${CLUBS[sg.club].short} · ${Math.round(sg.power * 100)}% SWING`, `TRY ${CLUBS[sg.club].short} · ${Math.round(sg.power * 100)}%`], bw - 36 - tw0), x + bw - 12, pad + (compact ? 36 : 41));
       ctx.textAlign = "left";
     }
     if (r.ch.last && !r.ch.done && r.phase !== "back" && r.phase !== "down" && r.phase !== "fly") {
-      mono(ctx, compact ? 9 : 10);
-      const lw = ctx.measureText(r.ch.last).width + 20;
-      const lx = w / 2 - lw / 2, ly = pad + (compact ? 52 : 60);
+      mono(ctx, 10);
+      const parts = r.ch.last.split(" · ");
+      const last = fitText(ctx, [r.ch.last, `${parts[0]} · ${parts[parts.length - 1]}`, parts[parts.length - 1]], w - 2 * pad - 20);
+      const lw = ctx.measureText(last).width + 20;
+      const lx = w / 2 - lw / 2, ly = stack ? slot1 : pad + (compact ? 52 : 60);
       ctx.fillStyle = "rgba(13,16,14,0.82)";
       ctx.beginPath();
       ctx.roundRect(lx, ly, lw, 22, 4);
       ctx.fill();
       ctx.fillStyle = PAPER;
-      ctx.fillText(r.ch.last, lx + 10, ly + 15);
+      ctx.fillText(last, lx + 10, ly + 15);
     }
   }
 
@@ -958,14 +982,14 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
     const along = r.wind.x * Math.sin(r.yaw) + r.wind.z * Math.cos(r.yaw);
     const across = r.wind.x * Math.cos(r.yaw) - r.wind.z * Math.sin(r.yaw);
     const mph = Math.round(Math.hypot(r.wind.x, r.wind.z) * 2.237);
-    panel(ctx, wx, pad, 112, 40);
-    mono(ctx, 9);
+    panel(ctx, wx, topY, 112, 40);
+    mono(ctx, 10);
     ctx.fillStyle = DIM;
-    ctx.fillText("WIND", wx + 10, pad + 15);
+    ctx.fillText("WIND", wx + 10, topY + 15);
     ctx.fillStyle = PAPER;
-    ctx.fillText(`${mph} MPH`, wx + 10, pad + 31);
+    ctx.fillText(`${mph} MPH`, wx + 10, topY + 31);
     // arrow: where the wind is blowing, relative to the aim (up = downrange)
-    const ax = wx + 84, ay = pad + 20;
+    const ax = wx + 88, ay = topY + 20;
     const ang = Math.atan2(across, along); // 0 = tailwind (blows downrange = up on the screen)
     ctx.save();
     ctx.translate(ax, ay);
@@ -984,8 +1008,9 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
     ctx.fill();
     ctx.restore();
   }
-  if (!compact) {
-    const mx = w - pad - mw, my = pad + 48;
+  // the map goes only where it clears the swing gauge
+  if (!compact && topY + 48 + mh <= gy - 8) {
+    const mx = w - pad - mw, my = topY + 48;
     panel(ctx, mx, my, mw, mh);
     const ox = mx + mw / 2, oy = my + mh - 14;
     const sy = (mh - 30) / 300, sx = (mw - 16) / 100;
@@ -1008,7 +1033,7 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
         ctx.stroke();
       }
     });
-    mono(ctx, 8);
+    mono(ctx, 10);
     ctx.fillStyle = DIM;
     for (const yd of [100, 200, 300]) ctx.fillText(String(yd), mx + 5, oy - yd * sy + 3);
     // aim line
@@ -1031,19 +1056,20 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
 
   // ---- bottom: club, swing gauge, prompt
   const s = r.sw;
-  const gw = Math.min(compact ? w - 2 * pad : 470, w - 2 * pad);
   const gx = w / 2 - gw / 2;
-  const gh = 58;
-  const gy = h - gh - (compact ? 8 : 14);
   panel(ctx, gx, gy, gw, gh);
   // left: club
-  mono(ctx, compact ? 9 : 10);
+  mono(ctx, 10);
   ctx.fillStyle = MINT;
-  ctx.fillText(club.name.toUpperCase(), gx + 12, gy + 18);
+  const clubName = club.name.toUpperCase();
+  const fullTxt = `${Math.round(fullCarry(r.club))} YD FULL`;
+  ctx.fillText(clubName, gx + 12, gy + 18);
   ctx.fillStyle = DIM;
-  ctx.fillText(`${Math.round(fullCarry(r.club))} YD FULL`, gx + 12, gy + 34);
+  ctx.fillText(fullTxt, gx + 12, gy + 34);
   // bar
-  const bx = gx + (compact ? 118 : 150), bw2 = gw - (compact ? 130 : 164), by = gy + 26;
+  const labelW = Math.max(ctx.measureText(clubName).width, ctx.measureText(fullTxt).width);
+  const bOff = Math.max(compact ? 118 : 150, 12 + labelW + 16);
+  const bx = gx + bOff, bw2 = gw - bOff - 12, by = gy + 26;
   const active = r.phase === "back" || r.phase === "down";
   const bcur = active ? s.b : 0;
   const maxB = 1.15;
@@ -1063,7 +1089,7 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
   }
   ctx.fillStyle = PAPER;
   ctx.fillRect(full - 1, by - 3, 2, 16);
-  mono(ctx, 8);
+  mono(ctx, 10);
   ctx.fillStyle = DIM;
   ctx.fillText("POWER", bx, by - 6);
   ctx.textAlign = "right";
@@ -1071,22 +1097,24 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
   ctx.textAlign = "left";
 
   // prompt above the gauge
-  let msg = "";
-  if (r.mode === "challenge" && r.ch.done) msg = `ROUND OVER · ${r.ch.score} POINTS · CLICK OR PRESS SPACE TO PLAY AGAIN`;
-  else if (r.phase === "ready" || (r.phase === "rest" && r.restT > 0.9)) msg = compact ? "DRAG DOWN, THEN SWING UP" : "DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL · OR PRESS SPACE THREE TIMES";
-  else if (r.phase === "back") msg = s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP";
-  else if (r.phase === "down") msg = s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP";
-  if (msg) {
-    mono(ctx, compact ? 8 : 10);
+  mono(ctx, 10);
+  const room = w - 2 * pad - 20;
+  let msgs: string[] = [];
+  if (r.mode === "challenge" && r.ch.done) msgs = [`ROUND OVER · ${r.ch.score} POINTS · CLICK OR PRESS SPACE TO PLAY AGAIN`, `ROUND OVER · ${r.ch.score} POINTS · TAP TO PLAY AGAIN`, "TAP TO PLAY AGAIN"];
+  else if (r.phase === "ready" || (r.phase === "rest" && r.restT > 0.9)) msgs = ["DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL · OR PRESS SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"];
+  else if (r.phase === "back") msgs = [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"];
+  else if (r.phase === "down") msgs = [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
+  if (msgs.length) {
+    const msg = fitText(ctx, msgs, room);
     const tw = ctx.measureText(msg).width + 20;
-    const mx2 = w / 2 - Math.min(tw, w - 2 * pad) / 2;
+    const mx2 = w / 2 - tw / 2;
     ctx.fillStyle = "rgba(13,16,14,0.7)";
     ctx.beginPath();
-    ctx.roundRect(mx2, gy - 28, Math.min(tw, w - 2 * pad), 22, 4);
+    ctx.roundRect(mx2, slot0, tw, 22, 4);
     ctx.fill();
     ctx.fillStyle = PAPER;
     ctx.textAlign = "center";
-    ctx.fillText(msg, w / 2, gy - 13, w - 2 * pad - 16);
+    ctx.fillText(msg, w / 2, slot0 + 15);
     ctx.textAlign = "left";
   }
 
@@ -1146,23 +1174,25 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
 
   // aim hint, first moments
   if (r.phase === "ready" && t < 10 && r.mode === "practice") {
-    mono(ctx, compact ? 8 : 9);
-    ctx.fillStyle = "rgba(13,16,14,0.7)";
+    mono(ctx, 10);
     const hint = compact ? "TAP A GREEN TO AIM" : "TAP A GREEN OR USE ← → TO AIM · ↑ ↓ TO CHANGE CLUB";
     const hw = ctx.measureText(hint).width + 20;
+    // top centre when the columns leave room for it, else down by the prompt
+    const hy = hw <= midRoom ? h * 0.07 : slot1;
+    ctx.fillStyle = "rgba(13,16,14,0.7)";
     ctx.beginPath();
-    ctx.roundRect(w / 2 - hw / 2, h * 0.07, hw, 22, 4);
+    ctx.roundRect(w / 2 - hw / 2, hy, hw, 22, 4);
     ctx.fill();
     ctx.fillStyle = PAPER;
     ctx.textAlign = "center";
-    ctx.fillText(hint, w / 2, h * 0.07 + 15);
+    ctx.fillText(hint, w / 2, hy + 15);
     ctx.textAlign = "left";
   }
 
   // round over
   if (r.mode === "challenge" && r.ch.done) {
     const bw = Math.min(360, w - 2 * pad), bh = 180;
-    const x = w / 2 - bw / 2, y = h * 0.3;
+    const x = w / 2 - bw / 2, y = Math.max(h * 0.3, topY + 8);
     panel(ctx, x, y, bw, bh);
     mono(ctx, 10);
     ctx.fillStyle = MINT;

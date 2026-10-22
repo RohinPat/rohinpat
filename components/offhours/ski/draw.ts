@@ -9,6 +9,13 @@ const FAR = 300;
 const START_Z = 14;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/** a touch screen: no keyboard to press Enter on, so the copy says "tap" */
+let coarseMq: MediaQueryList | null = null;
+export function coarse() {
+  if (!coarseMq && typeof window !== "undefined") coarseMq = window.matchMedia("(pointer: coarse), (hover: none)");
+  return !!coarseMq?.matches;
+}
+
 type Obj = { z: number; k: number; i: number };
 const K_TREE = 0, K_GATE = 1, K_ARCH = 2, K_FAN = 3, K_SIGN = 4, K_SKIER = 5;
 
@@ -46,6 +53,7 @@ export function render(ctx: CanvasRenderingContext2D, w: number, h: number, g: G
   const T = C.terrain;
   const s = g.run;
   const cam = g.cam;
+  g.startTop = Infinity;
 
   // ---- camera: the skier sits low on the screen, the camera behind and above
   let f = Math.max(Math.min(1.2 * h, 0.95 * w), w * 0.5);
@@ -319,6 +327,7 @@ export function render(ctx: CanvasRenderingContext2D, w: number, h: number, g: G
         ctx.fillRect(b0.x, topY, b1.x - b0.x, botY - topY);
         ctx.fillStyle = "#8ad9a8";
         ctx.fillRect(b0.x, botY - 0.1 * sc, b1.x - b0.x, 0.1 * sc);
+        g.startTop = topY;
         ctx.fillStyle = "#f2ead7";
         display(ctx, Math.max(8, (botY - topY) * 0.7), 800);
         ctx.textAlign = "center";
@@ -591,6 +600,13 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 const TONE = { good: "#8ad9a8", bad: "#ff8a78", info: "#f2ead7", trick: "#ffd36a" };
 
+type HudBox = { cardL: number; cardR: number; labelBottom: number; boxBottom: number };
+
+/** `short` when `text` won't fit `max` px in the current font */
+function fit(ctx: CanvasRenderingContext2D, text: string, short: string, max: number) {
+  return ctx.measureText(text).width <= max ? text : short;
+}
+
 function hud(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, play: boolean, hz: number) {
   const s = g.run;
   const u = Math.max(0.62, Math.min(1.15, Math.min(w / 980, h / 640)));
@@ -614,99 +630,146 @@ function hud(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, play:
     return;
   }
 
+  // Phones: the layout scales with u, but small text never drops under 10 px
+  // and box widths follow their text instead of a fixed multiple of u.
+  const compact = w < 520;
+  const sm = (px: number) => Math.max(10, px * u);
+  const ip = Math.max(9, 14 * u);
   const live = g.phase === "run" || g.phase === "finish" || g.phase === "result";
-  // clock
-  ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(13,16,14,0.5)";
-  rr(ctx, pad, pad, 190 * u, 82 * u, 12 * u);
-  ctx.fill();
-  ctx.fillStyle = "#f2ead7";
+  const ready = g.phase === "ready";
+  const resultUp = g.phase === "result" || (g.phase === "finish" && g.phaseT > 0.6);
+  // on a phone the start and result cards need the room the clock and speedo
+  // take (it reads 0:00.0 on one and repeats itself on the other)
+  const hudA = compact ? (ready || g.phase === "result" ? 0 : g.phase === "finish" ? 1 - clamp01((g.phaseT - 0.6) / 0.4) : 1) : 1;
+
+  // widths that follow the text
   display(ctx, 46 * u, 800);
-  ctx.fillText(fmt(live ? total : 0), pad + 14 * u, pad + 47 * u);
-  mono(ctx, 10 * u);
-  if (s.pen > 0) {
-    ctx.fillStyle = "#ff8a78";
-    ctx.fillText(`+${s.pen.toFixed(1)} S PENALTY`, pad + 14 * u, pad + 68 * u);
-  } else {
-    ctx.fillStyle = "#b5b6ab";
-    ctx.fillText(s.finished ? "CLEAN RUN" : "CLEAN SO FAR", pad + 14 * u, pad + 68 * u);
-  }
-  if (g.pace !== null && live) {
-    const good = g.pace <= 0;
-    ctx.fillStyle = "rgba(13,16,14,0.5)";
-    rr(ctx, pad, pad + 90 * u, 190 * u, 34 * u, 10 * u);
-    ctx.fill();
+  const timeW = ctx.measureText("0:00.0").width;
+  const kmhNumW = ctx.measureText("888").width;
+  mono(ctx, sm(10));
+  const penW = ctx.measureText("+0.0 S PENALTY").width;
+  const kmhW = ctx.measureText("KM/H").width;
+  const cbw = Math.max(190 * u, 2 * ip + Math.max(timeW, penW));
+  const sbw = Math.max(150 * u, 2 * ip + kmhNumW + 6 + kmhW);
+  const sbx = w - pad - sbw;
+  const boxBottom = pad + 82 * u;
+  const pipY = pad + 8 * u;
+  const labelY = pipY + Math.max(30 * u, 12 * u + 13);
+  const labelBottom = labelY + 4;
+  let paceBottom = boxBottom;
+
+  if (hudA > 0) {
+    ctx.globalAlpha = hudA;
+    // clock
     ctx.textAlign = "left";
-    ctx.fillStyle = good ? "#8ad9a8" : "#ff8a78";
-    display(ctx, 24 * u, 800);
-    ctx.globalAlpha = 0.6 + 0.4 * clamp01(1.5 - g.paceAge);
-    ctx.fillText(`${good ? "−" : "+"}${Math.abs(g.pace).toFixed(2)}`, pad + 14 * u, pad + 114 * u);
-    ctx.globalAlpha = 1;
-    mono(ctx, 9 * u);
-    ctx.fillStyle = "#b5b6ab";
-    ctx.fillText("VS GOLD PACE", pad + 86 * u, pad + 111 * u);
-  }
-
-  // gate pips along the top
-  {
-    const pw = Math.min(w - 2 * pad - 400 * u, gates.length * 11 * u);
-    const gap = pw / gates.length;
-    const x0 = w / 2 - pw / 2 + 60 * u;
-    const y0 = pad + 8 * u;
-    gates.forEach((_, i) => {
-      const done = i < s.next;
-      ctx.fillStyle = done ? (s.gateOk[i] ? "#8ad9a8" : "#ff6a58") : i === s.next ? "#f2ead7" : "rgba(242,234,215,0.28)";
-      const hh = i === s.next ? 12 * u : 8 * u;
-      ctx.fillRect(x0 + i * gap, y0 + (12 * u - hh), Math.max(2, gap - 3 * u), hh);
-    });
-    ctx.textAlign = "center";
-    mono(ctx, 9 * u);
-    ctx.fillStyle = "#cfd0c6";
-    ctx.fillText(`GATE ${Math.min(s.next + 1, gates.length)} OF ${gates.length}`, x0 + pw / 2, y0 + 30 * u);
-  }
-
-  // speed
-  {
-    const kmh = Math.round(s.v * 3.6);
-    ctx.textAlign = "right";
     ctx.fillStyle = "rgba(13,16,14,0.5)";
-    rr(ctx, w - pad - 150 * u, pad, 150 * u, 82 * u, 12 * u);
+    rr(ctx, pad, pad, cbw, 82 * u, 12 * u);
     ctx.fill();
     ctx.fillStyle = "#f2ead7";
     display(ctx, 46 * u, 800);
-    ctx.fillText(`${kmh}`, w - pad - 52 * u, pad + 47 * u);
-    mono(ctx, 10 * u);
-    ctx.fillStyle = "#b5b6ab";
-    ctx.textAlign = "left";
-    ctx.fillText("KM/H", w - pad - 46 * u, pad + 47 * u);
-    // a bar: fills with speed; the tip shows how hard the edges are working
-    const bx = w - pad - 136 * u;
-    const bw = 122 * u;
-    ctx.fillStyle = "rgba(242,234,215,0.16)";
-    ctx.fillRect(bx, pad + 62 * u, bw, 6 * u);
-    ctx.fillStyle = "#8ad9a8";
-    ctx.fillRect(bx, pad + 62 * u, bw * clamp01(s.v / 38), 6 * u);
-    const grip = clamp01(Math.abs(s.aLat) / 16);
-    ctx.fillStyle = s.skid > 0.15 ? "#ff6a58" : "rgba(242,234,215,0.9)";
-    ctx.fillRect(bx, pad + 71 * u, bw * grip, 3 * u);
-    ctx.textAlign = "right";
-    mono(ctx, 8 * u);
-    ctx.fillStyle = "#b5b6ab";
+    ctx.fillText(fmt(live ? total : 0), pad + ip, pad + 47 * u);
+    mono(ctx, sm(10));
+    if (s.pen > 0) {
+      ctx.fillStyle = "#ff8a78";
+      ctx.fillText(`+${s.pen.toFixed(1)} S PENALTY`, pad + ip, pad + 68 * u);
+    } else {
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText(s.finished ? "CLEAN RUN" : "CLEAN SO FAR", pad + ip, pad + 68 * u);
+    }
+    if (g.pace !== null && live) {
+      const good = g.pace <= 0;
+      const py = pad + 90 * u;
+      const ph = Math.max(34 * u, 26);
+      const pn = `${good ? "−" : "+"}${Math.abs(g.pace).toFixed(2)}`;
+      display(ctx, 24 * u, 800);
+      const pnw = ctx.measureText(pn).width;
+      mono(ctx, sm(9));
+      const label = compact ? "VS GOLD" : "VS GOLD PACE";
+      const plw = ctx.measureText(label).width;
+      const pw2 = Math.max(cbw, 2 * ip + pnw + 8 + plw);
+      ctx.fillStyle = "rgba(13,16,14,0.5)";
+      rr(ctx, pad, py, pw2, ph, 10 * u);
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillStyle = good ? "#8ad9a8" : "#ff8a78";
+      display(ctx, 24 * u, 800);
+      ctx.globalAlpha = hudA * (0.6 + 0.4 * clamp01(1.5 - g.paceAge));
+      ctx.fillText(pn, pad + ip, py + ph * 0.72);
+      ctx.globalAlpha = hudA;
+      mono(ctx, sm(9));
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText(label, pad + ip + pnw + 8, py + ph * 0.66);
+      paceBottom = py + ph;
+    }
+
+    // gate pips along the top, in the gap between the clock and the speedo
+    {
+      const gapL = pad + cbw + 8;
+      const gapR = sbx - 8;
+      const mid = compact ? (gapL + gapR) / 2 : w / 2;
+      const pw = Math.min(2 * Math.min(mid - gapL, gapR - mid), gates.length * 11 * u);
+      const gap = pw / gates.length;
+      const x0 = mid - pw / 2;
+      gates.forEach((_, i) => {
+        const done = i < s.next;
+        ctx.fillStyle = done ? (s.gateOk[i] ? "#8ad9a8" : "#ff6a58") : i === s.next ? "#f2ead7" : "rgba(242,234,215,0.28)";
+        const hh = i === s.next ? 12 * u : 8 * u;
+        ctx.fillRect(x0 + i * gap, pipY + (12 * u - hh), Math.max(2, gap - 3 * u), hh);
+      });
+      ctx.textAlign = "center";
+      mono(ctx, sm(9));
+      ctx.fillStyle = "#cfd0c6";
+      ctx.fillText(`GATE ${Math.min(s.next + 1, gates.length)} OF ${gates.length}`, mid, labelY);
+    }
+
+    // speed
+    {
+      const kmh = Math.round(s.v * 3.6);
+      const barH = Math.max(4, 6 * u);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(13,16,14,0.5)";
+      rr(ctx, sbx, pad, sbw, 82 * u, 12 * u);
+      ctx.fill();
+      ctx.fillStyle = "#f2ead7";
+      display(ctx, 46 * u, 800);
+      ctx.fillText(`${kmh}`, sbx + sbw - ip - kmhW - 6, pad + 47 * u);
+      mono(ctx, sm(10));
+      ctx.fillStyle = "#b5b6ab";
+      ctx.textAlign = "left";
+      ctx.fillText("KM/H", sbx + sbw - ip - kmhW, pad + 47 * u);
+      // a bar: fills with speed; the tip shows how hard the edges are working
+      const bx = sbx + ip;
+      const bw = sbw - 2 * ip;
+      ctx.fillStyle = "rgba(242,234,215,0.16)";
+      ctx.fillRect(bx, pad + 62 * u, bw, barH);
+      ctx.fillStyle = "#8ad9a8";
+      ctx.fillRect(bx, pad + 62 * u, bw * clamp01(s.v / 38), barH);
+      const grip = clamp01(Math.abs(s.aLat) / 16);
+      ctx.fillStyle = s.skid > 0.15 ? "#ff6a58" : "rgba(242,234,215,0.9)";
+      ctx.fillRect(bx, pad + 62 * u + barH + 2, bw * grip, 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
-  // toasts, centre
-  let ty = h * 0.2;
+  // toasts, centre: below the clock, the pace chip and the speedo
+  const tsz = (tone: string) => (tone === "trick" ? 66 : 44) * u;
+  let ty = Math.max(h * 0.2, (compact ? paceBottom : boxBottom) + (g.toasts.length ? 0.85 * tsz(g.toasts[0].tone) : 0) + 8);
   for (const tt of g.toasts) {
     const a = clamp01(Math.min(tt.age / 0.12, (tt.life - tt.age) / 0.35));
     ctx.globalAlpha = a;
     ctx.textAlign = "center";
     ctx.fillStyle = TONE[tt.tone];
-    display(ctx, (tt.tone === "trick" ? 66 : 44) * u, 800);
+    display(ctx, tsz(tt.tone), 800);
     ctx.fillText(tt.text, w / 2, ty - (1 - a) * 10);
     if (tt.sub) {
-      mono(ctx, 11 * u);
+      mono(ctx, sm(11));
       ctx.fillStyle = "#f2ead7";
-      ctx.fillText(tt.sub.toUpperCase(), w / 2, ty + 20 * u);
+      const sub = tt.sub.toUpperCase();
+      // the sky behind the toasts is bright: a soft shadow keeps the small line readable
+      ctx.shadowColor = "rgba(13,16,14,0.7)";
+      ctx.shadowBlur = 5;
+      ctx.fillText(fit(ctx, sub, sub.slice(0, 22), w - 16), w / 2, ty + Math.max(20 * u, 16));
+      ctx.shadowBlur = 0;
       ty += 24 * u;
     }
     ty += 52 * u;
@@ -737,14 +800,15 @@ function hud(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, play:
   if (live && g.hintAge < 9 && !s.finished) {
     ctx.globalAlpha = clamp01((9 - g.hintAge) / 1.5);
     ctx.textAlign = "center";
-    mono(ctx, 10.5 * u);
+    mono(ctx, sm(10.5));
     ctx.fillStyle = "rgba(13,16,14,0.55)";
-    const msg = "← → CARVE THROUGH THE GATES   ·   ↓ OR HOLD TO TUCK   ·   ← → IN THE AIR SPINS";
+    const msg = w > 640 && !coarse() ? "← → CARVE THROUGH THE GATES   ·   ↓ OR HOLD TO TUCK   ·   ← → IN THE AIR SPINS" : "DRAG TO CARVE  ·  GO BETWEEN THE POLES";
     const mw = Math.min(w - 24, ctx.measureText(msg).width + 28 * u);
-    rr(ctx, w / 2 - mw / 2, h - 42 * u, mw, 26 * u, 13 * u);
+    const hh = Math.max(26 * u, 24);
+    rr(ctx, w / 2 - mw / 2, h - 16 * u - hh, mw, hh, hh / 2);
     ctx.fill();
     ctx.fillStyle = "#f2ead7";
-    ctx.fillText(w > 640 ? msg : "DRAG TO CARVE  ·  GO BETWEEN THE POLES", w / 2, h - 24.5 * u);
+    ctx.fillText(msg, w / 2, h - 16 * u - hh / 2 + 4);
     ctx.globalAlpha = 1;
   }
 
@@ -756,7 +820,8 @@ function hud(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, play:
     ctx.fillText("GO", w / 2, h * 0.36);
     ctx.globalAlpha = 1;
   }
-  if (g.phase === "ready") readyCard(ctx, w, h, g, u);
+  const hb: HudBox = { cardL: pad + cbw + 6, cardR: sbx - 6, labelBottom, boxBottom };
+  if (ready) readyCard(ctx, w, h, g, u, compact, hb);
   else if (g.phase === "count") {
     const n = 3 - Math.floor(g.phaseT / 0.85);
     const frac = (g.phaseT % 0.85) / 0.85;
@@ -766,27 +831,51 @@ function hud(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, play:
     display(ctx, 170 * u * (1.15 - frac * 0.15), 800);
     ctx.fillText(String(Math.max(1, n)), w / 2, h * 0.36);
     ctx.globalAlpha = 1;
-  } else if (g.phase === "result" || (g.phase === "finish" && g.phaseT > 0.6)) resultCard(ctx, w, h, g, u);
+  } else if (resultUp) resultCard(ctx, w, h, g, u, compact, hb);
 }
 
-function readyCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, u: number) {
-  const cw = Math.min(w - 32, 560 * u);
-  const ch = 214 * u;
+function readyCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, u: number, compact: boolean, hb: HudBox) {
+  const sm = Math.max(10.5, 10.5 * u);
+  const cw = Math.min(w - 24, compact ? 360 : 560 * Math.max(u, 0.9));
   const x = w / 2 - cw / 2;
-  const y = w > 760 ? 56 * u : 124 * u;
+  // sit between the clock row and the start banner, never over either
+  const hudClear = x < hb.cardL || x + cw > hb.cardR ? hb.boxBottom : hb.labelBottom;
+  const top = compact ? 8 : hudClear + 8;
+  const bottom = Math.min(h - 8, (Number.isFinite(g.startTop) ? g.startTop : h * 0.5) - 10);
+  const T = compact ? 36 : Math.min(46, Math.max(30, 46 * u));
+  const rulesWide = `MISS A GATE: +${PENALTY.toFixed(1)} S   ·   TUCK ON THE STRAIGHTS   ·   DON'T SKID`;
+  mono(ctx, sm);
+  const oneLine = ctx.measureText(rulesWide).width <= cw - 32;
+  const rules = oneLine ? [rulesWide] : [`MISS A GATE: +${PENALTY.toFixed(1)} S`, "TUCK ON THE STRAIGHTS  ·  DON'T SKID"];
+  // drop the header line, then the rules, if the room above the banner is short
+  const dropHead = [false, true, true];
+  const dropRules = [false, false, true];
+  const heightFor = (k: number) => 14 + (dropHead[k] ? 0 : 20) + T * 0.95 + (dropRules[k] ? 0 : rules.length * 16 + 3) + 40 + 26;
+  let v = 0;
+  while (v < 2 && top + heightFor(v) > bottom) v++;
+  const ch = heightFor(v);
+  const y = Math.max(top, top + (bottom - top - ch) / 2);
   ctx.fillStyle = "rgba(13,16,14,0.74)";
-  rr(ctx, x, y, cw, ch, 16 * u);
+  rr(ctx, x, y, cw, ch, 16);
   ctx.fill();
   ctx.textAlign = "center";
-  ctx.fillStyle = "#8ad9a8";
-  mono(ctx, 10.5 * u);
-  ctx.fillText(`GIANT SLALOM  ·  ${g.C.gates.length} GATES  ·  1.4 KM`, w / 2, y + 28 * u);
+  let cur = y + 14;
+  if (!dropHead[v]) {
+    ctx.fillStyle = "#8ad9a8";
+    mono(ctx, sm);
+    ctx.fillText(`GIANT SLALOM  ·  ${g.C.gates.length} GATES  ·  1.4 KM`, w / 2, cur + 11);
+    cur += 20;
+  }
   ctx.fillStyle = "#f2ead7";
-  display(ctx, 54 * u, 800);
-  ctx.fillText("Go gate to gate.", w / 2, y + 82 * u);
-  mono(ctx, 10.5 * u);
-  ctx.fillStyle = "#cfd0c6";
-  ctx.fillText(`MISS A GATE: +${PENALTY.toFixed(1)} S   ·   TUCK ON THE STRAIGHTS   ·   DON'T SKID`, w / 2, y + 108 * u);
+  display(ctx, T, 800);
+  ctx.fillText("Go gate to gate.", w / 2, cur + T * 0.78);
+  cur += T * 0.95;
+  if (!dropRules[v]) {
+    mono(ctx, sm);
+    ctx.fillStyle = "#cfd0c6";
+    rules.forEach((line, i) => ctx.fillText(line, w / 2, cur + 11 + i * 16));
+    cur += rules.length * 16 + 3;
+  }
   // medal targets
   const p = g.par;
   const cols = [
@@ -795,36 +884,45 @@ function readyCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game,
     ["BRONZE", p.bronze, "#c98a5a"],
   ] as const;
   cols.forEach(([name, tm, col], i) => {
-    const cx = w / 2 + (i - 1) * (cw / 3.2);
+    const cx = x + (cw / 3) * (i + 0.5);
+    display(ctx, 22, 800);
+    const tw = ctx.measureText(fmt(tm)).width;
+    mono(ctx, sm);
+    const gw = 14 + 8 + Math.max(tw, ctx.measureText(name).width);
+    const gx = cx - gw / 2;
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.arc(cx - 40 * u, y + 141 * u, 7 * u, 0, Math.PI * 2);
+    ctx.arc(gx + 6, cur + 13, 6, 0, Math.PI * 2);
     ctx.fill();
     ctx.textAlign = "left";
     ctx.fillStyle = "#f2ead7";
-    display(ctx, 22 * u, 800);
-    ctx.fillText(fmt(tm), cx - 28 * u, y + 148 * u);
+    display(ctx, 22, 800);
+    ctx.fillText(fmt(tm), gx + 20, cur + 20);
     ctx.fillStyle = "#b5b6ab";
-    mono(ctx, 8 * u);
-    ctx.fillText(name, cx - 28 * u, y + 161 * u);
+    mono(ctx, sm);
+    ctx.fillText(name, gx + 20, cur + 33);
   });
+  cur += 40;
   ctx.textAlign = "center";
   ctx.fillStyle = "#f2ead7";
-  mono(ctx, 11 * u);
+  mono(ctx, Math.max(11, sm));
   const pulse = 0.65 + 0.35 * Math.sin(g.time * 4);
   ctx.globalAlpha = pulse;
-  ctx.fillText("PRESS ENTER, SPACE OR TAP TO DROP IN", w / 2, y + 192 * u);
+  ctx.fillText(coarse() ? "TAP TO DROP IN" : "PRESS ENTER, SPACE OR TAP TO DROP IN", w / 2, cur + 13);
   ctx.globalAlpha = 1;
 }
 
-function resultCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, u: number) {
+function resultCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, u0: number, compact: boolean, hb: HudBox) {
   const r = g.result;
   if (!r) return;
+  const u = compact ? 0.9 : u0;
+  const sm = Math.max(10.5, 10 * u);
   const a = clamp01((g.phase === "finish" ? g.phaseT - 0.6 : 1) / 0.4);
-  const cw = Math.min(w - 32, 540 * u);
+  const cw = Math.min(w - 24, 540 * u);
   const ch = 292 * u;
   const x = w / 2 - cw / 2;
-  const y = Math.max(8, h * 0.1);
+  const clear = compact ? 8 : (x < hb.cardL || x + cw > hb.cardR ? hb.boxBottom : hb.labelBottom) + 8;
+  const y = Math.max(clear, Math.min(h * 0.1, h - ch - 8));
   ctx.globalAlpha = a;
   ctx.fillStyle = "rgba(13,16,14,0.8)";
   rr(ctx, x, y, cw, ch, 16 * u);
@@ -844,15 +942,20 @@ function resultCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game
   display(ctx, 34 * u, 800);
   ctx.fillText(r.medal ? String(r.medal) : "–", x + 62 * u, y + 78 * u);
   ctx.textAlign = "left";
-  mono(ctx, 10 * u);
+  const tx = x + 112 * u;
+  const room = cw - 112 * u - 12;
+  mono(ctx, sm);
   ctx.fillStyle = "#8ad9a8";
-  ctx.fillText(r.medal ? `${MEDALS[r.medal].toUpperCase()} MEDAL${r.newBest ? "  ·  NEW BEST" : ""}` : `NO MEDAL YET${r.newBest ? "  ·  NEW BEST" : ""}`, x + 112 * u, y + 34 * u);
+  const best = r.newBest ? "  ·  NEW BEST" : "";
+  const head = r.medal ? `${MEDALS[r.medal].toUpperCase()} MEDAL${best}` : `NO MEDAL YET${best}`;
+  ctx.fillText(fit(ctx, head, head.replace("  ·  NEW BEST", " · NEW BEST"), room), tx, y + 34 * u);
   ctx.fillStyle = "#f2ead7";
   display(ctx, 62 * u, 800);
-  ctx.fillText(fmt(r.total), x + 112 * u, y + 88 * u);
-  mono(ctx, 10 * u);
+  ctx.fillText(fmt(r.total), tx, y + 88 * u);
+  mono(ctx, sm);
   ctx.fillStyle = "#b5b6ab";
-  ctx.fillText(`${fmt(r.raw)} ON THE CLOCK${r.pen ? `  +  ${r.pen.toFixed(1)} PENALTY` : ""}`, x + 112 * u, y + 110 * u);
+  const clock = `${fmt(r.raw)} ON THE CLOCK${r.pen ? `  +  ${r.pen.toFixed(1)} PENALTY` : ""}`;
+  ctx.fillText(fit(ctx, clock, `${fmt(r.raw)} + ${r.pen.toFixed(1)} PENALTY`, room), tx, y + 110 * u);
   // stats grid
   const stats: [string, string][] = [
     ["GATES", `${r.gates - r.missed}/${r.gates}`],
@@ -871,20 +974,20 @@ function resultCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game
     display(ctx, 22 * u, 800);
     ctx.fillText(v, sx, sy + 18 * u);
     ctx.fillStyle = "#b5b6ab";
-    mono(ctx, 8 * u);
+    mono(ctx, sm);
     ctx.fillText(k, sx, sy + 32 * u);
   });
   // next target
   const p = g.par;
   const nextT = r.medal === 0 ? ["bronze", p.bronze] : r.medal === 3 ? ["silver", p.silver] : r.medal === 2 ? ["gold", p.gold] : null;
   ctx.textAlign = "center";
-  mono(ctx, 10 * u);
+  mono(ctx, sm);
   ctx.fillStyle = "#cfd0c6";
-  if (nextT) ctx.fillText(`${(nextT[0] as string).toUpperCase()} IS ${fmt(nextT[1] as number)}`, w / 2, y + ch - 36 * u);
-  else ctx.fillText(r.tricks ? "GOLD. CAN YOU SHAVE ANOTHER SECOND?" : "GOLD. NOW TRY A 360 OFF THE JUMP.", w / 2, y + ch - 36 * u);
+  const nextMsg = nextT ? `${(nextT[0] as string).toUpperCase()} IS ${fmt(nextT[1] as number)}` : r.tricks ? "GOLD. CAN YOU SHAVE ANOTHER SECOND?" : "GOLD. NOW TRY A 360 OFF THE JUMP.";
+  ctx.fillText(fit(ctx, nextMsg, nextMsg.replace("CAN YOU ", "").replace("NOW ", ""), cw - 24), w / 2, y + ch - 36 * u);
   ctx.fillStyle = "#f2ead7";
   ctx.globalAlpha = a * (0.65 + 0.35 * Math.sin(g.time * 4));
-  mono(ctx, 11 * u);
-  ctx.fillText("PRESS ENTER OR TAP TO RUN IT AGAIN", w / 2, y + ch - 14 * u);
+  mono(ctx, Math.max(11, sm));
+  ctx.fillText(coarse() ? "TAP TO RUN IT AGAIN" : "PRESS ENTER OR TAP TO RUN IT AGAIN", w / 2, y + ch - 14 * u);
   ctx.globalAlpha = 1;
 }
