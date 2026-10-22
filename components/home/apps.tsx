@@ -27,7 +27,6 @@ export const GRID: App[] = [
   { id: "colophon", name: "Colophon", href: "/colophon", tile: CREAM, ink: INK, land: CREAM, glyph: "braces" },
   { id: "github", name: "GitHub", href: site.github, external: true, tile: INK, ink: CREAM, glyph: "branch" },
   { id: "linkedin", name: "LinkedIn", href: site.linkedin, external: true, tile: GREEN, ink: CREAM, glyph: "badge" },
-  { id: "privacy", name: "Privacy", href: "/privacy", tile: CREAM, ink: GREEN, land: CREAM, glyph: "shield" },
 ];
 
 export const DOCK: App[] = [
@@ -37,7 +36,13 @@ export const DOCK: App[] = [
   { id: "mail", name: "Mail", href: `mailto:${site.email}`, external: true, tile: CREAM, ink: GREEN, glyph: "envelope" },
 ];
 
-export const ALL_APPS = [...DOCK, ...GRID];
+// reachable from Search (and every page's footer), but not worth a lone fifth
+// icon on its own row of the home screen
+const SEARCH_ONLY: App[] = [
+  { id: "privacy", name: "Privacy", href: "/privacy", tile: CREAM, ink: GREEN, land: CREAM, glyph: "shield" },
+];
+
+export const ALL_APPS = [...DOCK, ...GRID, ...SEARCH_ONLY];
 
 // 24×24 line glyphs, drawn to sit together like a single icon set.
 export const GLYPHS = {

@@ -68,10 +68,10 @@ function MadeIndex({ entries }: { entries: Entry[] }) {
             id={e.slug}
             className="group relative scroll-mt-24 grid grid-cols-12 gap-x-4 gap-y-3 py-8 md:py-10 border-b border-[var(--border-strong)]"
           >
-            <span className="col-span-2 md:col-span-1 font-mono text-xs muted pt-3 md:pt-5 tabular-nums">
+            <span className="col-span-12 md:col-span-1 -mb-2 md:mb-0 font-mono text-xs muted md:pt-5 tabular-nums">
               {pad(i + 1)}
             </span>
-            <h3 className="col-span-10 md:col-span-7 display" style={{ fontSize: "clamp(2.75rem, 7vw, 6rem)" }}>
+            <h3 className="col-span-12 md:col-span-7 display" style={{ fontSize: "clamp(2.75rem, 7vw, 6rem)" }}>
               {e.caseStudy ? (
                 <Link href={e.caseStudy} className="hover:text-[var(--accent-text)] transition-colors">
                   {e.title}
@@ -80,11 +80,11 @@ function MadeIndex({ entries }: { entries: Entry[] }) {
                 e.title
               )}
             </h3>
-            <p className="col-span-10 col-start-3 md:col-span-4 md:col-start-auto md:pt-5 md:text-right font-mono text-xs uppercase tracking-wider muted">
+            <p className="col-span-12 md:col-span-4 md:pt-5 md:text-right font-mono text-xs uppercase tracking-wider muted">
               {e.year}
               <span className="block mt-1">{e.tags.join(" · ")}</span>
             </p>
-            <div className="col-span-10 col-start-3 md:col-span-7 md:col-start-2">
+            <div className="col-span-12 md:col-span-7 md:col-start-2">
               <p className="leading-relaxed max-w-[52ch] text-pretty">{e.line}</p>
               <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs uppercase tracking-wider">
                 {e.caseStudy && (
@@ -120,13 +120,13 @@ function WorkedAt({ entries }: { entries: Entry[] }) {
             <li
               key={e.slug}
               id={e.slug}
-              className={`${styleFor(i)} scroll-mt-24 min-h-[320px] md:min-h-[400px] p-6 flex flex-col`}
+              className={`${styleFor(i)} scroll-mt-24 md:min-h-[400px] p-6 flex flex-col`}
             >
               <p className="font-mono text-[11px] uppercase tracking-[0.18em]">
                 {current ? `${e.year} now` : e.year}
               </p>
-              <div className="flex-1 grid place-items-center py-6">
-                <Motif slug={e.slug} className="w-[130px] h-auto" />
+              <div className="flex-1 grid place-items-center py-8 md:py-6">
+                <Motif slug={e.slug} className="w-[96px] md:w-[130px] h-auto" />
               </div>
               <h3 className="display" style={{ fontSize: "clamp(2.4rem, 4vw, 3.3rem)", lineHeight: 0.9 }}>
                 {e.title}

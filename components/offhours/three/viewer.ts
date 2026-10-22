@@ -15,7 +15,10 @@ export type Part = { id: string; label: string; note: string; movers: Mover[]; a
 export type Model = {
   root: THREE.Object3D;
   parts: Part[];
-  view: { position: [number, number, number]; target: [number, number, number]; fov?: number; previewScale?: number; near?: number; far?: number; minDistance?: number; maxDistance?: number };
+  view: { position: [number, number, number]; target: [number, number, number]; fov?: number; previewScale?: number; near?: number; far?: number; minDistance?: number; maxDistance?: number;
+    /** pull the camera back, as far as it takes, to fit the whole model (assembled and exploded) to the viewport's aspect, e.g. a portrait phone */
+    fit?: boolean;
+  };
   background: string;
   floorY: number;
   shadowSize: number;
@@ -211,6 +214,43 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
   let want = 0;
   let cur = 0;
   let zoomApplied = 1;
+  // fit: how far back the camera must stand so the model's bounding box (as
+  // built, and fully exploded) is inside the frustum at the viewport's aspect.
+  // It only ever adds distance to the model's own framing, so landscape stays
+  // as authored and a portrait phone gets the whole board.
+  const baseDist = startOffset.length();
+  const fitCorners: [THREE.Vector3[], THREE.Vector3[]] = [[], []];
+  const fitDist: [number, number] = [0, 0];
+  if (model.view.fit) {
+    const corners = (box: THREE.Box3, about: THREE.Vector3) => {
+      const out: THREE.Vector3[] = [];
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) out.push(new THREE.Vector3(x, y, z).sub(about));
+      return out;
+    };
+    fitCorners[0] = corners(new THREE.Box3().setFromObject(model.root), target);
+    const count = model.parts.length;
+    model.parts.forEach((p, i) => {
+      const e = model.ease ? model.ease(1, i, count) : 1;
+      for (const m of p.movers) {
+        m.obj.position.copy(m.home!).addScaledVector(m.dir, e);
+        if (m.late) m.obj.position.addScaledVector(m.late, 1);
+      }
+    });
+    fitCorners[1] = corners(new THREE.Box3().setFromObject(model.root), target.clone().add(new THREE.Vector3(...(model.explodeLift ?? [0, 0, 0]))));
+    for (const p of model.parts) for (const m of p.movers) m.obj.position.copy(m.home!);
+  }
+  const fitFor = (aspect: number) => {
+    const dir = startOffset.clone().normalize();
+    const right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, dir.clone().negate()).normalize();
+    const th = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const tw = th * aspect;
+    fitCorners.forEach((cs, k) => {
+      let d = 0;
+      for (const c of cs) d = Math.max(d, c.dot(dir) + Math.abs(c.dot(right)) / tw, c.dot(dir) + Math.abs(c.dot(up)) / th);
+      fitDist[k] = d * 1.08;
+    });
+  };
   const liftApplied = new THREE.Vector3();
   // solo: other parts swap to a ghost material
   const ghost = new THREE.MeshBasicMaterial({ color: 0xcfc8b8, transparent: true, opacity: 0.07, depthWrite: false });
@@ -246,6 +286,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    if (model.view.fit) fitFor(camera.aspect);
   };
   resize();
   const ro = new ResizeObserver(resize);
@@ -292,7 +333,8 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
       }
     }
     // ease the camera back as the model comes apart
-    const zf = 1 + ((model.explodeZoom ?? 1) - 1) * cur;
+    let zf = 1 + ((model.explodeZoom ?? 1) - 1) * cur;
+    if (model.view.fit) zf = Math.max(zf, (fitDist[0] + (fitDist[1] - fitDist[0]) * cur) / baseDist);
     if (Math.abs(zf - zoomApplied) > 1e-4) {
       const off = camera.position.clone().sub(controls ? controls.target : target);
       camera.position.copy((controls ? controls.target : target).clone().add(off.multiplyScalar(zf / zoomApplied)));

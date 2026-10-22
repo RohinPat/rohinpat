@@ -14,7 +14,7 @@ import { display, mono } from "./font";
 
 type Algo = "you" | "bfs" | "dfs" | "astar" | "wall" | "q";
 const ALGOS: { id: Algo; name: string; note: string }[] = [
-  { id: "you", name: "You", note: "Arrows or WASD" },
+  { id: "you", name: "You", note: "Arrows, WASD, or drag" },
   { id: "bfs", name: "BFS", note: "Breadth-first: shortest path, explores everything" },
   { id: "dfs", name: "DFS", note: "Depth-first: dives in, backtracks" },
   { id: "astar", name: "A*", note: "Heuristic search: heads for the exit" },
@@ -205,6 +205,8 @@ type Run = {
   doneAt: number;
   result: string;
   keys: Set<string>;
+  /** touch: drag from where you pressed, up walks, sideways turns */
+  stick: { x0: number; y0: number; x: number; y: number } | null;
   flash: number;
 };
 
@@ -227,6 +229,7 @@ function newRun(maze: Maze, algo: Algo, t: number): Run {
     doneAt: 0,
     result: "",
     keys: new Set(),
+    stick: null,
     flash: 0,
   };
 }
@@ -271,6 +274,19 @@ export default function Maze({ mode, paused }: PieceProps) {
       const mx = side ? vw : 0;
       const my = side ? 0 : vh;
       drawMap(ctx, R, mx, my, w - mx, h - my, play && side);
+      if (R.stick) {
+        const { x0, y0, x, y } = R.stick;
+        const dx = x - x0, dy = y - y0, d = Math.hypot(dx, dy), k = d > 56 ? 56 / d : 1;
+        ctx.strokeStyle = "rgba(207,238,221,0.5)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x0, y0, 56, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(207,238,221,0.8)";
+        ctx.beginPath();
+        ctx.arc(x0 + dx * k, y0 + dy * k, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // a finished run: report, then (preview) move on
       if (R.phase === "done" && !R.result) {
@@ -302,6 +318,17 @@ export default function Maze({ mode, paused }: PieceProps) {
         if (down) R.keys.add(k);
         else R.keys.delete(k);
         return true;
+      },
+      onDown: (p) => {
+        const R = run.current;
+        if (R?.algo === "you") R.stick = { x0: p.x, y0: p.y, x: p.x, y: p.y };
+      },
+      onMove: (p) => {
+        const R = run.current;
+        if (R?.stick && p.down) Object.assign(R.stick, { x: p.x, y: p.y });
+      },
+      onUp: () => {
+        if (run.current) run.current.stick = null;
       },
     },
   );
@@ -364,8 +391,14 @@ export default function Maze({ mode, paused }: PieceProps) {
       }
       walk(R, dt, t);
     } else if (R.phase === "manual") {
-      const turn = (R.keys.has("arrowleft") || R.keys.has("a") ? -1 : 0) + (R.keys.has("arrowright") || R.keys.has("d") ? 1 : 0);
-      const fwd = (R.keys.has("arrowup") || R.keys.has("w") ? 1 : 0) - (R.keys.has("arrowdown") || R.keys.has("s") ? 1 : 0);
+      let turn = (R.keys.has("arrowleft") || R.keys.has("a") ? -1 : 0) + (R.keys.has("arrowright") || R.keys.has("d") ? 1 : 0);
+      let fwd = (R.keys.has("arrowup") || R.keys.has("w") ? 1 : 0) - (R.keys.has("arrowdown") || R.keys.has("s") ? 1 : 0);
+      if (R.stick) {
+        // a small dead zone, full speed at 56px
+        const ax = (v: number) => (Math.abs(v) < 8 ? 0 : Math.max(-1, Math.min(1, v / 56)));
+        turn += ax(R.stick.x - R.stick.x0);
+        fwd += ax(R.stick.y0 - R.stick.y);
+      }
       R.cam.a += turn * 2.6 * dt;
       const sp = fwd * 2.6 * dt;
       const nx = R.cam.x + Math.cos(R.cam.a) * sp;
@@ -643,7 +676,7 @@ export default function Maze({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 flex flex-col bg-[#0d100e]">
       {play && (
-        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-2">
+        <div className="chip-row flex items-center gap-2 px-3 pt-3 pb-2 overflow-x-auto sm:flex-wrap">
           {ALGOS.map((a) => (
             <button
               key={a.id}
@@ -651,7 +684,7 @@ export default function Maze({ mode, paused }: PieceProps) {
               onClick={() => pick(a.id)}
               aria-pressed={algo === a.id}
               title={a.note}
-              className={`h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors ${
+              className={`shrink-0 whitespace-nowrap h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors ${
                 algo === a.id ? "bg-[#cfeedd] text-[#0d100e] border-transparent" : "border-white/15 text-[#cfeedd] hover:bg-white/10"
               }`}
             >
@@ -661,7 +694,7 @@ export default function Maze({ mode, paused }: PieceProps) {
           <button
             type="button"
             onClick={() => fresh(algo, tick.current, true)}
-            className="h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] bg-[#1d5e3f] text-[#f2ead7] ml-auto"
+            className="shrink-0 h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] bg-[#1d5e3f] text-[#f2ead7] ml-auto whitespace-nowrap"
           >
             New maze
           </button>
@@ -675,8 +708,8 @@ export default function Maze({ mode, paused }: PieceProps) {
           ref={ref}
           data-autofocus={play || undefined}
           role={play ? "img" : undefined}
-          aria-label={play ? "A first-person maze in 1-bit, with the map beside it. When You is selected, arrow keys or WASD walk." : undefined}
-          className="absolute inset-0 w-full h-full outline-none"
+          aria-label={play ? "A first-person maze in 1-bit, with the map beside it. When You is selected, arrow keys or WASD walk, or drag on the maze." : undefined}
+          className="absolute inset-0 w-full h-full outline-none touch-none"
         />
       </div>
     </div>

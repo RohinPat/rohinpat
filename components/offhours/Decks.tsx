@@ -252,8 +252,11 @@ export default function Decks({ mode, paused }: PieceProps) {
       // draw: plinth + platter
       ctx.fillStyle = "#16181a";
       ctx.fillRect(0, 0, w, h);
-      const r = Math.min(w * 0.42, h * 0.44);
-      const cx = Math.min(w / 2, r + 24), cy = h / 2;
+      // the status label has its own strip along the bottom, clear of the record
+      const strip = play ? 30 : 24;
+      const r = Math.min(w * 0.42, (h - strip) * 0.44);
+      // played, the record and its tonearm sit centred; in a tile the record hugs the left, the pads take the right
+      const cx = play ? w / 2 - r * 0.08 : Math.min(w / 2, r + 24), cy = (h - strip) / 2;
       box.current = { cx, cy, r };
       // strobe dots on the platter rim
       ctx.fillStyle = "#2a2d30";
@@ -404,7 +407,7 @@ export default function Decks({ mode, paused }: PieceProps) {
   const Cell = play ? "button" : "span";
   return (
     <div className="absolute inset-0 flex flex-col md:flex-row bg-[#16181a] text-[#f2ead7]">
-      <div className="relative flex-1 min-h-[45%] md:min-h-0">
+      <div className="relative flex-1 min-h-[30%] md:min-h-0">
         <canvas
           ref={ref}
           data-autofocus={play || undefined}
@@ -413,7 +416,7 @@ export default function Decks({ mode, paused }: PieceProps) {
           className="absolute inset-0 w-full h-full outline-none touch-none"
         />
       </div>
-      <div className={`flex flex-col justify-center gap-3 ${play ? "p-4 md:p-6 md:w-[52%]" : "p-3 w-[50%]"}`}>
+      <div className={`flex flex-col gap-3 [&>:first-child]:mt-auto [&>:last-child]:mb-auto ${play ? "min-h-0 overflow-y-auto p-3 md:p-6 md:w-[52%]" : "p-3 w-[50%] justify-center"}`}>
         {play && (
           <div className="flex items-center gap-3 flex-wrap">
             <button
@@ -423,9 +426,10 @@ export default function Decks({ mode, paused }: PieceProps) {
             >
               {running ? "Stop" : "Play"}
             </button>
-            <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#b5b6ab]">
+            {/* narrow: Play and Cut share a row, the tempo slider gets one to itself */}
+            <label className="order-last basis-full lg:order-none lg:basis-auto flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#b5b6ab]">
               Tempo
-              <input type="range" min={70} max={140} value={bpm} onChange={(e) => setBpm(Number(e.target.value))} className="accent-[#8ad9a8] w-28" />
+              <input type="range" min={70} max={140} value={bpm} onChange={(e) => setBpm(Number(e.target.value))} className="accent-[#8ad9a8] flex-1 min-w-0 lg:flex-none lg:w-28" />
               <span className="tabular-nums text-[#f2ead7] w-8">{bpm}</span>
             </label>
             <button
@@ -439,11 +443,20 @@ export default function Decks({ mode, paused }: PieceProps) {
             </button>
           </div>
         )}
-        <div role={play ? "group" : undefined} aria-label={play ? "Step sequencer" : undefined} className="flex flex-col gap-1.5">
+        {/* played: steps are never smaller than 28px, so on a phone the rows scroll sideways together */}
+        <div
+          role={play ? "group" : undefined}
+          aria-label={play ? "Step sequencer" : undefined}
+          className={`flex flex-col gap-1.5 ${play ? "overflow-x-auto [scrollbar-width:thin] pb-1 -mb-1" : ""}`}
+        >
           {ROWS.map((name, r) => (
-            <div key={name} className="flex items-center gap-2">
-              <span className={`font-mono uppercase tracking-[0.12em] text-[#b5b6ab] shrink-0 ${play ? "w-12 text-[10px]" : "w-8 text-[8px]"}`}>{name}</span>
-              <div className="grid gap-[3px] flex-1" style={{ gridTemplateColumns: "repeat(16, minmax(0, 1fr))" }}>
+            <div key={name} className={`flex items-center gap-2 ${play ? "w-max min-w-full" : ""}`}>
+              <span
+                className={`font-mono uppercase tracking-[0.12em] text-[#b5b6ab] shrink-0 ${play ? "w-12 text-[10px] sticky left-0 z-10 bg-[#16181a]" : "w-8 text-[8px]"}`}
+              >
+                {name}
+              </span>
+              <div className="grid gap-[3px] flex-1" style={{ gridTemplateColumns: `repeat(16, minmax(${play ? 28 : 0}px, 1fr))` }}>
                 {pattern[r].map((on, c) => (
                   <Cell
                     key={c}
