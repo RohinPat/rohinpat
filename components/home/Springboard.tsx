@@ -95,7 +95,11 @@ export default function Springboard() {
   }, []);
 
   useEffect(() => {
-    [...GRID, ...DOCK].forEach((a) => !a.external && router.prefetch(a.href));
+    // warm the other pages when the main thread is idle, not mid-hydration
+    // or mid-unfold
+    const prefetch = () => [...GRID, ...DOCK].forEach((a) => !a.external && router.prefetch(a.href));
+    const ric = "requestIdleCallback" in window;
+    const idle = ric ? window.requestIdleCallback(prefetch, { timeout: 4000 }) : window.setTimeout(prefetch, 1500);
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -103,7 +107,11 @@ export default function Springboard() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (ric) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+    };
   }, [router]);
 
   const unlock = useCallback(() => {
@@ -112,7 +120,13 @@ export default function Springboard() {
     setLocked(false);
     setJustUnlocked(true);
     const wait = reducedMotion() ? 0 : duo ? DUO_MS + 40 : 480;
-    window.setTimeout(() => setLockGone(true), wait);
+    // while the Duo swings, expensive extras (the venom cursor's lighting)
+    // stand down; see VenomCursor
+    if (duo) document.documentElement.dataset.swing = "";
+    window.setTimeout(() => {
+      setLockGone(true);
+      delete document.documentElement.dataset.swing;
+    }, wait);
     window.setTimeout(() => document.querySelector<HTMLElement>("[data-home] a")?.focus({ preventScroll: true }), wait + 20);
   }, [locked, duo]);
 
@@ -218,7 +232,8 @@ function DuoCover({ now, locked, onUnlock }: { now: Boston | null; locked: boole
         <span className="duo-btn" aria-hidden="true" style={{ top: 170, height: 40 }} />
         <div className="duo-outer">
           <div className="duo-island" aria-hidden="true" />
-          <FieldWallpaper dark />
+          {/* frozen once the cover starts to swing: nobody sees it redraw */}
+          <FieldWallpaper dark paused={!locked} />
           <LockScreen now={now} locked={locked} onUnlock={onUnlock} dark slide={false} />
         </div>
       </div>
@@ -301,7 +316,9 @@ function PhoneScreen({
 
   return (
     <div className={`relative w-full h-full min-h-[inherit] ${fg}`} style={{ filter: bright < 100 ? `brightness(${bright / 100})` : undefined }}>
-      <FieldWallpaper paused={paused} dark={dark} />
+      {/* held still for the Duo's swing: re-uploading a full-screen canvas
+          every frame is what made the unfold stutter */}
+      <FieldWallpaper paused={paused || (duo && justUnlocked && !lockGone)} dark={dark} />
       <div className="absolute inset-0" aria-hidden="true" onPointerDown={() => jiggle && setJiggle(false)} />
 
       {/* status bar (inside a frame; real phones have their own) */}
@@ -323,7 +340,7 @@ function PhoneScreen({
         data-home
         className={`relative z-10 flex flex-col min-h-[100svh] md:min-h-0 md:h-full pb-4 pointer-events-none transition-opacity duration-300 ${
           duo ? "px-8 pt-[64px]" : "px-5 pt-[76px] [@media(max-height:720px)]:pt-[64px] md:!pt-[76px]"
-        } ${locked ? "opacity-0" : "opacity-100"}`}
+        } ${locked && !duo ? "opacity-0" : "opacity-100"}`}
       >
         {jiggle && (
           <button
@@ -340,7 +357,9 @@ function PhoneScreen({
           <div className="grid grid-cols-2 gap-x-16">
             {/* widgets pop in once the cover has landed on this half */}
             <div className={`${grid} ${anim} [--d:520ms]`}>{widgets}</div>
-            <div className={`${grid} pt-2 ${anim}`}>{icons}</div>
+            {/* the right half is lit under the cover from the start (already
+                painted, so the swing doesn't wait on it); it's just uncovered */}
+            <div className={`${grid} pt-2`}>{icons}</div>
           </div>
         ) : (
           <div className={`${grid} ${anim}`}>

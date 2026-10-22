@@ -20,6 +20,8 @@ const SIZE = 460; // each canvas, CSS px, centred on the blob
 const REACH = 170; // how far a tendril will stretch
 const SNAP = 110; // how far a sticky strand stretches before it snaps
 const TARGETS = "[data-tile], [data-venom]";
+const FILTER_K = "url(#venom-black) drop-shadow(0 3px 4px rgba(0,0,0,0.35))";
+const FILTER_W = "url(#venom-white) drop-shadow(0 3px 5px rgba(0,0,0,0.55))";
 
 type Pt = { x: number; y: number };
 type Drop = Pt & { vx: number; vy: number; r: number; age: number; life: number; home: boolean };
@@ -63,7 +65,9 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
     // touch-first screens keep their taps; mouse-first ones get the symbiote
     if (matchMedia("(pointer: coarse)").matches || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    // 1×: the goo is blurred and lit anyway, and the lighting filters run on
+    // the CPU, so Retina pixels would cost 4× for nothing you'd see
+    const dpr = 1;
     for (const c of [cvK, cvW]) c.width = c.height = SIZE * dpr;
 
     const p = { x: -999, y: -999, in: false, moved: 0 };
@@ -156,9 +160,12 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
       }
       shown += ((p.in ? 1 : 0) - shown) * (1 - Math.exp(-dt * 14));
       p.moved += dt;
+      // while the Duo swings open, no layout reads (they'd force the browser
+      // to re-lay out mid-animation) and the flat filter: just the blob
+      const flat = "swing" in document.documentElement.dataset;
 
       // which symbiote belongs here; a change floods in from the leading edge
-      if (p.in && frameNo % 3 === 0) {
+      if (p.in && !flat && frameNo % 3 === 0) {
         const want = toneAt(p.x, p.y, [cvK, cvW]);
         const target = wipe ? wipe.to : tone;
         if (want !== target) wipe = { to: want, t: 0, x: p.x, y: p.y };
@@ -189,7 +196,7 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
       // targets: the one under the pointer, and the two closest
       let inside: HTMLElement | null = null;
       const near: { el: Element; d: number; x: number; y: number }[] = [];
-      if (p.in) {
+      if (p.in && !flat) {
         host.querySelectorAll<HTMLElement>(TARGETS).forEach((el) => {
           const r = el.getBoundingClientRect();
           if (!r.width || r.bottom < 0 || r.top > innerHeight) return;
@@ -200,7 +207,7 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
           else if (d < REACH) near.push({ el, d, x: cx, y: cy });
         });
       }
-      if (inside !== over) {
+      if (!flat && inside !== over) {
         if (over) leave(over);
         if (inside) enter(inside);
         over = inside;
@@ -359,6 +366,10 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
         o?.setAttribute("dy", dy);
       }
 
+      // flat goo (no lighting pass) while the Duo swings open: same shape and
+      // colour, a fraction of the cost, back to wet and glossy once it lands
+      cvK.style.filter = flat ? "url(#venom-black-flat)" : FILTER_K;
+      cvW.style.filter = flat ? "url(#venom-white-flat)" : FILTER_W;
       const tf = `translate(${ox}px, ${oy}px)`;
       const kOn = draw(kx, 0);
       const wOn = draw(wx, 1);
@@ -414,19 +425,30 @@ export default function VenomCursor({ root }: { root: React.RefObject<HTMLElemen
         <defs>
           {filter("venom-black", drift, "#141716", 1, 1.35)}
           {filter("venom-white", driftW, "#f6f4ee", 1.2, 0.7)}
+          {[
+            ["venom-black-flat", "#0b0d0c"],
+            ["venom-white-flat", "#f2f0ea"],
+          ].map(([id, c]) => (
+            <filter key={id} id={id} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="blur" />
+              <feColorMatrix in="blur" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 22 -10" result="goo" />
+              <feFlood floodColor={c} />
+              <feComposite in2="goo" operator="in" />
+            </filter>
+          ))}
         </defs>
       </svg>
       <canvas
         ref={black}
         aria-hidden="true"
         className="pointer-events-none fixed left-0 top-0 z-[45]"
-        style={{ ...canvasStyle, filter: "url(#venom-black) drop-shadow(0 3px 4px rgba(0,0,0,0.35))" }}
+        style={{ ...canvasStyle, filter: FILTER_K }}
       />
       <canvas
         ref={white}
         aria-hidden="true"
         className="pointer-events-none fixed left-0 top-0 z-[45]"
-        style={{ ...canvasStyle, filter: "url(#venom-white) drop-shadow(0 3px 5px rgba(0,0,0,0.55))" }}
+        style={{ ...canvasStyle, filter: FILTER_W }}
       />
     </>
   );
