@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pov, site } from "@/lib/site";
@@ -8,6 +9,7 @@ import { burst, getAudio } from "@/components/offhours/audio";
 import FieldWallpaper from "./FieldWallpaper";
 import Motif from "./Motif";
 import Spotlight from "./Spotlight";
+import VenomCursor from "./VenomCursor";
 import { DOCK, GLYPHS, GRID, type App } from "./apps";
 import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 
@@ -20,6 +22,9 @@ import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 // bar; Spotlight on Search or ⌘/Ctrl-K; long-press to jiggle.
 
 const CREAM = "#f2ead7";
+// loaded only when someone taps the lock screen's camera
+const CameraApp = dynamic(() => import("./CameraApp"), { ssr: false });
+
 const DUO_MS = 820; // the cover's swing; matches .duo-leaf in globals.css
 
 type Boston = { h: number; m: number; s: number; label: string; date: string };
@@ -154,6 +159,7 @@ export default function Springboard() {
       </Device>
 
       <Spotlight open={search} onClose={() => setSearch(false)} onOpenApp={(a) => openApp(a)} />
+      <VenomCursor root={section} />
     </section>
   );
 }
@@ -357,6 +363,7 @@ function PhoneScreen({
             <button
               type="button"
               onClick={onSearch}
+              data-venom
               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full backdrop-blur-md text-sm font-medium transition-colors ${
                 dark ? "bg-[rgba(242,234,215,0.14)] hover:bg-[rgba(242,234,215,0.22)]" : "bg-[rgba(13,16,14,0.12)] hover:bg-[rgba(13,16,14,0.18)]"
               }`}
@@ -448,11 +455,11 @@ function LockScreen({
   const [drag, setDrag] = useState(0);
   const [torch, setTorch] = useState(false);
   const [flash, setFlash] = useState(false);
-  const router = useRouter();
+  const [camera, setCamera] = useState(false);
 
   // the two lock-screen buttons do what they do on a phone: the torch lights
-  // a pool on the wallpaper that follows the pointer; the camera fires the
-  // shutter and opens the one app here that's about taking photos
+  // a pool on the wallpaper that follows the pointer; the camera opens a
+  // viewfinder that names colours the way Closet Organizer does
   const click = (freq: number) => {
     const au = getAudio();
     if (au) burst(au, { freq, q: 4, dur: 0.025, gain: 0.35 });
@@ -463,6 +470,7 @@ function LockScreen({
     beam.current.style.setProperty("--bx", `${e.clientX - r.left}px`);
     beam.current.style.setProperty("--by", `${e.clientY - r.top}px`);
   };
+  const closeCamera = useCallback(() => setCamera(false), []);
   const shoot = () => {
     if (flash) return;
     const au = getAudio();
@@ -471,7 +479,10 @@ function LockScreen({
       burst(au, { freq: 2600, q: 2, dur: 0.05, gain: 0.4, at: 0.07 });
     }
     setFlash(true);
-    window.setTimeout(() => router.push("/projects/closet-organizer"), reducedMotion() ? 0 : 380);
+    window.setTimeout(() => {
+      setFlash(false);
+      setCamera(true);
+    }, reducedMotion() ? 0 : 260);
   };
 
   // scrolling over the lock screen unlocks it (and doesn't scroll the page)
@@ -487,6 +498,7 @@ function LockScreen({
   }, [locked, onUnlock]);
 
   return (
+    <>
     <div
       ref={layer}
       className="absolute inset-x-0 top-0 h-[100svh] md:h-auto md:bottom-0 z-20 flex flex-col items-center touch-none select-none"
@@ -548,6 +560,7 @@ function LockScreen({
             type="button"
             aria-label="Flashlight"
             aria-pressed={torch}
+            data-venom
             onClick={() => {
               click(torch ? 1800 : 2400);
               setTorch((t) => !t);
@@ -563,7 +576,8 @@ function LockScreen({
           </button>
           <button
             type="button"
-            aria-label="Camera: opens the Closet Organizer, the photo app"
+            aria-label="Camera: names the colours of whatever you point it at"
+            data-venom
             onClick={shoot}
             className={`w-12 h-12 rounded-full grid place-items-center backdrop-blur-xl transition-transform duration-150 active:scale-90 ${dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"}`}
           >
@@ -573,12 +587,14 @@ function LockScreen({
             </svg>
           </button>
         </div>
-        <button type="button" onClick={onUnlock} className="text-sm font-semibold opacity-80 hover:opacity-100 px-3 py-1 rounded-full">
+        <button type="button" onClick={onUnlock} data-venom className="text-sm font-semibold opacity-80 hover:opacity-100 px-3 py-1 rounded-full">
           Swipe up to unlock
         </button>
         <span aria-hidden="true" className={`w-[134px] h-[5px] rounded-full ${dark ? "bg-[var(--paper)]" : "bg-[var(--ink)]"}`} />
       </div>
     </div>
+    {camera && <CameraApp onClose={closeCamera} />}
+    </>
   );
 }
 

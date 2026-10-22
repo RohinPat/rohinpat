@@ -118,7 +118,9 @@ export default function ColophonPage() {
             No cookies, no local storage, no analytics, and no third-party scripts, embeds or
             font requests. A test plays with the Off hours pieces and fails if the page contacts
             any other host or writes a cookie or a local-storage key. Response headers switch off
-            camera, microphone and location access and refuse to be framed. The{" "}
+            microphone and location access everywhere, and the camera everywhere but the home
+            screen, where its camera names colours only when you ask; frames are read in your
+            browser and go nowhere. Pages refuse to be framed. The{" "}
             <Link href="/privacy">privacy page</Link> says the same thing in fewer words.
           </p>
 

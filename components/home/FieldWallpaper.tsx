@@ -155,5 +155,6 @@ export default function FieldWallpaper({ paused = false, dark = false }: { pause
     };
   }, []);
 
-  return <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 w-full h-full" />;
+  // data-tone tells the venom cursor which symbiote belongs on this wallpaper
+  return <canvas ref={canvas} aria-hidden="true" data-tone={dark ? "dark" : "light"} className="absolute inset-0 w-full h-full" />;
 }

@@ -70,3 +70,21 @@ test("terms and cookies fold into the privacy page", async ({ page }) => {
     await expect(page.locator(hash)).toBeVisible();
   }
 });
+
+test("lock screen: the flashlight toggles and the camera names colours", async ({ page }) => {
+  await page.goto("/");
+  const torch = page.getByRole("button", { name: "Flashlight" });
+  await torch.click();
+  await expect(torch).toHaveAttribute("aria-pressed", "true");
+  // no camera in the test browser: it falls back to a sample outfit
+  await page.getByRole("button", { name: /^Camera/ }).click();
+  const cam = page.getByRole("dialog", { name: "Colour namer" });
+  await expect(cam).toBeVisible();
+  const live = cam.locator("[aria-live]");
+  await expect(live).toHaveText("Navy and Beige", { timeout: 10_000 });
+  await cam.getByRole("button", { name: "Sample", exact: true }).click();
+  await expect(live).toHaveText("Brown");
+  await page.keyboard.press("Escape");
+  await expect(cam).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /swipe up to unlock/i })).toBeVisible();
+});
