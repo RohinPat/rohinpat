@@ -9,6 +9,7 @@ import { burst, getAudio } from "@/components/offhours/audio";
 import FieldWallpaper from "./FieldWallpaper";
 import Motif from "./Motif";
 import Spotlight from "./Spotlight";
+import VenomCursor from "./VenomCursor";
 import { DOCK, GLYPHS, GRID, type App } from "./apps";
 import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 
@@ -158,6 +159,7 @@ export default function Springboard() {
       </Device>
 
       <Spotlight open={search} onClose={() => setSearch(false)} onOpenApp={(a) => openApp(a)} />
+      <VenomCursor root={section} />
     </section>
   );
 }
@@ -361,6 +363,7 @@ function PhoneScreen({
             <button
               type="button"
               onClick={onSearch}
+              data-venom
               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full backdrop-blur-md text-sm font-medium transition-colors ${
                 dark ? "bg-[rgba(242,234,215,0.14)] hover:bg-[rgba(242,234,215,0.22)]" : "bg-[rgba(13,16,14,0.12)] hover:bg-[rgba(13,16,14,0.18)]"
               }`}
@@ -557,6 +560,7 @@ function LockScreen({
             type="button"
             aria-label="Flashlight"
             aria-pressed={torch}
+            data-venom
             onClick={() => {
               click(torch ? 1800 : 2400);
               setTorch((t) => !t);
@@ -573,6 +577,7 @@ function LockScreen({
           <button
             type="button"
             aria-label="Camera: names the colours of whatever you point it at"
+            data-venom
             onClick={shoot}
             className={`w-12 h-12 rounded-full grid place-items-center backdrop-blur-xl transition-transform duration-150 active:scale-90 ${dark ? "bg-[rgba(242,234,215,0.14)]" : "bg-[rgba(13,16,14,0.12)]"}`}
           >
@@ -582,7 +587,7 @@ function LockScreen({
             </svg>
           </button>
         </div>
-        <button type="button" onClick={onUnlock} className="text-sm font-semibold opacity-80 hover:opacity-100 px-3 py-1 rounded-full">
+        <button type="button" onClick={onUnlock} data-venom className="text-sm font-semibold opacity-80 hover:opacity-100 px-3 py-1 rounded-full">
           Swipe up to unlock
         </button>
         <span aria-hidden="true" className={`w-[134px] h-[5px] rounded-full ${dark ? "bg-[var(--paper)]" : "bg-[var(--ink)]"}`} />
