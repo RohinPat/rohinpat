@@ -53,6 +53,9 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+/* a row of chips that scrolls sideways on a phone instead of wrapping */
+.chip-row { scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
 
 @layer utilities {
   .text-balance { text-wrap: balance; }

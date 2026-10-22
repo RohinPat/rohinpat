@@ -16,6 +16,14 @@ export type StageMeta = { index: number; label: string; title: string; how: stri
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 const MS = 440;
 
+// On a touch screen the keyboard half of a hint is noise: drop "(or Space)",
+// "(keys 1-7)" and keyboard-only lines, and say tap instead of click.
+function forTouch(how: string[]) {
+  return how
+    .filter((h) => !h.startsWith("Keyboard:"))
+    .map((h) => h.replace(/\s*\((?:or |keys )[^)]*\)/g, "").replace(/^Click/, "Tap").replace("arrows, WASD, or drag", "drag"));
+}
+
 function useMuted() {
   return useSyncExternalStore(onMuteChange, isMuted, () => false);
 }
@@ -37,6 +45,8 @@ export default function Stage({
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const how = touch ? forTouch(meta.how) : meta.how;
 
   const close = () => {
     if (closing) return;
@@ -170,12 +180,12 @@ export default function Stage({
         userSelect: "none",
       }}
     >
-      <header className="flex items-start justify-between gap-4 px-4 md:px-8 pt-4 md:pt-5 pb-3">
+      <header className="flex items-start justify-between gap-4 px-4 md:px-8 pt-3 md:pt-5 pb-2 md:pb-3">
         <div className="min-w-0">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mint)]">
             {String(meta.index).padStart(2, "0")} — {meta.label}
           </p>
-          <h2 id="stage-title" className="hero-field mt-1 text-[clamp(1.9rem,4.2vw,3.4rem)]">
+          <h2 id="stage-title" className="hero-field mt-1 text-[clamp(1.6rem,4.2vw,3.4rem)] leading-[0.92]">
             {meta.title}
           </h2>
         </div>
@@ -184,9 +194,17 @@ export default function Stage({
             type="button"
             onClick={() => setMuted(!muted)}
             aria-pressed={!muted}
-            className="h-10 px-3.5 rounded-full border border-white/15 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
+            aria-label="Sound"
+            className="h-10 w-10 sm:w-auto sm:px-3.5 grid place-items-center rounded-full border border-white/15 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
           >
-            Sound {muted ? "off" : "on"}
+            {/* phones get the speaker alone so the title keeps the width */}
+            <svg className="sm:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9z" />
+              {muted ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />}
+            </svg>
+            <span className="hidden sm:inline" aria-hidden="true">
+              Sound {muted ? "off" : "on"}
+            </span>
           </button>
           <button
             ref={closeBtn}
@@ -202,7 +220,7 @@ export default function Stage({
         </div>
       </header>
       <ul className="flex flex-wrap gap-x-5 gap-y-1 px-4 md:px-8 pb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[#b5b6ab]">
-        {meta.how.map((h, i) => (
+        {how.map((h, i) => (
           <li key={h} className={i ? "hidden sm:list-item" : undefined}>
             {h}
           </li>

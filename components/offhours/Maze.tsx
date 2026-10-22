@@ -676,7 +676,7 @@ export default function Maze({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 flex flex-col bg-[#0d100e]">
       {play && (
-        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-2">
+        <div className="chip-row flex items-center gap-2 px-3 pt-3 pb-2 overflow-x-auto sm:flex-wrap">
           {ALGOS.map((a) => (
             <button
               key={a.id}
@@ -684,7 +684,7 @@ export default function Maze({ mode, paused }: PieceProps) {
               onClick={() => pick(a.id)}
               aria-pressed={algo === a.id}
               title={a.note}
-              className={`h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors ${
+              className={`shrink-0 whitespace-nowrap h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors ${
                 algo === a.id ? "bg-[#cfeedd] text-[#0d100e] border-transparent" : "border-white/15 text-[#cfeedd] hover:bg-white/10"
               }`}
             >
@@ -694,7 +694,7 @@ export default function Maze({ mode, paused }: PieceProps) {
           <button
             type="button"
             onClick={() => fresh(algo, tick.current, true)}
-            className="h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] bg-[#1d5e3f] text-[#f2ead7] ml-auto"
+            className="shrink-0 h-9 px-3.5 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] bg-[#1d5e3f] text-[#f2ead7] ml-auto whitespace-nowrap"
           >
             New maze
           </button>

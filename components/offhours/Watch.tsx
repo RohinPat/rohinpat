@@ -159,7 +159,7 @@ export default function Watch({ mode, paused }: PieceProps) {
                   wind(42);
                 }
               }}
-              className="relative w-24 h-24 rounded-full cursor-grab active:cursor-grabbing touch-none select-none outline-offset-4"
+              className="relative w-20 h-20 md:w-24 md:h-24 rounded-full cursor-grab active:cursor-grabbing touch-none select-none outline-offset-4"
               style={{ background: "radial-gradient(circle at 35% 30%, #f4f2ec, #8f8b83 70%)", boxShadow: "inset 0 -6px 12px rgba(0,0,0,0.35), 0 10px 20px -8px rgba(0,0,0,0.6)" }}
             >
               <div
@@ -174,19 +174,28 @@ export default function Watch({ mode, paused }: PieceProps) {
               <span className="absolute inset-0 grid place-items-center font-mono text-[10px] uppercase tracking-[0.18em] text-[#0d100e]">Wind ↻</span>
             </div>
           </div>
-          <div className="flex-1 md:flex-none w-full">
+          {/* phones: the knob on the left, the rest stacked beside it; desktop: one column */}
+          <div className="flex-1 min-w-0 flex flex-col gap-3 md:contents">
+          <div className="w-full">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab]">Power reserve</p>
             <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
               <div className="h-full bg-[var(--mint)] transition-[width] duration-150" style={{ width: `${reserve * 100}%` }} />
             </div>
-            <p className="mt-1 font-mono text-[10px] text-[#b5b6ab]">{reserve > 0 ? `${Math.round(reserve * RESERVE)}s left · orbit it to swing the rotor` : "Stopped. Wind it."}</p>
+            <p className="mt-1 font-mono text-[10px] text-[#b5b6ab]">{reserve > 0 ? (
+                <>
+                  {Math.round(reserve * RESERVE)}s left<span className="hidden md:inline"> · orbit it to swing the rotor</span>
+                </>
+              ) : (
+                "Stopped. Wind it."
+              )}</p>
           </div>
           <label className="w-full font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab]">
             Explode
             <input type="range" min={0} max={100} value={Math.round(explode * 100)} onChange={(e) => setExplode(Number(e.target.value) / 100)} className="mt-2 w-full accent-[#8ad9a8]" />
           </label>
-          <div className="w-full">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Bezel</p>
+          <div className="flex flex-wrap items-center gap-2 md:contents">
+          <div className="flex-1 md:w-full">
+            <p className="hidden md:block font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Bezel</p>
             <div className="flex items-center gap-2" role="group" aria-label="Bezel colour">
               {BEZELS.map(([id, name, hex]) => (
                 <button
@@ -206,15 +215,17 @@ export default function Watch({ mode, paused }: PieceProps) {
               <button
                 type="button"
                 onClick={turnBezel}
-                className="ml-auto h-8 px-3 rounded-full border border-white/20 font-mono text-[10px] uppercase tracking-[0.14em] hover:bg-white/10"
+                className="ml-auto h-8 px-3 whitespace-nowrap rounded-full border border-white/20 font-mono text-[10px] uppercase tracking-[0.14em] hover:bg-white/10"
               >
-                Turn bezel ↺
+                Turn<span className="hidden md:inline"> bezel</span> ↺
               </button>
             </div>
           </div>
-          <button type="button" onClick={() => setFlip((f) => !f)} aria-pressed={flip} className="h-9 px-4 rounded-full border border-white/20 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10">
+          <button type="button" onClick={() => setFlip((f) => !f)} aria-pressed={flip} className="h-8 md:h-9 px-3 md:px-4 rounded-full border border-white/20 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.14em] md:tracking-[0.16em] hover:bg-white/10">
             {flip ? "Show the dial" : "Flip it over"}
           </button>
+          </div>
+          </div>
           <div className="hidden md:block">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b5b6ab] mb-2">Parts · pick one</p>
             <ul className="grid grid-cols-2 gap-x-1 gap-y-0.5">

@@ -170,26 +170,27 @@ export default function Interests() {
                   </svg>
                 </span>
               </button>
-              <div className="flex items-baseline justify-between gap-4 px-4 py-3 border-t border-[var(--border-strong)]">
-                <div className="min-w-0">
-                  <h2 className="font-mono text-[11px] uppercase tracking-[0.2em]">
+              <div className="px-4 py-3 border-t border-[var(--border-strong)]">
+                {/* the title never breaks mid-phrase: on a narrow tile it drops under the label */}
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                  <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] whitespace-nowrap">
                     <span className="muted">{String(p.index).padStart(2, "0")} — </span>
                     {p.label}
                   </h2>
-                  <p className="text-sm muted mt-0.5 leading-snug">
-                    {p.line}
-                    {p.id === "decks" && (
-                      <>
-                        {" "}
-                        <a href={PLAYLIST} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
-                          The playlist<span className="sr-only"> (opens Spotify in a new tab)</span>
-                        </a>
-                        .
-                      </>
-                    )}
-                  </p>
+                  <p className="hidden sm:block whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.16em] muted">{p.title}</p>
                 </div>
-                <p className="hidden sm:block shrink-0 max-w-[45%] text-right font-mono text-[10px] uppercase tracking-[0.2em] muted">{p.title}</p>
+                <p className="text-sm muted mt-0.5 leading-snug">
+                  {p.line}
+                  {p.id === "decks" && (
+                    <>
+                      {" "}
+                      <a href={PLAYLIST} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+                        The playlist<span className="sr-only"> (opens Spotify in a new tab)</span>
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
               </div>
             </article>
           ))}
