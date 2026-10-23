@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { writeFileSync } from "node:fs";
 import {
   OrientationFilter,
@@ -31,6 +31,10 @@ import {
   genTwist,
   mulberry32,
 } from "./lab-swing-traces";
+
+// these sweeps simulate hundreds of traces; under a full parallel run they
+// can pass 5 s, so give the whole file room
+vi.setConfig({ testTimeout: 30_000 });
 
 // ---------------------------------------------------------------- helpers
 const quantile = (xs: number[], p: number) => {
