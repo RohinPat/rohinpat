@@ -460,7 +460,11 @@ main h1:not(.hero-field) {
   transform: translate(-50%, -50%) scale(var(--s, 0.8)) translateX(-25%);
   transition: transform var(--swing);
   perspective: 5200px;
+  will-change: transform;
 }
+/* the cover's glass sits over a dark, frozen wallpaper: a blur there is
+   invisible but costs a full re-blur on every frame of the 3D swing */
+.duo-outer [class*="backdrop-blur"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .duo.is-open { transform: translate(-50%, -50%) scale(var(--s, 0.8)); }
 /* the left half isn't there until the cover lands on it */
 .duo-body {
@@ -516,6 +520,8 @@ main h1:not(.hero-field) {
   transform-origin: left center;
   transform-style: preserve-3d;
   transition: transform var(--swing);
+  /* its own layer from the first paint, so the swing never waits for one */
+  will-change: transform;
 }
 .duo.is-open .duo-leaf { transform: rotateY(-180deg); }
 .duo-face {
