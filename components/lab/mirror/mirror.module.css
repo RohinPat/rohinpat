@@ -1,0 +1,552 @@
+/* Lab "mirror": a simplified copy of the site's phone (see .dev-* in
+   app/globals.css), built as a 3D slab so a real tilt can drive it. */
+
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  background: radial-gradient(90% 80% at 40% 38%, #171b18 0%, #0d100e 70%);
+  color: var(--fg);
+  overflow: hidden;
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+@media (max-width: 860px) {
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow-y: auto;
+  }
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* the slot reserves the scaled size so layout matches what you see */
+.slot {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.rig {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 393px;
+  height: 852px;
+  transform-style: preserve-3d;
+  transform-origin: center;
+  will-change: transform;
+  margin-left: -196.5px;
+  margin-top: -426px;
+}
+.scale {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  /* perspective lives here so it scales with the phone: the look is the same at any window size */
+  perspective: 1500px;
+  perspective-origin: 0 -30px;
+  transform: scale(var(--s, 0.8));
+}
+
+/* ---- metal body: a stack of rounded plates gives the slab its thickness ---- */
+.edge {
+  /* plain flat plates: gradients and shadows on 3D layers are re-rastered every frame */
+  position: absolute;
+  inset: -14px;
+  border-radius: 72px;
+  background: #7a7569;
+}
+.back {
+  position: absolute;
+  inset: -14px;
+  border-radius: 72px;
+  background: #4a463f;
+}
+.frame {
+  position: absolute;
+  inset: -14px;
+  border-radius: 72px;
+  background: linear-gradient(145deg, #d9d3c6 0%, #8f897e 30%, #cfc8ba 55%, #7d786e 80%, #c7c0b2 100%);
+  box-shadow:
+    0 0 0 1px rgba(13, 16, 14, 0.35),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+}
+.frame::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 68px;
+  background: #050605;
+}
+.btn {
+  position: absolute;
+  width: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #7d786e, #cfc8ba);
+}
+
+/* ---- the screen ---- */
+.screen {
+  position: absolute;
+  inset: 0;
+  border-radius: 56px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #0d100e;
+  transform: translateZ(0.5px);
+  color: #f2ead7;
+  user-select: none;
+}
+.island {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(1px);
+  width: 126px;
+  height: 37px;
+  border-radius: 999px;
+  background: #000;
+  z-index: 40;
+}
+.wall {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 60% at 22% 18%, rgba(29, 94, 63, 0.95) 0%, rgba(29, 94, 63, 0) 62%),
+    radial-gradient(90% 55% at 85% 88%, rgba(138, 217, 168, 0.25) 0%, rgba(138, 217, 168, 0) 70%),
+    repeating-linear-gradient(115deg, rgba(242, 234, 215, 0.035) 0 2px, transparent 2px 22px),
+    #0d100e;
+}
+.glare {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  border-radius: 56px;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.13) 50%, rgba(255, 255, 255, 0) 62%);
+  background-size: 300% 100%;
+  background-position: calc(50% + var(--gx, 0) * 50%) 0;
+}
+
+/* lock layer: the same slide as the site (0.48s, ease-out expo-ish) */
+.lock {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  will-change: transform;
+}
+.date {
+  margin-top: 96px;
+  font-size: 17px;
+  font-weight: 600;
+  opacity: 0.9;
+  text-align: center;
+}
+.clock {
+  font-size: 116px;
+  line-height: 1;
+  margin-top: 4px;
+  font-weight: 800;
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.card {
+  margin-top: 24px;
+  border-radius: 22px;
+  padding: 12px 16px;
+  text-align: center;
+  background: rgba(242, 234, 215, 0.14);
+}
+.card b {
+  display: block;
+  font-weight: 600;
+}
+.card span {
+  display: block;
+  font-size: 14px;
+  opacity: 0.8;
+}
+.lockBottom {
+  margin-top: auto;
+  width: 100%;
+  padding: 0 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.lockBtns {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+}
+.lockBtn {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: rgba(242, 234, 215, 0.14);
+}
+.hint {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.pill {
+  width: 134px;
+  height: 5px;
+  border-radius: 999px;
+  background: #f2ead7;
+}
+
+/* home */
+.home {
+  position: absolute;
+  inset: 0;
+  padding: 18px 26px 0;
+  display: flex;
+  flex-direction: column;
+}
+.status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.grid {
+  margin-top: 56px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 26px 14px;
+}
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+.icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.dock {
+  margin: auto 0 22px;
+  height: 92px;
+  border-radius: 34px;
+  background: rgba(242, 234, 215, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 14px;
+}
+
+.ripple {
+  position: absolute;
+  z-index: 60;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  border-radius: 50%;
+  border: 2px solid rgba(138, 217, 168, 0.95);
+  background: radial-gradient(circle, rgba(138, 217, 168, 0.45), rgba(138, 217, 168, 0) 70%);
+  pointer-events: none;
+  animation: ripple 680ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes ripple {
+  from {
+    transform: scale(0.15);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ripple {
+    animation-duration: 1ms;
+  }
+}
+
+/* ---- side panel ---- */
+.panel {
+  border-left: 1px solid var(--border);
+  background: rgba(23, 27, 24, 0.72);
+  padding: 20px 18px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 14px;
+}
+@media (max-width: 860px) {
+  .panel {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+.panel h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+.panel h2 {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #a3a69c;
+  flex: none;
+}
+.dotLive {
+  background: #8ad9a8;
+  box-shadow: 0 0 0 4px rgba(138, 217, 168, 0.2);
+}
+.dotWarn {
+  background: #e8b04a;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel button,
+.panel a.btnLink {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.panel button:hover,
+.panel a.btnLink:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  color: var(--fg-muted);
+}
+.field input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #8ad9a8;
+}
+.field output {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--fg-muted);
+}
+.check input {
+  accent-color: #8ad9a8;
+}
+.hud {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fg-muted);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+}
+.hud dd {
+  margin: 0;
+  color: var(--fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.hud dt {
+  margin: 0;
+}
+.note {
+  font-size: 12px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+}
+
+/* ---- the phone page ---- */
+.phonePage {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #0d100e;
+  color: #f2ead7;
+  font-family: var(--font-display), system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.pad {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  background:
+    radial-gradient(80% 50% at 50% 100%, rgba(29, 94, 63, 0.55), rgba(29, 94, 63, 0) 70%),
+    #0d100e;
+}
+.padInner {
+  max-width: 320px;
+}
+.phoneLock {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 56px 24px 28px;
+  text-align: center;
+  background:
+    radial-gradient(120% 60% at 22% 18%, rgba(29, 94, 63, 0.95) 0%, rgba(29, 94, 63, 0) 62%),
+    repeating-linear-gradient(115deg, rgba(242, 234, 215, 0.035) 0 2px, transparent 2px 22px),
+    #0d100e;
+  will-change: transform;
+}
+.big {
+  font-size: 34px;
+  font-weight: 800;
+  font-stretch: 75%;
+  line-height: 1.05;
+  margin: 0 0 10px;
+}
+.sub {
+  margin: 0;
+  font-size: 15px;
+  opacity: 0.8;
+  line-height: 1.45;
+}
+.cta {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: #f2ead7;
+  color: #0d100e;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 16px 28px;
+  margin-top: 22px;
+  touch-action: manipulation;
+}
+.ghost {
+  appearance: none;
+  border: 1px solid rgba(242, 234, 215, 0.4);
+  background: rgba(242, 234, 215, 0.08);
+  color: #f2ead7;
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 999px;
+  padding: 10px 16px;
+  touch-action: manipulation;
+}
+.chev {
+  display: block;
+  margin: 0 auto 6px;
+  animation: bob 1.4s ease-in-out infinite;
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chev {
+    animation: none;
+  }
+}
+.readout {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.tapDot {
+  position: absolute;
+  z-index: 10;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(138, 217, 168, 0.55), rgba(138, 217, 168, 0) 70%);
+  border: 2px solid rgba(138, 217, 168, 0.9);
+  animation: ripple 600ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  pointer-events: none;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
