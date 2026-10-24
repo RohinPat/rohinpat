@@ -546,6 +546,9 @@ main h1:not(.hero-field) {
   overflow: hidden;
   isolation: isolate;
   z-index: 1;
+  /* the cover's lock screen is always dark, and sits outside the home
+     screen's colour wrapper, so it sets its own: paper on the dark wallpaper */
+  color: var(--paper);
 }
 .duo-island {
   position: absolute;
@@ -691,10 +694,15 @@ main h1:not(.hero-field) {
     font-size: 28pt !important;
     margin-bottom: 4pt !important;
   }
-    main.resume-page section { margin-top: 14pt !important; }
+  main.resume-page section { margin-top: 14pt !important; }
   main.resume-page ul.space-y-6 > li + li { margin-top: 9pt !important; }
   main.resume-page header + p { margin-top: 10pt !important; }
   main.resume-page a { color: #000 !important; text-decoration: underline; }
   main.resume-page .resume-entry { break-inside: avoid; }
   main.resume-page h2 { break-after: avoid; }
 }
+
+/* The phone link (components/link): while a real phone is linked, the whole
+   device tilts with it. The transform goes on the slot, so the --s scale on
+   .dev / .duo is untouched; this just lets the browser promote it. */
+.dev-slot[data-link], .duo-slot[data-link] { will-change: transform; }
