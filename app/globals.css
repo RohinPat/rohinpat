@@ -650,3 +650,8 @@ main h1:not(.hero-field) {
 /* the diagram's explanation panel keeps its own rhythm inside .prose */
 .pipe-panel p { margin: 0; }
 .pipe-panel p + p { margin-top: 0.25rem; }
+
+/* The phone link (components/link): while a real phone is linked, the whole
+   device tilts with it. The transform goes on the slot, so the --s scale on
+   .dev / .duo is untouched; this just lets the browser promote it. */
+.dev-slot[data-link], .duo-slot[data-link] { will-change: transform; }
