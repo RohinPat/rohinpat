@@ -18,15 +18,19 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install --with-deps",
-    "test:all": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e"
+    "test:all": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e",
+    "link:relay": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/link-relay-dev.mjs"
   },
   "dependencies": {
+    "@vercel/functions": "^3.10.3",
     "jsqr": "^1.4.0",
     "next": "^14.2.0",
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "three": "0.169.0"
+    "redis": "^6.3.0",
+    "three": "0.169.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -37,6 +41,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/three": "0.169.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.6",
     "autoprefixer": "^10.0.1",
