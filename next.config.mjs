@@ -36,6 +36,16 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // lab pairing: the laptop's webcam reads the phone's answer QR code (later rule wins)
+        source: "/lab/:path*",
+        headers: [
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+          },
+        ],
+      },
     ];
   },
 };

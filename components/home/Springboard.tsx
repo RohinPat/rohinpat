@@ -3,14 +3,16 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import QuickCard from "@/components/QuickCard";
 import { pov, site } from "@/lib/site";
 import { burst, getAudio } from "@/components/offhours/audio";
 import FieldWallpaper from "./FieldWallpaper";
 import Motif from "./Motif";
 import Spotlight from "./Spotlight";
 import VenomCursor from "./VenomCursor";
-import { DOCK, GLYPHS, GRID, type App } from "./apps";
+import { ALL_APPS, DOCK, GLYPHS, GRID, type App } from "./apps";
+import type { PairInfo } from "@/components/link/PairCard";
 import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 
 // Home is an iPhone. On a phone it's full-bleed (your phone is the device);
@@ -24,6 +26,14 @@ import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 const CREAM = "#f2ead7";
 // loaded only when someone taps the lock screen's camera
 const CameraApp = dynamic(() => import("./CameraApp"), { ssr: false });
+// the phone link (components/link): loaded only on a mouse-first wide screen,
+// after the page has settled, so the home page's first load doesn't carry it
+const LinkHost = dynamic(() => import("@/components/link/LinkHost"), { ssr: false });
+const PairCard = dynamic(() => import("@/components/link/PairCard"), { ssr: false });
+// the pairing card, offered to whichever lock screen is showing
+const PairSlot = createContext<React.ReactNode>(null);
+// the lock screen that's showing, so a linked phone's finger can move it
+let remoteDrag: ((p: number | null) => void) | null = null;
 
 const DUO_MS = 820; // the cover's swing; matches .duo-leaf in globals.css
 
@@ -65,6 +75,18 @@ export default function Springboard() {
   const [locked, setLocked] = useState(() => !isUnlocked());
   const [lockGone, setLockGone] = useState(() => isUnlocked());
   const [justUnlocked, setJustUnlocked] = useState(false);
+  const slot = useRef<HTMLDivElement>(null);
+  const [linkOk, setLinkOk] = useState(false);
+  const [pair, setPair] = useState<PairInfo | null>(null);
+
+  // the phone link is for mouse-first wide screens: never on a phone
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)");
+    const on = () => setLinkOk(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
 
   // fit the device to the window
   useEffect(() => {
@@ -142,7 +164,13 @@ export default function Springboard() {
     else router.push(app.href);
   };
 
+  const linkOpen = (id: string) => {
+    const app = ALL_APPS.find((a) => a.id === id);
+    if (app && !app.external) openApp(app);
+  };
+
   return (
+    <PairSlot.Provider value={linkOk && pair ? <PairCard info={pair} /> : null}>
     <section
       ref={section}
       aria-labelledby="home-title"
@@ -159,7 +187,7 @@ export default function Springboard() {
         <span>Patel</span>
       </h1>
 
-      <Device duo={duo} fitted={fitted} open={!locked} cover={!lockGone} now={now} onUnlock={unlock}>
+      <Device slotRef={slot} duo={duo} fitted={fitted} open={!locked} cover={!lockGone} now={now} onUnlock={unlock}>
         <PhoneScreen
           duo={duo}
           now={now}
@@ -174,13 +202,25 @@ export default function Springboard() {
 
       <Spotlight open={search} onClose={() => setSearch(false)} onOpenApp={(a) => openApp(a)} />
       <VenomCursor root={section} />
+      {linkOk && (
+        <LinkHost
+          target={slot}
+          locked={locked}
+          onPair={setPair}
+          onDrag={(p) => remoteDrag?.(p)}
+          onUnlock={unlock}
+          onOpen={linkOpen}
+        />
+      )}
     </section>
+    </PairSlot.Provider>
   );
 }
 
 // One component for every frame, so the screen inside stays mounted when the
 // window crosses a breakpoint (the `false` holes keep children in place).
 function Device({
+  slotRef,
   duo,
   fitted,
   open,
@@ -189,6 +229,7 @@ function Device({
   onUnlock,
   children,
 }: {
+  slotRef: React.Ref<HTMLDivElement>;
   duo: boolean;
   fitted: boolean;
   open: boolean;
@@ -198,7 +239,7 @@ function Device({
   children: React.ReactNode;
 }) {
   return (
-    <div className={duo ? "duo-slot" : "dev-slot"} data-fitted={fitted || undefined}>
+    <div ref={slotRef} className={duo ? "duo-slot" : "dev-slot"} data-fitted={fitted || undefined}>
       <div className={duo ? `duo ${open ? "is-open" : ""}` : "dev"} data-duo={duo ? (open ? "open" : "closed") : undefined}>
         <div className={duo ? "duo-body" : "contents"}>
           <div className={duo ? "duo-frame" : "dev-frame"} aria-hidden="true" />
@@ -475,6 +516,20 @@ function LockScreen({
   const [torch, setTorch] = useState(false);
   const [flash, setFlash] = useState(false);
   const [camera, setCamera] = useState(false);
+  const pairCard = useContext(PairSlot);
+  const remote = useRef(false); // a linked phone's finger is on it
+
+  // a linked phone drags this layer the way a finger would
+  useEffect(() => {
+    const move = (p: number | null) => {
+      remote.current = p !== null;
+      setDrag(p === null ? 0 : -p * (layer.current?.offsetHeight ?? 0));
+    };
+    remoteDrag = move;
+    return () => {
+      if (remoteDrag === move) remoteDrag = null;
+    };
+  }, []);
 
   // the two lock-screen buttons do what they do on a phone: the torch lights
   // a pool on the wallpaper that follows the pointer; the camera opens a
@@ -520,11 +575,12 @@ function LockScreen({
     <>
     <div
       ref={layer}
+      data-lock-layer
       className="absolute inset-x-0 top-0 h-[100svh] md:h-auto md:bottom-0 z-20 flex flex-col items-center touch-none select-none"
       style={{
         transform: locked || !slide ? `translateY(${drag}px)` : "translateY(-105%)",
         opacity: locked || !slide ? 1 : 0,
-        transition: start.current !== null ? "none" : "transform 0.48s cubic-bezier(0.32,0.72,0,1), opacity 0.48s ease",
+        transition: start.current !== null || remote.current ? "none" : "transform 0.48s cubic-bezier(0.32,0.72,0,1), opacity 0.48s ease",
       }}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
@@ -566,14 +622,10 @@ function LockScreen({
           {now?.label ?? "9:41"}
         </p>
       </div>
-      <div className={`mt-6 rounded-[22px] px-4 py-3 text-center backdrop-blur-xl ${dark ? "bg-[rgba(242,234,215,0.12)]" : "bg-[rgba(242,234,215,0.6)]"}`}>
-        <p className="font-semibold">{site.name}</p>
-        <p className="text-sm opacity-80">
-          {site.role} · {site.employer}
-        </p>
-      </div>
+      <QuickCard dark={dark} />
 
       <div className="mt-auto w-full px-10 pb-5 flex flex-col items-center gap-4">
+        {pairCard}
         <div className="w-full flex justify-between">
           <button
             type="button"
