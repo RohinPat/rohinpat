@@ -10,6 +10,7 @@ export default function SiteFooter() {
     { name: "LinkedIn ↗", href: site.linkedin, external: true },
   ];
   const about = [
+    { name: "Resume", href: "/resume" },
     { name: "Colophon", href: "/colophon" },
     { name: "Privacy", href: "/privacy" },
   ];

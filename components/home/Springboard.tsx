@@ -4,6 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import QuickCard from "@/components/QuickCard";
 import { pov, site } from "@/lib/site";
 import { burst, getAudio } from "@/components/offhours/audio";
 import FieldWallpaper from "./FieldWallpaper";
@@ -566,12 +567,7 @@ function LockScreen({
           {now?.label ?? "9:41"}
         </p>
       </div>
-      <div className={`mt-6 rounded-[22px] px-4 py-3 text-center backdrop-blur-xl ${dark ? "bg-[rgba(242,234,215,0.12)]" : "bg-[rgba(242,234,215,0.6)]"}`}>
-        <p className="font-semibold">{site.name}</p>
-        <p className="text-sm opacity-80">
-          {site.role} · {site.employer}
-        </p>
-      </div>
+      <QuickCard dark={dark} />
 
       <div className="mt-auto w-full px-10 pb-5 flex flex-col items-center gap-4">
         <div className="w-full flex justify-between">

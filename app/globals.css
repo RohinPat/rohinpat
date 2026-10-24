@@ -650,3 +650,51 @@ main h1:not(.hero-field) {
 /* the diagram's explanation panel keeps its own rhythm inside .prose */
 .pipe-panel p { margin: 0; }
 .pipe-panel p + p { margin-top: 0.25rem; }
+
+/* ---------------------------------------------------------------------------
+   Print. Every page drops the chrome (nav, footer, skip link, the symbiote's
+   canvases); /resume (.resume-page) is also set as ink on white, one or two
+   pages, no backgrounds.
+   ------------------------------------------------------------------------ */
+@media print {
+  @page { margin: 0.55in 0.65in; }
+
+  nav[aria-label="Main"],
+  footer,
+  .skip-link,
+  .resume-actions,
+  canvas[class*="pointer-events-none"] { display: none !important; }
+
+  html:has(.resume-page),
+  body:has(.resume-page) {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* the page sizes its type in rem: 10pt here sets the whole resume's scale */
+  html:has(.resume-page) { font-size: 10pt; }
+
+  main.resume-page {
+    --fg: #000;
+    --fg-muted: #333;
+    --fg-dim: #333;
+    --border: #bbb;
+    --border-strong: #777;
+    --accent-text: #000;
+    background: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+    padding: 0 !important;
+    line-height: 1.35;
+  }
+  main.resume-page article { max-width: none; }
+  main.resume-page h1:not(.hero-field) {
+    font-size: 28pt !important;
+    margin-bottom: 4pt !important;
+  }
+    main.resume-page section { margin-top: 14pt !important; }
+  main.resume-page ul.space-y-6 > li + li { margin-top: 9pt !important; }
+  main.resume-page header + p { margin-top: 10pt !important; }
+  main.resume-page a { color: #000 !important; text-decoration: underline; }
+  main.resume-page .resume-entry { break-inside: avoid; }
+  main.resume-page h2 { break-after: avoid; }
+}
