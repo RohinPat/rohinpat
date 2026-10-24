@@ -9,8 +9,17 @@ import type { LinkPath, LinkSession, LinkState, Role } from "./session";
 // To use the real relay + WebRTC session, change the two lines in
 // createLink() to import("./client") and call hostLink() / joinLink(code).
 
+// The real session (relay + direct WebRTC) by default. The BroadcastChannel
+// mock stands in where there's no relay to talk to: `next dev` can't upgrade
+// WebSockets, so the UI's tests and local work set NEXT_PUBLIC_LINK_MOCK=1 or
+// add ?linkmock to the page URL.
+function mockRequested(): boolean {
+  if (process.env.NEXT_PUBLIC_LINK_MOCK === "1") return true;
+  return typeof location !== "undefined" && new URLSearchParams(location.search).has("linkmock");
+}
+
 export async function createLink(role: Role, code?: string): Promise<LinkSession> {
-  const impl = await import("./mock");
+  const impl = mockRequested() ? await import("./mock") : await import("./client");
   return role === "host" ? impl.hostLink() : impl.joinLink(code ?? "");
 }
 
@@ -104,6 +113,18 @@ export function useLink(role: Role): UseLink {
     else s?.close();
     setView(IDLE);
   }, [role, detach]);
+
+  // leaving the page for real (not just switching tabs) says goodbye, so the
+  // other side hears it at once instead of waiting out the relay's grace
+  useEffect(() => {
+    const onHide = (e: PageTransitionEvent) => {
+      if (e.persisted) return;
+      if (role === "host") dropHost();
+      else live.current?.session.close();
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [role]);
 
   useEffect(
     () => () => {

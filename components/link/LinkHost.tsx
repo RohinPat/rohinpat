@@ -5,6 +5,7 @@ import { pathExplainer, pillLabel } from "@/lib/link/pill";
 import type { LinkMsg, LinkSession, LinkStats } from "@/lib/link/session";
 import { clamp01 } from "@/lib/link/swipe";
 import { TiltDriver } from "@/lib/link/tilt";
+import { isPaired } from "@/lib/link/state";
 import { useLink } from "@/lib/link/useLink";
 import type { PairInfo } from "./PairCard";
 
@@ -51,6 +52,7 @@ export default function LinkHost(props: Props) {
 
   const link = useLink("host");
   const { session, state, path, code, pairUrl, start, stop } = link;
+  const paired = isPaired(state, path);
   const sessionRef = useRef<LinkSession | null>(null);
   sessionRef.current = session;
 
@@ -85,14 +87,14 @@ export default function LinkHost(props: Props) {
       // A moment's grace so a remount (strict mode, hot reload) doesn't flicker it.
       const s = sessionRef.current;
       window.setTimeout(() => {
-        if (attached === 0 && s && s.state === "live") s.send({ type: "screen", name: "piece", piece: location.pathname });
+        if (attached === 0 && s && isPaired(s.state, s.path)) s.send({ type: "screen", name: "piece", piece: location.pathname });
       }, 80);
     };
   }, [start]);
 
   // a session that ended: replace an expired code (a few times), or a finished link while the lock screen is still showing
   useEffect(() => {
-    if (state === "live") {
+    if (paired) {
       wasLive.current = true;
       renewals.current = 0;
       setStale(false);
@@ -109,13 +111,13 @@ export default function LinkHost(props: Props) {
     renewals.current++;
     if (latest.current.locked && renewals.current <= MAX_AUTO_RENEWALS) start();
     else setStale(true);
-  }, [state, start, stop]);
+  }, [state, paired, start, stop]);
 
   // what the home screen needs to draw the pairing card
   useEffect(() => {
     if (state === "idle" && !stale) latest.current.onPair(null);
-    else latest.current.onPair({ state: stale ? "closed" : state, code, pairUrl, stale, renew });
-  }, [state, code, pairUrl, stale, renew]);
+    else latest.current.onPair({ state: stale ? "closed" : state, paired, code, pairUrl, stale, renew });
+  }, [state, paired, code, pairUrl, stale, renew]);
 
   // phone -> host
   useEffect(() => {
@@ -161,11 +163,11 @@ export default function LinkHost(props: Props) {
 
   // host -> phone: which screen the big phone is on
   useEffect(() => {
-    if (session && state === "live") session.send({ type: "screen", name: props.locked ? "lock" : "home" });
-  }, [session, state, props.locked]);
+    if (session && paired) session.send({ type: "screen", name: props.locked ? "lock" : "home" });
+  }, [session, paired, props.locked]);
 
   // the tilt itself: one transform per frame, straight onto the device
-  const linked = state === "live" || state === "reconnecting";
+  const linked = paired;
   useEffect(() => {
     const el = props.target.current;
     if (!linked || !el || reduced) return;

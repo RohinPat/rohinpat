@@ -12,6 +12,8 @@ import type { LinkState } from "@/lib/link/session";
 
 export type PairInfo = {
   state: LinkState | "idle";
+  /** a phone is on the other end and messages flow (see isPaired) */
+  paired: boolean;
   code: string | null;
   pairUrl: string | null;
   /** the code died and we've stopped auto-replacing it */
@@ -21,7 +23,7 @@ export type PairInfo = {
 
 export default function PairCard({ info }: { info: PairInfo }) {
   const [how, setHow] = useState(false);
-  const { state, code, pairUrl, stale, renew } = info;
+  const { state, paired, code, pairUrl, stale, renew } = info;
 
   const qr = useMemo(() => (pairUrl ? makeQr(pairUrl) : null), [pairUrl]);
   const short = useMemo(() => {
@@ -34,7 +36,7 @@ export default function PairCard({ info }: { info: PairInfo }) {
     }
   }, [pairUrl]);
 
-  const live = state === "live" || state === "reconnecting";
+  const live = paired;
   const dead = state === "closed" && stale;
   const status = live ? "Phone linked. Tilt it, then swipe up on it to unlock." : dead ? "That code expired." : "";
 

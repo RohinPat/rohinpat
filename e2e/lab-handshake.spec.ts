@@ -248,21 +248,13 @@ async function camRun(w: number, h: number, fill: number, sim: Partial<SimOption
   }
 }
 
-test("camera scan: header blocks getUserMedia by default", async () => {
-  test.setTimeout(60000);
-  const browser = await chromium.launch({ args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  try {
-    await page.goto(`${BASE}/lab/handshake`);
-    await ready(page);
-    await page.getByRole("button", { name: /open camera/i }).click();
-    const alert = await page.getByText(/Camera unavailable/).first().textContent({ timeout: 10000 });
-    save("camera-blocked.json", { alert });
-    expect(alert).toMatch(/NotAllowedError|Camera unavailable/);
-  } finally {
-    await browser.close();
-  }
+// The POC found the site-wide camera=() header blocked the scanner here; the
+// lab now gets camera=(self) (next.config.mjs), and everywhere else keeps it off.
+test("camera: allowed on /lab, still off elsewhere", async ({ request }) => {
+  const lab = await request.get(`${BASE}/lab/handshake`);
+  expect(lab.headers()["permissions-policy"]).toContain("camera=(self)");
+  const other = await request.get(`${BASE}/projects`);
+  expect(other.headers()["permissions-policy"]).toContain("camera=()");
 });
 
 for (const c of [

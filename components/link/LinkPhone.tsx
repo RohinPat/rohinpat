@@ -8,6 +8,7 @@ import { askMotionPermission, type Motion } from "@/lib/link/permission";
 import { pillLabel } from "@/lib/link/pill";
 import type { LinkMsg, LinkStats } from "@/lib/link/session";
 import { dragProgress, inSwipeZone, shouldUnlock } from "@/lib/link/swipe";
+import { isPaired } from "@/lib/link/state";
 import { useLink } from "@/lib/link/useLink";
 
 // The visitor's own phone, as a controller. It joins the code the laptop shows,
@@ -43,7 +44,7 @@ export default function LinkPhone() {
 
 function Controller() {
   const link = useLink("phone");
-  const { session, state } = link;
+  const { session, state, path } = link;
 
   const [typed, setTyped] = useState("");
   const [code, setCode] = useState<string | null>(null);
@@ -75,8 +76,8 @@ function Controller() {
     };
   }, []);
 
-  const liveish = state === "live" || state === "reconnecting";
-  if (state === "live") everLive.current = true;
+  const liveish = isPaired(state, path);
+  if (liveish) everLive.current = true;
   const failed = started && state === "closed";
   const joining = started && !failed && !liveish;
 
@@ -131,7 +132,7 @@ function Controller() {
   }, [session]);
 
   useEffect(() => {
-    if (!session || state !== "live" || motion === "denied" || motion === "unavailable") return;
+    if (!session || !liveish || motion === "denied" || motion === "unavailable") return;
     let seq = 0;
     let last = 0;
     let got = false;
@@ -154,7 +155,7 @@ function Controller() {
       window.removeEventListener("deviceorientation", onOrient);
       window.clearTimeout(timer);
     };
-  }, [session, state, motion]);
+  }, [session, liveish, motion]);
 
   useEffect(() => {
     if (!liveish) return;
