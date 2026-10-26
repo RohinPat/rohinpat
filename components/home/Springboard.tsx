@@ -14,6 +14,7 @@ import VenomCursor from "./VenomCursor";
 import { ALL_APPS, DOCK, GLYPHS, GRID, type App } from "./apps";
 import type { PairInfo } from "@/components/link/PairCard";
 import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
+import { DuoSlab, LeafHull, PhoneHull } from "./hull3d";
 
 // Home is an iPhone. On a phone it's full-bleed (your phone is the device);
 // from 768px it sits in a frame — "pro", then "pro max" from 1280px with the
@@ -65,6 +66,9 @@ function useBoston() {
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const GRID_CLS =
+  "grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 [@media(max-height:720px)]:auto-rows-[64px] [@media(max-height:720px)]:gap-y-2 md:!auto-rows-[76px] md:!gap-y-3 pointer-events-auto content-start";
+
 export default function Springboard() {
   const router = useRouter();
   const section = useRef<HTMLElement>(null);
@@ -78,6 +82,9 @@ export default function Springboard() {
   const slot = useRef<HTMLDivElement>(null);
   const [linkOk, setLinkOk] = useState(false);
   const [pair, setPair] = useState<PairInfo | null>(null);
+  // the screen's mode lives here so the Duo's cover can show the same left half
+  const [dark, setDark] = useState(true); // the phone starts in dark mode
+  const [bright, setBright] = useState(100);
 
   // the phone link is for mouse-first wide screens: never on a phone
   useEffect(() => {
@@ -139,6 +146,7 @@ export default function Springboard() {
   const unlock = useCallback(() => {
     if (!locked) return;
     markUnlocked();
+    if (duo) snapWallpaper();
     setLocked(false);
     setJustUnlocked(true);
     const wait = reducedMotion() ? 0 : duo ? DUO_MS + 40 : 480;
@@ -187,8 +195,12 @@ export default function Springboard() {
         <span>Patel</span>
       </h1>
 
-      <Device slotRef={slot} duo={duo} fitted={fitted} open={!locked} cover={!lockGone} now={now} onUnlock={unlock}>
+      <Device slotRef={slot} duo={duo} fitted={fitted} open={!locked} cover={!lockGone} now={now} dark={dark} onUnlock={unlock}>
         <PhoneScreen
+          dark={dark}
+          onDark={setDark}
+          bright={bright}
+          onBright={setBright}
           duo={duo}
           now={now}
           locked={locked}
@@ -226,6 +238,7 @@ function Device({
   open,
   cover,
   now,
+  dark,
   onUnlock,
   children,
 }: {
@@ -235,14 +248,26 @@ function Device({
   open: boolean;
   cover: boolean;
   now: Boston | null;
+  dark: boolean;
   onUnlock: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div ref={slotRef} className={duo ? "duo-slot" : "dev-slot"} data-fitted={fitted || undefined}>
-      <div className={duo ? `duo ${open ? "is-open" : ""}` : "dev"} data-duo={duo ? (open ? "open" : "closed") : undefined}>
+      <div
+        className={duo ? `duo ${open ? "is-open" : ""} ${cover ? "" : "is-landed"}` : "dev"}
+        data-duo={duo ? (open ? "open" : "closed") : undefined}
+      >
+        {/* the open Duo's thickness (drawn only while the phone link tilts the device) */}
+        {duo && (
+          <div className="duo-slab" aria-hidden="true">
+            <DuoSlab />
+          </div>
+        )}
         <div className={duo ? "duo-body" : "contents"}>
-          <div className={duo ? "duo-frame" : "dev-frame"} aria-hidden="true" />
+          <div className={duo ? "duo-frame" : "dev-frame"} aria-hidden="true">
+            {!duo && <PhoneHull />}
+          </div>
           {!duo && (
             <>
               <span className="dev-btn" aria-hidden="true" style={{ left: -19, top: 120, height: 32 }} />
@@ -256,7 +281,7 @@ function Device({
             {children}
           </div>
         </div>
-        {duo && cover && <DuoCover now={now} locked={!open} onUnlock={onUnlock} />}
+        {duo && cover && <DuoCover now={now} dark={dark} locked={!open} onUnlock={onUnlock} />}
       </div>
     </div>
   );
@@ -265,12 +290,12 @@ function Device({
 // The Duo's cover: the outer display (lock screen) on its front, the left
 // half of the inner display on its back. Unlocking swings it open on the
 // hinge; once it lands, the real left half takes over and the cover goes.
-function DuoCover({ now, locked, onUnlock }: { now: Boston | null; locked: boolean; onUnlock: () => void }) {
+function DuoCover({ now, dark, locked, onUnlock }: { now: Boston | null; dark: boolean; locked: boolean; onUnlock: () => void }) {
   return (
     <div className="duo-leaf">
+      {/* the cover's thickness: its edges, and the buttons on its free edge */}
+      <LeafHull />
       <div className="duo-face duo-front">
-        <span className="duo-btn" aria-hidden="true" style={{ top: 96, height: 58 }} />
-        <span className="duo-btn" aria-hidden="true" style={{ top: 170, height: 40 }} />
         <div className="duo-outer">
           <div className="duo-island" aria-hidden="true" />
           {/* frozen once the cover starts to swing: nobody sees it redraw */}
@@ -279,13 +304,68 @@ function DuoCover({ now, locked, onUnlock }: { now: Boston | null; locked: boole
         </div>
       </div>
       <div className="duo-face duo-back" aria-hidden="true">
-        <div className="duo-back-screen" />
+        <div className="duo-back-screen" data-light={dark ? undefined : ""}>
+          <LeftHalf now={now} dark={dark} />
+        </div>
       </div>
     </div>
   );
 }
 
+// What the left half of the open screen will show, drawn on the cover's inner
+// face so the screen isn't empty while it unfolds: the wallpaper as it was
+// when you unlocked, and the same widgets in the same grid (same components,
+// so it follows dark mode and the clock). Two layers: sharp underneath, and a
+// blurred copy on top that fades out as the cover lands (an opacity fade, not
+// an animated filter). Not interactive, not announced.
+function LeftHalf({ now, dark }: { now: Boston | null; dark: boolean }) {
+  const inert = useCallback((el: HTMLElement | null) => el?.setAttribute("inert", ""), []);
+  const content = (
+    <div className={`duo-ghost ${dark ? "text-[var(--paper)]" : "text-[var(--ink)]"}`}>
+      <div className="hidden md:flex absolute top-0 inset-x-0 h-[54px] items-center px-8 text-[16px] font-semibold tabular-nums">
+        <span>{now?.label ?? "9:41"}</span>
+      </div>
+      <div className="relative flex flex-col h-full pb-4 px-8 pt-[64px]">
+        <div className="grid grid-cols-2 gap-x-16">
+          <div className={GRID_CLS}>
+            <ProfileWidget i={0} />
+            <ClockWidget now={now} i={1} />
+            <CaseWidget i={2} ghost />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div ref={inert} className="absolute inset-0 pointer-events-none" aria-hidden="true">
+      <canvas className="duo-snap" />
+      {content}
+      <div className="duo-ghost-blur">
+        <div className="duo-ghost-soft">{content}</div>
+      </div>
+      {/* the screen's two outer corners, as bezel-coloured patches (see .duo-back-screen) */}
+      <i className="duo-corner duo-corner-t" />
+      <i className="duo-corner duo-corner-b" />
+    </div>
+  );
+}
+
+// the left half's wallpaper, as the cover starts to swing: frozen from here on
+function snapWallpaper() {
+  const real = document.querySelector<HTMLCanvasElement>(".duo-screen canvas");
+  const snap = document.querySelector<HTMLCanvasElement>(".duo-snap");
+  const ctx = snap?.getContext("2d");
+  if (!real || !snap || !ctx) return;
+  snap.width = Math.round(real.width / 2);
+  snap.height = real.height;
+  ctx.drawImage(real, 0, 0, snap.width, real.height, 0, 0, snap.width, snap.height);
+}
+
 function PhoneScreen({
+  dark,
+  onDark,
+  bright,
+  onBright,
   duo,
   now,
   locked,
@@ -295,6 +375,10 @@ function PhoneScreen({
   openApp,
   onSearch,
 }: {
+  dark: boolean;
+  onDark: (v: boolean) => void;
+  bright: number;
+  onBright: (v: number) => void;
   duo: boolean;
   now: Boston | null;
   locked: boolean;
@@ -308,8 +392,6 @@ function PhoneScreen({
   const [jiggle, setJiggle] = useState(false);
   const [cc, setCc] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [dark, setDark] = useState(true); // the phone starts in dark mode
-  const [bright, setBright] = useState(100);
 
   // coming back from an app: close into its icon
   useEffect(() => {
@@ -353,7 +435,7 @@ function PhoneScreen({
   const icons = GRID.map((a, k) => (
     <AppIcon key={a.id} app={a} index={k} i={3 + k} dark={dark} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
   ));
-  const grid = "grid grid-cols-4 grid-flow-dense auto-rows-[76px] gap-x-4 gap-y-3 [@media(max-height:720px)]:auto-rows-[64px] [@media(max-height:720px)]:gap-y-2 md:!auto-rows-[76px] md:!gap-y-3 pointer-events-auto content-start";
+  const grid = GRID_CLS;
 
   return (
     <div className={`relative w-full h-full min-h-[inherit] ${fg}`} style={{ filter: bright < 100 ? `brightness(${bright / 100})` : undefined }}>
@@ -396,8 +478,10 @@ function PhoneScreen({
         {duo ? (
           // open Duo: Today View on the left half, the Home Screen on the right
           <div className="grid grid-cols-2 gap-x-16">
-            {/* widgets pop in once the cover has landed on this half */}
-            <div className={`${grid} ${anim} [--d:520ms]`}>{widgets}</div>
+            {/* in place from the first frame: the cover's inner face (LeftHalf)
+                shows these same widgets while it swings, so when the cover
+                lands there's nothing left to pop in */}
+            <div className={grid}>{widgets}</div>
             {/* the right half is lit under the cover from the start (already
                 painted, so the swing doesn't wait on it); it's just uncovered */}
             <div className={`${grid} pt-2`}>{icons}</div>
@@ -465,8 +549,8 @@ function PhoneScreen({
           dark={dark}
           bright={bright}
           onPaused={setPaused}
-          onDark={setDark}
-          onBright={setBright}
+          onDark={onDark}
+          onBright={onBright}
           onClose={() => setCc(false)}
         />
       )}
@@ -902,21 +986,10 @@ function ProfileWidget({ i }: { i: number }) {
   );
 }
 
-function CaseWidget({ onOpen, i }: { onOpen: (el: HTMLElement | null) => void; i: number }) {
+function CaseWidget({ onOpen, i, ghost }: { onOpen?: (el: HTMLElement | null) => void; i: number; ghost?: boolean }) {
   const ref = useRef<HTMLAnchorElement>(null);
-  return (
-    <Link
-      ref={ref}
-      href="/projects/closet-organizer"
-      data-tile="closet-widget"
-      onClick={(e) => {
-        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-        e.preventDefault();
-        onOpen(ref.current);
-      }}
-      style={{ ["--i" as string]: i } as React.CSSProperties}
-      className="col-span-2 row-span-2 rounded-[24px] p-4 [@media(max-height:720px)]:p-3 md:!p-4 flex flex-col justify-between bg-[#1e2320] text-[var(--paper)] shadow-[0_10px_30px_-14px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(242,234,215,0.12)] transition-transform active:scale-95"
-    >
+  const body = (
+    <>
       <span className="flex items-start justify-between">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mint)]">Case study</span>
         <Motif slug="closet-organizer" className="w-9 h-9 text-[var(--mint)]" />
@@ -925,6 +998,31 @@ function CaseWidget({ onOpen, i }: { onOpen: (el: HTMLElement | null) => void; i
         <span className="block font-semibold leading-tight text-[15px]">Closet Organizer</span>
         <span className="block mt-1 text-[11px] text-[#b5b6ab] whitespace-nowrap">CLIP · FastAPI</span>
       </span>
+    </>
+  );
+  const cls =
+    "col-span-2 row-span-2 rounded-[24px] p-4 [@media(max-height:720px)]:p-3 md:!p-4 flex flex-col justify-between bg-[#1e2320] text-[var(--paper)] shadow-[0_10px_30px_-14px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(242,234,215,0.12)]";
+  // the cover's copy: same look, nothing to click, nothing for the venom cursor to find
+  if (ghost)
+    return (
+      <div className={cls} style={{ ["--i" as string]: i } as React.CSSProperties}>
+        {body}
+      </div>
+    );
+  return (
+    <Link
+      ref={ref}
+      href="/projects/closet-organizer"
+      data-tile="closet-widget"
+      onClick={(e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        onOpen?.(ref.current);
+      }}
+      style={{ ["--i" as string]: i } as React.CSSProperties}
+      className={`${cls} transition-transform active:scale-95`}
+    >
+      {body}
     </Link>
   );
 }

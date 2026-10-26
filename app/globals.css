@@ -367,6 +367,8 @@ main h1:not(.hero-field) {
     transform-origin: center;
   }
   .dev-frame {
+    /* the outline the solid body is built on (see hull3d.tsx) */
+    --w: 421px; --h: 880px; --r: 72px;
     display: block;
     position: absolute;
     inset: -14px;
@@ -413,7 +415,7 @@ main h1:not(.hero-field) {
 }
 @media (min-width: 1280px) {
   .dev-screen { width: 430px; height: 932px; border-radius: 60px; }
-  .dev-frame { border-radius: 76px; }
+  .dev-frame { --w: 458px; --h: 960px; --r: 76px; border-radius: 76px; }
   .dev-frame::after { border-radius: 72px; }
 }
 /* The slot a scaled device occupies, so layout matches what you see. */
@@ -517,7 +519,10 @@ main h1:not(.hero-field) {
   left: 50%;
   width: 50%;
   z-index: 50;
-  transform-origin: left center;
+  /* the hinge axis runs through the back of the cover (z = -thickness), so the
+     inner face lands exactly on the open screen's plane */
+  transform-origin: left center -36px;
+  --w: 489px; --h: 696px; --r: 50px; /* the outline its walls are built on */
   transform-style: preserve-3d;
   transition: transform var(--swing);
   /* its own layer from the first paint, so the swing never waits for one */
@@ -561,15 +566,15 @@ main h1:not(.hero-field) {
   background: #000;
   z-index: 40;
 }
-.duo-btn {
-  position: absolute;
-  right: -5px;
-  width: 5px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #4a4e4b, #1c1e1d);
+/* the back is mirrored by the leaf's turn, so its own left is the outer edge.
+   It sits on the cover's back plane (36px behind the front); the .duo's
+   perspective shrinks that depth by 0.7%, so it's scaled back up about the
+   hinge to land at exactly the size of the screen under it. */
+.duo-back {
+  transform-origin: 100% 50%;
+  transform: translateX(-100%) scale(1.0069) translateZ(-36px) rotateY(180deg);
+  border-radius: 50px 0 0 50px;
 }
-/* the back is mirrored by the leaf's turn, so its own left is the outer edge */
-.duo-back { transform: rotateY(180deg); border-radius: 50px 0 0 50px; }
 .duo-back::after {
   content: "";
   position: absolute;
@@ -581,13 +586,52 @@ main h1:not(.hero-field) {
   position: absolute;
   inset: 14px 0 14px 14px;
   border-radius: 38px 0 0 38px;
-  /* the wallpaper's tone, with a hint of its strokes, under hinge shading */
-  /* the inner screen's left half, dark like the wallpaper, shaded toward the hinge */
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03), transparent 40%, rgba(0, 0, 0, 0.35)),
-    radial-gradient(120% 80% at 30% 30%, #1a1d1b, #0d100e);
+  /* No overflow clip here: composited children (the canvas, the fading layer)
+     inside a rounded clip would each need a mask on every frame of the swing.
+     Instead each layer carries the corner radius itself. */
+  /* the wallpaper's base tone; its content is LeftHalf (Springboard.tsx) */
+  --tone: #0d100e;
+  background: var(--tone);
   z-index: 1;
 }
+.duo-back-screen[data-light] { --tone: #f2ead7; }
+/* what the screen under it will show: the wallpaper as it was at unlock, and the real
+   widgets' layout, sharp. The same size as the open screen, so it lines up with the
+   left half exactly when the cover lands. */
+.duo-snap { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.duo-ghost { position: absolute; left: 0; top: 0; width: 950px; height: 668px; }
+/* soft focus while the cover swings, cleared by a fade as it lands. Only the
+   wrapper is composited (an opacity fade is all the compositor does); the blur
+   is a static filter on the child, painted once into the wrapper's texture, not
+   re-run every frame of the swing. */
+.duo-ghost-blur {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: var(--tone);
+  will-change: opacity;
+  transition: opacity 340ms ease-out 480ms;
+}
+.duo-ghost-soft { position: absolute; inset: 0; filter: blur(5px); }
+.duo.is-open .duo-ghost-blur { opacity: 0; }
+/* the bezel colour in the two corners the rounded screen leaves, kept inside the bezel's own curve */
+.duo-corner { position: absolute; left: -10px; width: 48px; height: 48px; z-index: 4; }
+.duo-corner-t { top: -10px; border-radius: 46px 0 0 0; background: radial-gradient(circle at 48px 48px, transparent 37.2px, #050605 38px); }
+.duo-corner-b { bottom: -10px; border-radius: 0 0 0 46px; background: radial-gradient(circle at 48px 0, transparent 37.2px, #050605 38px); }
+/* shaded toward the hinge while it turns; flat once it has landed */
+.duo-back-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03), transparent 40%, rgba(0, 0, 0, 0.35));
+  transition: opacity 340ms ease-out 480ms;
+}
+.duo.is-open .duo-back-screen::after { opacity: 0; }
+
 /* light falls off the cover as it turns past edge-on */
 .duo-front::before, .duo-back::before {
   content: "";
@@ -647,7 +691,8 @@ main h1:not(.hero-field) {
 @media (prefers-reduced-motion: reduce) {
   .page-enter, .apps-in > *,
   [class*="animate-["] { animation: none !important; }
-  .duo, .duo-body, .duo-leaf, .duo-front::before, .duo-back::before { transition: none !important; }
+  .duo, .duo-body, .duo-leaf, .duo-front::before, .duo-back::before,
+  .duo-ghost-blur, .duo-back-screen::after { transition: none !important; }
 }
 
 /* the diagram's explanation panel keeps its own rhythm inside .prose */
@@ -706,3 +751,126 @@ main h1:not(.hero-field) {
    device tilts with it. The transform goes on the slot, so the --s scale on
    .dev / .duo is untouched; this just lets the browser promote it. */
 .dev-slot[data-link], .duo-slot[data-link] { will-change: transform; }
+
+/* ---------------------------------------------------------------------------
+   Solid bodies (components/home/hull3d.tsx). While a phone is linked the
+   device tilts in 3D, so it gets thickness: side walls, buttons that stand
+   off them, a back panel (with a camera plateau on the iPhone, a hinge barrel
+   on the Duo). The screen stays the real DOM, flat on the front plane.
+   Everything here is static; nothing is animated per frame, and none of it
+   exists for a flat device (display: none), so only the Duo's cover walls
+   (always drawn: the swing passes through edge-on) cost anything at rest.
+   ------------------------------------------------------------------------ */
+.b3 {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.dev-slot:not([data-link]) .b3-solid, .duo-slot:not([data-link]) .b3-solid, .duo-slot:not([data-link]) .duo-slab { display: none; }
+.duo-half, .duo-spine { display: contents; }
+
+.dev-slot[data-link], .duo-slot[data-link] { transform-style: preserve-3d; }
+@media (min-width: 768px) {
+  /* the scale must reach depth too, or the thickness wouldn't shrink with the device */
+  .dev-slot[data-link] .dev {
+    transform: translate(-50%, -50%) scale3d(var(--s, 0.8), var(--s, 0.8), var(--s, 0.8));
+    transform-style: preserve-3d;
+  }
+  /* the front plane is z = 0 (so nothing about the screen moves); the body is behind it */
+  .dev-slot[data-link] .dev-frame {
+    transform-style: preserve-3d;
+    /* the ground shadow moves to a plate behind the body, below */
+    box-shadow: 0 0 0 1px rgba(13, 16, 14, 0.35), inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+  }
+  .dev-slot[data-link] .dev-screen { transform: translateZ(0.5px); }
+  .dev-slot[data-link] .dev-btn { display: none; }
+}
+.b3-ground {
+  width: var(--w);
+  height: var(--h);
+  border-radius: var(--r);
+  box-shadow: 0 50px 100px -30px rgba(13, 16, 14, 0.55);
+}
+.b3-back { transform-style: preserve-3d; transform-origin: 50% 50%; height: var(--h); }
+.b3-back-phone {
+  width: var(--w);
+  border-radius: var(--r);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.35), transparent 38%, rgba(0, 0, 0, 0.14) 80%),
+    linear-gradient(0deg, #bcb6a9, #cbc5b8);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.4), inset 0 0 0 6px rgba(120, 114, 102, 0.35);
+}
+/* the Duo's back: the half panels, and the hinge barrel between them */
+.b3-back-duo {
+  background: linear-gradient(150deg, #34383a, #1f2221 45%, #2c302e);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.12);
+}
+/* viewed from behind the iPhone's camera is top-left, which is its own top-left here */
+.b3-plateau {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: 84px;
+  height: 84px;
+  border-radius: 26px;
+  transform: translateZ(3px);
+  transform-style: preserve-3d;
+  background: linear-gradient(145deg, #d3cdc0, #aba596);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 0 1.5px rgba(255, 255, 255, 0.45);
+}
+.b3-lens {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  transform: translateZ(2px);
+  background: radial-gradient(circle at 35% 30%, #4d545c 0, #15181b 45%, #040506 72%);
+  box-shadow: 0 0 0 3px #77726a, 0 0 0 4px rgba(0, 0, 0, 0.45), inset 0 0 0 5px #0b0c0d;
+}
+.b3-flash {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f0e8cc;
+  box-shadow: inset 0 0 0 2px #b8b095;
+}
+/* the hinge barrel: ribbed along its length, shaded around it */
+.b3-spine {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.06) 42%, rgba(0, 0, 0, 0.4)),
+    repeating-linear-gradient(90deg, #62665f 0 3px, #272a28 3px 5px);
+}
+.b3-back.b3-spine {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.1) 50%, rgba(0, 0, 0, 0.5)),
+    repeating-linear-gradient(180deg, #62665f 0 3px, #272a28 3px 5px);
+}
+.duo.is-open .b3-spine-wall { display: none; }
+
+/* The open Duo's thickness. Its front plane is the body (the screens), pushed
+   back by the thickness of one half; the .duo's perspective shrinks that depth
+   by 0.7%, so body and slab are scaled back up to keep the screens exactly the
+   size they are flat. */
+.duo-slab {
+  position: absolute;
+  inset: 0;
+  --w: 978px; --h: 696px; --r: 50px;
+  transform: scale(1.0069);
+  transform-style: preserve-3d;
+}
+.duo-half-l { visibility: hidden; }
+.duo.is-landed .duo-half-l { visibility: visible; }
+.duo-slot[data-link] .duo {
+  transform: translate(-50%, -50%) scale3d(var(--s, 0.8), var(--s, 0.8), var(--s, 0.8)) translateX(-25%) translateZ(0px);
+  transform-style: preserve-3d;
+}
+/* open: the screens (z = -36 inside the .duo) come forward to the pivot plane, z = 0 */
+.duo-slot[data-link] .duo.is-open {
+  transform: translate(-50%, -50%) scale3d(var(--s, 0.8), var(--s, 0.8), var(--s, 0.8)) translateX(0%) translateZ(36px);
+}
+.duo-slot[data-link] .duo-body { transform: translateZ(-36px) scale(1.0069); }
