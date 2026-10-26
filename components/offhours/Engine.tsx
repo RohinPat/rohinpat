@@ -4,12 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio, noise, type Audio } from "./audio";
 import { display, mono } from "./font";
+import { useRemote } from "@/lib/link/remote";
+import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, rpmRate, type EnginePhase } from "./engineRemote";
 
 // A race dash and a quarter mile. The engine is a small physics model
 // (torque curve, gear ratios, drag) and a synthesized V8: detuned saws at
 // the firing frequency (rpm / 15) plus a sub-octave, through a waveshaper
 // and a load-dependent low-pass. Hold the throttle to stage and launch,
-// shift on the green light; perfect shifts pop and pull.
+// shift on the green light; perfect shifts pop and pull. A linked phone is a
+// throttle grip: it sends the `throttle` axis (0..1, a pedal part way down),
+// shifts with `engine-shift`, and is told the revs and gear back.
 
 const RATIOS = [3.4, 2.15, 1.55, 1.2, 0.97, 0.82];
 const FINAL = 3.55;
@@ -100,6 +104,8 @@ type Car = {
   x: number;
   gear: number;
   throttle: boolean;
+  /** how far down the pedal is, 0..1: 1 for the keys and the button, anything for a phone */
+  pedal: number;
   shiftT: number;
   tree: number;
   t: number;
@@ -121,6 +127,7 @@ const freshCar = (best: number | null = null): Car => ({
   x: 0,
   gear: 0,
   throttle: false,
+  pedal: 0,
   shiftT: 0,
   tree: 0,
   t: 0,
@@ -141,6 +148,10 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
   const eng = useRef<Engine | null>(null);
   const clock = useRef(0);
   const [done, setDone] = useState<string>("");
+  // the keys / pedal button (held) and a linked phone (target, then smoothed)
+  const held = useRef(false);
+  const phone = useRef({ target: 0, smooth: 0 });
+  const told = useRef({ at: -Infinity, key: "" });
 
   useEffect(
     () => () => {
@@ -154,6 +165,7 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
   );
 
   const throttle = (on: boolean) => {
+    held.current = on;
     car.current.throttle = on;
     if (on && play && !eng.current) {
       const au = getAudio();
@@ -183,12 +195,54 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
     setDone("");
   };
 
+  // A linked phone: its throttle axis is a pedal, its shift gesture is the up
+  // arrow, and it is told the revs, gear and shift light. Without one this does nothing.
+  const remote = useRemote(play ? "engine" : null, {
+    axis: (name, v) => {
+      if (name === "throttle") phone.current.target = parseThrottle(v);
+    },
+    gesture: (name) => {
+      if (name === "engine-shift") shift();
+      else if (name === "engine-again" && car.current.phase === "done") again();
+      else if (name === "engine-sync") told.current.key = "";
+    },
+  });
+  const linkRef = useRef(remote);
+  linkRef.current = remote;
+  useEffect(() => {
+    // no phone (or it dropped): a throttle left open must not stay open
+    if (!remote.linked) phone.current = { target: 0, smooth: 0 };
+    told.current.key = "";
+  }, [remote.linked]);
+  /** tell the phone where the dash is: when it changed, and not more than ten times a second */
+  function tellPhone(c: Car, t: number) {
+    const r = linkRef.current;
+    if (!r.linked || t * 1000 - told.current.at < ENGINE_CAL.stateEveryMs) return;
+    const phase: EnginePhase = c.phase;
+    const call = c.call && t - c.callT < 0.9 ? c.call : "";
+    const view = { rpm: c.rpm, gear: c.gear, phase, shift: phase === "run" && c.rpm >= SHIFT_AT && c.gear < RATIOS.length - 1, call, time: phase === "run" || phase === "done" ? c.t : 0 };
+    const data = engineStateData(view);
+    const key = JSON.stringify(data);
+    if (key === told.current.key) return;
+    told.current = { at: t * 1000, key };
+    r.send({ type: "gesture", name: "engine-state", data });
+  }
+
   const ref = useCanvas(
     ({ ctx, w, h, t, dt }) => {
       clock.current = t;
       const c = car.current;
       if (!play) autopilot(c, dt);
+      if (play) {
+        // keys and the button are a flat-out pedal; a phone's is smoothed and can be part way
+        const ph = phone.current;
+        ph.smooth = pedalStep(ph.smooth, ph.target, dt, ENGINE_CAL.smoothS);
+        const p = Math.max(held.current ? 1 : 0, ph.smooth);
+        c.throttle = p > ENGINE_CAL.throttleOn;
+        c.pedal = c.throttle ? p : 0;
+      } else c.pedal = c.throttle ? 1 : 0;
       simulate(c, dt, t);
+      tellPhone(c, t);
       voice(c);
       draw(ctx, c, w, h, t);
     },
@@ -230,14 +284,14 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
   function simulate(c: Car, dt: number, t: number) {
     if (c.phase === "idle") {
       // free revving: stage by holding the throttle
-      c.rpm += (c.throttle ? 9000 : -6000) * dt;
+      c.rpm += rpmRate(c.pedal, 9000, 6000) * dt;
       c.stageHeld = c.throttle ? c.stageHeld + dt : 0;
       if (c.stageHeld > 0.35) {
         c.phase = "tree";
         c.tree = 0;
       }
     } else if (c.phase === "tree") {
-      c.rpm += (c.throttle ? 7000 : -6000) * dt;
+      c.rpm += rpmRate(c.pedal, 7000, 6000) * dt;
       c.tree += dt;
       if (c.tree >= 1.6) {
         c.phase = "run";
@@ -259,7 +313,7 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
       c.limiter = onLimiter ? c.limiter + dt : 0;
       const drive =
         c.throttle && c.shiftT <= 0 && !(onLimiter && Math.floor(t * 30) % 2)
-          ? Math.min(17500, (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) // traction-limited
+          ? Math.min(17500, (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) * c.pedal // traction-limited
           : 0;
       const bog = c.slip < 0 ? 1 + c.slip * 0.6 : 1 - Math.max(0, c.slip) * 0.35;
       const drag = 0.39 * c.v * c.v + 180;
@@ -282,7 +336,7 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
           );
       }
     } else {
-      c.rpm += (c.throttle ? 7000 : -4000) * dt;
+      c.rpm += rpmRate(c.pedal, 7000, 4000) * dt;
       c.v = Math.max(0, c.v - 6 * dt);
     }
     if (c.phase !== "run") c.rpm = Math.min(LIMIT + 60, Math.max(IDLE, c.rpm));
@@ -298,7 +352,7 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
     const cycle = c.rpm / 120;
     e.osc.frequency.setTargetAtTime(cycle, now, 0.02);
     e.low.frequency.setTargetAtTime(cycle / 2, now, 0.02);
-    const load = c.throttle ? 1 : 0.3;
+    const load = 0.3 + 0.7 * c.pedal;
     const cut = c.phase === "run" && c.shiftT > 0;
     // off throttle it goes dull and boomy; on throttle it opens up, but stays low
     e.lp.frequency.setTargetAtTime(180 + c.rpm * (0.09 + 0.1 * load), now, 0.04);
@@ -479,6 +533,15 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 flex flex-col bg-[#0b0d0c]">
       <div className="relative flex-1 min-h-0">
+        {remote.linked && (
+          <p
+            data-testid="engine-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Twist your phone
+          </p>
+        )}
         <canvas
           ref={ref}
           data-autofocus={play || undefined}

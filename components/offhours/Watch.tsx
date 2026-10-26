@@ -5,6 +5,8 @@ import type { PieceProps } from "./useCanvas";
 import { burst, getAudio, modal } from "./audio";
 import Exploded3D from "./Exploded3D";
 import type { WatchState } from "./three/watch";
+import { useRemote } from "@/lib/link/remote";
+import { WATCH_CAL, parseCrown } from "./watchRemote";
 
 // A 40 mm automatic in fifteen parts, rendered in real 3D (three.js, loaded
 // only when this piece is on screen): polished and brushed steel, sapphire,
@@ -12,6 +14,9 @@ import type { WatchState } from "./three/watch";
 // it; orbit it and the rotor swings and winds it too; pull it apart with the
 // slider; flip it to look through the caseback; pick a part to isolate it.
 // The model and the movement's motion live in three/watch.ts.
+// A linked phone turns the crown too: its `crown` gestures are degrees of turn
+// and go through the same wind() as a drag; it also sets the explode slider
+// (axis `explode`) and flips the watch, and is told the power reserve back.
 
 const RESERVE = 75;
 const BEZELS = [
@@ -90,8 +95,8 @@ export default function Watch({ mode, paused }: PieceProps) {
     }
     s.crown += deg;
     clickAcc.current += deg;
-    while (clickAcc.current >= 14) {
-      clickAcc.current -= 14;
+    while (clickAcc.current >= WATCH_CAL.detentDeg) {
+      clickAcc.current -= WATCH_CAL.detentDeg;
       const au = getAudio();
       if (s.power < 1) {
         s.power = Math.min(1, s.power + 0.018);
@@ -102,6 +107,32 @@ export default function Watch({ mode, paused }: PieceProps) {
     setReserve(s.power);
   };
 
+  const remote = useRemote(play ? "watch" : null, {
+    gesture: (name, data) => {
+      if (name === "crown") {
+        const deg = parseCrown(data);
+        if (deg !== null) wind(deg);
+      } else if (name === "watch-flip") setFlip((f) => !f);
+      else if (name === "watch-sync") setSyncKey((k) => k + 1);
+    },
+    axis: (name, v) => {
+      if (name === "explode") setExplode(Math.max(0, Math.min(1, v)));
+    },
+  });
+  // tell the phone the power reserve and the explode / flip settings: when they change, and when it asks
+  const [syncKey, setSyncKey] = useState(0);
+  const sendRef = useRef(remote.send);
+  sendRef.current = remote.send;
+  const reserve2 = Math.round(reserve * 100) / 100;
+  useEffect(() => {
+    if (!remote.linked) return;
+    const id = window.setTimeout(
+      () => sendRef.current({ type: "gesture", name: "watch-state", data: { reserve: reserve2, explode: Math.round(explode * 100) / 100, flip } }),
+      WATCH_CAL.stateEveryMs / 2,
+    );
+    return () => window.clearTimeout(id);
+  }, [remote.linked, reserve2, explode, flip, syncKey]);
+
   const angle = (e: React.PointerEvent) => {
     const b = (e.currentTarget as HTMLElement).getBoundingClientRect();
     return Math.atan2(e.clientY - (b.top + b.height / 2), e.clientX - (b.left + b.width / 2));
@@ -110,6 +141,15 @@ export default function Watch({ mode, paused }: PieceProps) {
   return (
     <div className={`absolute inset-0 flex ${play ? "flex-col md:flex-row" : ""} bg-[#f2ead7]`}>
       <div className="relative flex-1 min-h-0">
+        {remote.linked && (
+          <p
+            data-testid="watch-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Twist your phone to wind
+          </p>
+        )}
         <Exploded3D
           build={async () => (await import("./three/watch")).buildWatch(state.current)}
           explode={explode}
