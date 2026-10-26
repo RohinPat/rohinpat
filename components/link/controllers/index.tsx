@@ -5,6 +5,8 @@ import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offh
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
 import Golf from "./Golf";
+import Maze from "./Maze";
+import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
 
@@ -22,6 +24,8 @@ import type { ControllerProps } from "./types";
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
   golf: Golf,
+  maze: Maze,
+  powder: Powder,
 };
 
 export type PieceControlsProps = {

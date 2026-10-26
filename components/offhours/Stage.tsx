@@ -58,8 +58,11 @@ export default function Stage({
   };
   const closeRef = useRef(close);
   closeRef.current = close;
+  // only a bump after this stage opened closes it: a stage opened after an earlier Back
+  // is mounted with the page's counter already above 0 and must not close itself
+  const openedAt = useRef(closeSignal);
   useEffect(() => {
-    if (closeSignal > 0) closeRef.current();
+    if (closeSignal > openedAt.current) closeRef.current();
   }, [closeSignal]);
 
   useEffect(() => {

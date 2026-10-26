@@ -9,6 +9,8 @@ export { createTwistFilter } from "./twist";
 export type { TwistOptions, TwistState, TwistFilter } from "./twist";
 export { createTiltFilter } from "./tilt";
 export type { TiltOptions, TiltState, TiltFilter } from "./tilt";
+export { createWheelFilter, wrapDeg } from "./wheel";
+export type { WheelOptions, WheelState, WheelFilter } from "./wheel";
 export { OrientationFilter } from "./orientation";
 export * from "./samples";
 export { createStillGate } from "./still";
