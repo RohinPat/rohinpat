@@ -4,7 +4,9 @@ import type { ComponentType } from "react";
 import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offhours/pieces";
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
+import Decks from "./Decks";
 import Golf from "./Golf";
+import Keyboard from "./Keyboard";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
 
@@ -22,6 +24,8 @@ import type { ControllerProps } from "./types";
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
   golf: Golf,
+  keyboard: Keyboard,
+  decks: Decks,
 };
 
 export type PieceControlsProps = {
