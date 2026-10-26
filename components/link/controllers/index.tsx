@@ -4,9 +4,11 @@ import type { ComponentType } from "react";
 import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offhours/pieces";
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
+import Engine from "./Engine";
 import Golf from "./Golf";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
+import Watch from "./Watch";
 
 // The phone's game controllers, routed from the `screen` message the laptop
 // sends ({name: "piece", piece}):
@@ -22,6 +24,8 @@ import type { ControllerProps } from "./types";
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
   golf: Golf,
+  engine: Engine,
+  watch: Watch,
 };
 
 export type PieceControlsProps = {
