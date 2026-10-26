@@ -5,11 +5,11 @@ import { answerQr } from "../lib/lab/handshake/qr";
 import { renderFrame, type SimOptions } from "../lib/lab/handshake/sim";
 
 // Two browser contexts on localhost: one is the "laptop", one is the "phone".
-// Run with PORT=3201. Results are written to HS_OUT (default: scratchpad lab-out).
+// Runs against the same server as the rest of the suite. Results are written to HS_OUT (default: scratchpad lab-out).
 const OUT =
   process.env.HS_OUT ??
   "C:/Users/rohin/AppData/Local/Temp/claude/C--Users-rohin-Documents-NLP-programming/02091cd0-b508-4be1-a47e-6ce728796fdb/scratchpad/bruno/lab-out/handshake";
-const BASE = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3201}`;
+const BASE = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 type HS = Record<string, any>;
 const hs = <T,>(page: Page, fn: string, ...args: unknown[]): Promise<T> =>

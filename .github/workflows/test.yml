@@ -91,9 +91,12 @@ jobs:
           NEXT_PUBLIC_LINK_MOCK: "1"
         run: npm run build
 
+      # Playwright's webServer rebuilds in CI (playwright.config.ts), so the
+      # link mock flag has to be set here too, not only on the Build step
       - name: Run e2e
         env:
           CI: "1"
+          NEXT_PUBLIC_LINK_MOCK: "1"
         run: npm run test:e2e
 
       - name: Upload Playwright report
