@@ -8,6 +8,8 @@ import Engine from "./Engine";
 import Golf from "./Golf";
 import Hoops from "./Hoops";
 import Penalty from "./Penalty";
+import Maze from "./Maze";
+import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import Watch from "./Watch";
@@ -30,6 +32,8 @@ export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>
   watch: Watch,
   hoops: Hoops,
   penalty: Penalty,
+  maze: Maze,
+  powder: Powder,
 };
 
 export type PieceControlsProps = {

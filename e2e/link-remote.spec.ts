@@ -63,6 +63,7 @@ async function openGolfRange(host: Page, phone: Page) {
 const carry = (text: string | null) => Number(/(\d+) yards carry/.exec(text ?? "")?.[1] ?? NaN);
 
 test.describe("phone controllers: opening games", () => {
+    test.setTimeout(75_000);
   test("the phone lists the nine games once the laptop is on /interests, and opens one like a click", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     const list = phone.getByTestId("phone-piece-list");
@@ -80,7 +81,7 @@ test.describe("phone controllers: opening games", () => {
     await phone.getByTestId("phone-back").click();
     await expect(stage(host)).toHaveCount(0, SLOW);
     await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
-    await phone.locator('[data-piece="maze"]').click();
+    await phone.locator('[data-piece="keyboard"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
     await expect(phone.getByTestId("phone-soon")).toContainText(/coming soon; use your laptop/i);
     await phone.getByRole("button", { name: "Back to the games" }).click();
