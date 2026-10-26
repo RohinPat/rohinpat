@@ -17,8 +17,8 @@ import {
   samplesFromRecording,
   rowFromSample,
   AXES_NOTE,
-} from "../../lib/lab/swing";
-import type { MotionSample, RecordingFile } from "../../lib/lab/swing";
+} from "../../lib/motion";
+import type { MotionSample, RecordingFile } from "../../lib/motion";
 import {
   CONFOUNDERS,
   genConfounder,

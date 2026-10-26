@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRemote } from "@/lib/link/remote";
 import { useCanvas, type PieceProps } from "./useCanvas";
 import { CLUBS } from "./golf/flight";
-import { newRange, rangeAim, rangeDraw, rangeKey, rangePointer, rangeSetClub, rangeSetMode, type Range, type RangeEnv, type RangeMode } from "./golf/range";
+import { newRange, rangeAim, rangeDraw, rangeKey, rangePointer, rangeRemoteSwing, rangeSetClub, rangeSetMode, type Range, type RangeEnv, type RangeMode } from "./golf/range";
+import { parseSwing, shotFromSwing } from "./golf/remoteSwing";
 import { newPutt, puttDraw, puttKey, puttPointer, puttRead, puttRestart, type Putt, type PuttEnv } from "./golf/green";
 
 // Two ways to play golf. PUTT: nine greens drawn as lit relief; pull back from
@@ -36,6 +38,37 @@ export default function Golf({ mode, paused }: PieceProps) {
   penv.current.play = play;
   const renv = useRef<RangeEnv>({ play, say: setStatus, club: setClub });
   renv.current.play = play;
+
+  // A linked phone: its golf-swing plays a shot on the range, its club picker
+  // sets the club. The phone is told the club and which half (putt / range) is
+  // up so its controller matches. Without a phone this does nothing at all.
+  const remote = useRemote(play ? "golf" : null, {
+    gesture: (name, data) => {
+      if (name === "golf-swing") {
+        if (kindRef.current !== "range") return;
+        const swing = parseSwing(data);
+        if (swing) rangeRemoteSwing(R, shotFromSwing(swing, R.club), tRef.current);
+      } else if (name === "golf-club") {
+        const i = Math.round(Number(data.index));
+        if (Number.isFinite(i) && (R.phase === "ready" || R.phase === "rest")) {
+          rangeSetClub(R, i);
+          setClub(R.club);
+        }
+        syncPhone();
+      } else if (name === "golf-sync") {
+        syncPhone();
+      }
+    },
+  });
+  const syncPhone = () => {
+    remote.send({ type: "gesture", name: "golf-club", data: { index: R.club } });
+    remote.send({ type: "gesture", name: "golf-mode", data: { range: kindRef.current === "range" } });
+  };
+  const syncRef = useRef(syncPhone);
+  syncRef.current = syncPhone;
+  useEffect(() => {
+    if (remote.linked) syncRef.current();
+  }, [remote.linked, club, kind]);
 
   const ref = useCanvas(
     ({ ctx, w, h, dt, t, p }) => {
@@ -172,6 +205,15 @@ export default function Golf({ mode, paused }: PieceProps) {
         </div>
       )}
       <div className="relative flex-1 min-h-0">
+        {remote.linked && kind === "range" && (
+          <p
+            data-testid="golf-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Swing your phone
+          </p>
+        )}
         <canvas
           ref={ref}
           data-autofocus={play || undefined}

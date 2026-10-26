@@ -87,7 +87,7 @@ export default function LinkHost(props: Props) {
       // A moment's grace so a remount (strict mode, hot reload) doesn't flicker it.
       const s = sessionRef.current;
       window.setTimeout(() => {
-        if (attached === 0 && s && isPaired(s.state, s.path)) s.send({ type: "screen", name: "piece", piece: location.pathname });
+        if (attached === 0 && s && isPaired(s.state, s.path)) s.send({ type: "screen", name: "piece", piece: location.pathname.startsWith("/interests") ? "list" : location.pathname });
       }, 80);
     };
   }, [start]);

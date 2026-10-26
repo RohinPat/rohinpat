@@ -387,14 +387,15 @@ test.describe("link UI: the phone page", () => {
     await context.close();
   });
 
-  test("when the laptop's phone goes to a game, the phone says controls are coming", async ({ browser, baseURL }) => {
+  test("when the laptop goes to the games, the phone lists them", async ({ browser, baseURL }) => {
     const { context, host, phone } = await linked(browser, baseURL);
     await swipeUp(phone, 650, 250);
     await expect(phone.getByTestId("phone-home")).toBeVisible();
     // the laptop opens Off hours (the games live there)
     await phone.getByRole("button", { name: /^Off hours: opens on your laptop/ }).click();
-    await expect(host).toHaveURL(/\/interests$/);
-    await expect(phone.getByRole("heading", { name: /controls for this game are coming soon; use your laptop/i })).toBeVisible();
+    await expect(host).toHaveURL(/\/interests$/, { timeout: 15_000 });
+    await expect(phone.getByRole("heading", { name: /pick a game/i })).toBeVisible();
+    await expect(phone.getByTestId("phone-piece-list").locator("[data-piece]")).toHaveCount(9);
     await context.close();
   });
 });
