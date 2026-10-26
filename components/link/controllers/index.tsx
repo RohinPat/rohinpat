@@ -4,11 +4,13 @@ import type { ComponentType } from "react";
 import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offhours/pieces";
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
+import Decks from "./Decks";
 import Engine from "./Engine";
 import Golf from "./Golf";
 import Hoops from "./Hoops";
-import Penalty from "./Penalty";
+import Keyboard from "./Keyboard";
 import Maze from "./Maze";
+import Penalty from "./Penalty";
 import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
@@ -27,12 +29,14 @@ import Watch from "./Watch";
 // "Soon" tags all follow from the registry.
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
-  golf: Golf,
-  engine: Engine,
   watch: Watch,
+  maze: Maze,
   hoops: Hoops,
   penalty: Penalty,
-  maze: Maze,
+  decks: Decks,
+  engine: Engine,
+  keyboard: Keyboard,
+  golf: Golf,
   powder: Powder,
 };
 

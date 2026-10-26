@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRemote } from "@/lib/link/remote";
 import { useCanvas, type PieceProps } from "./useCanvas";
 import { getAudio } from "./audio";
 import { display, mono } from "./font";
+import { DECKS_CAL, OMEGA, scratchRate } from "./decksRemote";
 
 // A 16-step drum machine that plays through a turntable. Each change to the
 // pattern re-renders one bar offline (OfflineAudioContext: kick, snare,
@@ -11,6 +13,8 @@ import { display, mono } from "./font";
 // plays that bar at whatever rate the platter is turning, forwards or
 // backwards. So grabbing the record really scratches the beat you made.
 // Stop brakes the platter like a real deck; the fader cuts the sound.
+// A linked phone's screen is the platter: its circular drag is the same hand
+// on the record (decksRemote.ts), its buttons play and cut.
 
 const ROWS = ["Kick", "Snare", "Hats", "Bass"] as const;
 const START: number[][] = [
@@ -20,8 +24,6 @@ const START: number[][] = [
   [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0],
 ];
 const RIFF = [55, 55, 65.41, 55, 73.42, 55, 82.41, 98, 55, 55, 65.41, 55, 110, 98, 82.41, 73.42];
-const RPM = 33.333;
-const OMEGA = (RPM / 60) * Math.PI * 2; // rad/s at normal speed
 
 const WORKLET = `
 class Scratch extends AudioWorkletProcessor {
@@ -162,6 +164,11 @@ export default function Decks({ mode, paused }: PieceProps) {
     lastGrab: 0,
     grabRate: 0,
     cut: false,
+    // a phone's hand on the record: held, when its last scratch came, and the cut it holds
+    remote: false,
+    remoteWant: false,
+    remoteAt: 0,
+    remoteCut: false,
     running: !play,
     arm: play ? 0 : 1,
     lastPos: 0,
@@ -224,13 +231,74 @@ export default function Decks({ mode, paused }: PieceProps) {
     if (deck.current && au) deck.current.fader.gain.setTargetAtTime(c ? 0 : 1, au.ctx.currentTime, 0.004);
   };
 
+  const setRun = (r: boolean) => {
+    S.current.running = r;
+    setRunning(r);
+  };
+  const syncPhone = () => remote.send({ type: "gesture", name: "decks-run", data: { on: S.current.running } });
+  const remote = useRemote(play ? "decks" : null, {
+    gesture: (name, data) => {
+      const s = S.current;
+      if (name === "decks-grab") {
+        s.remoteWant = !!data.on;
+        if (data.on) {
+          void boot().then(() => {
+            if (!s.remoteWant) return;
+            s.grab = true;
+            s.remote = true;
+            s.remoteAt = performance.now();
+            s.lastGrab = s.remoteAt;
+            s.grabRate = 0;
+          });
+        } else if (s.remote) {
+          s.grab = false;
+          s.remote = false;
+        }
+      } else if (name === "decks-play") {
+        void boot().then(() => setRun(typeof data.on === "boolean" ? data.on : !S.current.running));
+      } else if (name === "decks-cut") {
+        s.remoteCut = !!data.on;
+        setCut(s.remoteCut);
+      } else if (name === "decks-sync") {
+        syncPhone();
+      }
+    },
+    axis: (name, v) => {
+      const s = S.current;
+      if (name !== "scratch" || !s.remote) return;
+      s.grabRate = scratchRate(v);
+      s.remoteAt = performance.now();
+    },
+  });
+  const syncRef = useRef(syncPhone);
+  syncRef.current = syncPhone;
+  useEffect(() => {
+    if (remote.linked) syncRef.current();
+  }, [remote.linked, running]);
+  // a phone that goes away lets go of the record and the fader
+  useEffect(() => {
+    if (remote.linked) return;
+    const s = S.current;
+    s.remoteWant = false;
+    if (s.remote) {
+      s.remote = false;
+      s.grab = false;
+    }
+    if (s.remoteCut) {
+      s.remoteCut = false;
+      setCut(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote.linked]);
+
   const ref = useCanvas(
     ({ ctx, w, h, dt, t }) => {
       const s = S.current;
       // motor: spin up quickly, brake slower; a grabbed record follows the hand
       if (s.grab) {
         s.rate += (s.grabRate - s.rate) * Math.min(1, dt * 30);
-        s.grabRate *= Math.exp(-dt * 10); // holding still stops it
+        // holding still stops it (a phone says so itself, so only once its messages dry up)
+        if (!s.remote || performance.now() - s.remoteAt > DECKS_CAL.staleMs) s.grabRate *= Math.exp(-dt * 10);
       } else {
         const target = s.running ? 1 : 0;
         s.rate += (target - s.rate) * Math.min(1, dt * (s.running ? 5 : 2.2));
@@ -238,6 +306,7 @@ export default function Decks({ mode, paused }: PieceProps) {
       const au = deck.current && getAudio();
       if (au && deck.current) deck.current.rate.setTargetAtTime(s.rate, au.ctx.currentTime, 0.008);
       s.angle += s.rate * OMEGA * dt;
+      if (s.remote) s.grabAngle += s.rate * OMEGA * dt; // the phone's hand goes round with the record
       if (!deck.current) {
         // no audio (preview): keep a notional position for the playhead
         s.pos = (s.pos + (s.rate * dt) / ((60 / bpm / 4) * 16) + 1) % 1;
@@ -346,6 +415,13 @@ export default function Decks({ mode, paused }: PieceProps) {
       const pct = Math.round(s.rate * 100);
       ctx.fillText(`${s.grab ? "SCRATCH" : s.running ? "PLAY" : s.rate > 0.02 ? "BRAKE" : "STOP"}  ${pct > 0 ? "+" : ""}${pct}%`, 12, h - 12);
       void t;
+      // for tests and the curious: what the deck is doing, in the DOM
+      const el = ref.current;
+      if (el) {
+        const g = s.grab ? "1" : "0";
+        if (el.dataset.grab !== g) el.dataset.grab = g;
+        if (el.dataset.rate !== String(pct)) el.dataset.rate = String(pct);
+      }
     },
     {
       interactive: play,
@@ -408,6 +484,15 @@ export default function Decks({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 flex flex-col md:flex-row bg-[#16181a] text-[#f2ead7]">
       <div className="relative flex-1 min-h-[30%] md:min-h-0">
+        {remote.linked && (
+          <p
+            data-testid="decks-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Scratch on your phone
+          </p>
+        )}
         <canvas
           ref={ref}
           data-autofocus={play || undefined}
