@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // The phone link's relay (app/api/link) runs `ws`. Bundled, its optional
+    // native helper resolves to a stub, and any frame of 32 bytes or more then
+    // throws "unmask is not a function" and kills the function. Loaded from
+    // node_modules at runtime, ws falls back to plain JS as it should.
+    serverComponentsExternalPackages: ["ws"],
+  },
   // Retired pages.
   async redirects() {
     return [
