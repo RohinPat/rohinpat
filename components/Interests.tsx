@@ -50,25 +50,48 @@ export default function Interests() {
   openRef.current = open;
   const piece = PIECES.find((p) => p.id === open?.id);
 
-  const close = () => {
-    setOpen(null);
-    opener.current?.focus({ preventScroll: true });
-  };
+  // a game the phone asked for while another stage was still open or closing;
+  // it opens once that one has gone
+  const pending = useRef<PieceId | null>(null);
 
-  // A linked phone can open a game (exactly as a click on its tile: it grows
-  // out of the tile) and close it again with its Back button.
-  const onRemote = useCallback((id: PieceId | "list") => {
-    if (id === "list") {
-      if (openRef.current) setCloseSignal((n) => n + 1);
-      return;
-    }
-    if (openRef.current) return;
+  const openTile = useCallback((id: PieceId) => {
     const tile = document.querySelector<HTMLButtonElement>(`[data-piece="${id}"]`);
     if (!tile) return;
     tile.scrollIntoView({ block: "nearest", behavior: "instant" as ScrollBehavior });
     opener.current = tile;
     setOpen({ id, rect: tile.getBoundingClientRect() });
   }, []);
+
+  const close = () => {
+    setOpen(null);
+    // the next stage mounts fresh; a leftover signal would close it on arrival
+    setCloseSignal(0);
+    const next = pending.current;
+    pending.current = null;
+    if (next) requestAnimationFrame(() => openTile(next));
+    else opener.current?.focus({ preventScroll: true });
+  };
+
+  // A linked phone can open a game (exactly as a click on its tile: it grows
+  // out of the tile) and close it again with its Back button.
+  const onRemote = useCallback(
+    (id: PieceId | "list") => {
+      const cur = openRef.current?.id;
+      if (id === "list") {
+        pending.current = null;
+        if (cur) setCloseSignal((n) => n + 1);
+        return;
+      }
+      if (cur === id) return;
+      if (cur) {
+        pending.current = id;
+        setCloseSignal((n) => n + 1);
+        return;
+      }
+      openTile(id);
+    },
+    [openTile],
+  );
   useRemoteList({ onOpen: onRemote, open: (open?.id as PieceId | undefined) ?? null });
 
   return (
