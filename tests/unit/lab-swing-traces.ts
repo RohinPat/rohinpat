@@ -16,7 +16,7 @@
 // velocity profiles below are smooth textbook curves (sin^2 lobes, min-jerk),
 // not real swings. See the lab report for the gap.
 
-import type { MotionSample, TouchPoint, Vec3 } from "../../lib/lab/swing/types";
+import type { MotionSample, TouchPoint, Vec3 } from "../../lib/motion/types";
 
 // ---------------------------------------------------------------- random
 export type Rng = () => number;

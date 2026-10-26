@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createSwipeTracker } from "@/lib/lab/swing";
-import type { DetectorOutput, SwipeEvent, TouchPoint } from "@/lib/lab/swing";
+import { createSwipeTracker } from "@/lib/motion";
+import type { DetectorOutput, SwipeEvent, TouchPoint } from "@/lib/motion";
 
 export interface SwipeRecord {
   points: TouchPoint[];

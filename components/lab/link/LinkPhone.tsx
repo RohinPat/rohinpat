@@ -14,8 +14,8 @@ import {
   createGolfDetector,
   flipAccel,
   motionSampleFromEvent,
-} from "@/lib/lab/swing";
-import type { DetectorOutput, DeviceMotionLike, FlickEvent, GolfSwingEvent, MotionSample, OrientationAngles } from "@/lib/lab/swing";
+} from "@/lib/motion";
+import type { DetectorOutput, DeviceMotionLike, FlickEvent, GolfSwingEvent, MotionSample, OrientationAngles } from "@/lib/motion";
 import { LinkDiagnostics, fmtMs, type LinkSnapshot } from "@/lib/lab/link/diagnostics";
 import { askMotionPermission, hasMotionApi, type MotionPermission } from "@/lib/lab/link/permission";
 import { describeGesture, type LinkExtra, type PhoneMode, type Recogniser } from "@/lib/lab/link/protocol";

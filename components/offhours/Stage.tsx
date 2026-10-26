@@ -32,11 +32,14 @@ export default function Stage({
   meta,
   origin,
   onClose,
+  closeSignal = 0,
   children,
 }: {
   meta: StageMeta;
   origin: DOMRect | null;
   onClose: () => void;
+  /** bump to close it as if the close button was pressed (the phone's Back button does) */
+  closeSignal?: number;
   children: React.ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -55,6 +58,9 @@ export default function Stage({
   };
   const closeRef = useRef(close);
   closeRef.current = close;
+  useEffect(() => {
+    if (closeSignal > 0) closeRef.current();
+  }, [closeSignal]);
 
   useEffect(() => {
     const html = document.documentElement;

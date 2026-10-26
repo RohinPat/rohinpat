@@ -4,6 +4,7 @@ import { CLUBS, at, simulate, type Club, type Shot } from "./flight";
 import { TARGETS, YD, drawWorld, newCam, prepare, project, surfaceAt, halfW, type Cam, type Drawable, type P2 } from "./scene";
 import { ballLocal, blend, clubHeadWorld, golferDrawable, poseFor, type Pose } from "./golfer";
 import { sfx } from "./sound";
+import type { RemoteShot } from "./remoteSwing";
 
 // The driving range: a behind-the-golfer broadcast view, a swing you make with
 // your hand (drag back, swing up through) or with three presses of Space, a
@@ -27,7 +28,7 @@ type Particle = { x: number; y: number; z: number; vx: number; vy: number; vz: n
 type Card = { club: Club; shot: Shot; label: string; t: number };
 
 type Swing = {
-  src: "gesture" | "meter" | "auto";
+  src: "gesture" | "meter" | "auto" | "remote";
   b: number;
   peak: number;
   t: number; // time in this phase
@@ -44,6 +45,8 @@ type Swing = {
   dur: number; // downswing duration (meter/auto)
   autoPeak: number;
   autoFace: number;
+  /** a swing from a linked phone: how the strike goes (src "remote") */
+  remote: RemoteShot | null;
   tRev: number;
   lastL: number;
 };
@@ -82,7 +85,7 @@ export type Range = {
 
 export const SHOTS_PER_ROUND = 10;
 
-const emptySwing = (): Swing => ({ src: "gesture", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, tRev: 0, lastL: 0 });
+const emptySwing = (): Swing => ({ src: "gesture", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, tRev: 0, lastL: 0 });
 
 export function newRange(): Range {
   const r: Range = {
@@ -199,6 +202,19 @@ function beginSwing(r: Range, src: Swing["src"], t: number, x = 0, y = 0) {
   r.card = null;
   r.trail = [];
   r.sw = { ...emptySwing(), src, tStart: t, x0: x, y0: y, peakY: y, xNow: x, yNow: y, xTop: x };
+}
+
+/**
+ * A swing that came from a linked phone: the golfer takes a quick swing and the
+ * ball is struck with exactly `shot` (see remoteSwing.ts). Returns false when
+ * a swing can't start now (ball in flight, round over).
+ */
+export function rangeRemoteSwing(r: Range, shot: RemoteShot, t: number): boolean {
+  if (!canSwing(r)) return false;
+  beginSwing(r, "remote", t);
+  r.sw.autoPeak = clamp(shot.power, 0.05, 1.15);
+  r.sw.remote = shot;
+  return true;
 }
 
 export function rangePointer(r: Range, kind: "down" | "move" | "up", x: number, y: number, w: number, h: number, t: number, env: RangeEnv) {
@@ -329,6 +345,8 @@ function strike(r: Range, t: number, env: RangeEnv) {
     if (td < 0.1) q -= (0.1 - td) * 2.5;
     q -= Math.max(0, Math.abs(ox) - 0.55) * 0.5;
     contact = q;
+  } else if (s.src === "remote" && s.remote) {
+    ({ face, curve, contact } = s.remote);
   } else {
     const f = s.autoFace;
     face = f * 0.6;
@@ -432,10 +450,10 @@ function frame(r: Range, dt: number, t: number, w: number, h: number, env: Range
   switch (r.phase) {
     case "back":
       if (s.src !== "gesture") {
-        s.b += dt / (s.src === "auto" ? 0.95 : 1.1);
-        if (s.src === "auto" && s.b >= s.autoPeak) {
+        s.b += dt / (s.src === "auto" ? 0.95 : s.src === "remote" ? 0.42 : 1.1);
+        if ((s.src === "auto" || s.src === "remote") && s.b >= s.autoPeak) {
           s.peak = s.autoPeak;
-          s.dur = 0.4 + 0.08 * s.peak;
+          s.dur = s.src === "remote" ? 0.3 : 0.4 + 0.08 * s.peak;
           s.revPose = r.pose;
           s.t = 0;
           r.phase = "down";
@@ -457,7 +475,9 @@ function frame(r: Range, dt: number, t: number, w: number, h: number, env: Range
         s.t += dt;
         const tau = s.dur - s.t;
         s.b = Math.max(0, (s.peak * tau) / s.dur);
-        if (s.src === "auto" && tau <= 0) {
+        if (s.src === "remote" && tau <= 0) {
+          strike(r, t, env);
+        } else if (s.src === "auto" && tau <= 0) {
           s.autoFace = (Math.random() - 0.5) * 0.3;
           strike(r, t, env);
         } else if (s.src === "meter" && tau < -0.14) {
@@ -1102,8 +1122,8 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
   let msgs: string[] = [];
   if (r.mode === "challenge" && r.ch.done) msgs = [`ROUND OVER · ${r.ch.score} POINTS · CLICK OR PRESS SPACE TO PLAY AGAIN`, `ROUND OVER · ${r.ch.score} POINTS · TAP TO PLAY AGAIN`, "TAP TO PLAY AGAIN"];
   else if (r.phase === "ready" || (r.phase === "rest" && r.restT > 0.9)) msgs = ["DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL · OR PRESS SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"];
-  else if (r.phase === "back") msgs = [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"];
-  else if (r.phase === "down") msgs = [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
+  else if (r.phase === "back") msgs = s.src === "remote" ? [] : [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"];
+  else if (r.phase === "down") msgs = s.src === "remote" ? [] : [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
   if (msgs.length) {
     const msg = fitText(ctx, msgs, room);
     const tw = ctx.measureText(msg).width + 20;

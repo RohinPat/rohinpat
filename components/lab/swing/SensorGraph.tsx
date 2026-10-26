@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { MotionSample, Vec3 } from "@/lib/lab/swing";
+import type { MotionSample, Vec3 } from "@/lib/motion";
 
 type Channel = "accel" | "gyro" | "linear";
 
