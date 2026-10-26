@@ -154,6 +154,11 @@ for (const variant of [
 }
 
 test("mode A with WebKit as the phone and Chromium as the laptop", async () => {
+  // Two different engines only find each other directly through mDNS (.local)
+  // names, and the CI container has no mDNS responder, so the channel can't
+  // open there. Not a verdict on iPhones (the real-device session is), and in
+  // production a failed direct path just stays on the relay.
+  test.skip(!!process.env.CI, "no mDNS between engines in the CI container");
   test.setTimeout(120000);
   const cb = await chromium.launch();
   let wb: Browser | null = null;
