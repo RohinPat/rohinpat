@@ -81,6 +81,18 @@ function Controller() {
   const failed = started && state === "closed";
   const joining = started && !failed && !liveish;
 
+  // never sit on "Linking…" forever: if the relay can't be reached at all (a
+  // network that blocks it, a certificate the browser won't take), say so
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!joining) {
+      setSlow(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlow(true), 12_000);
+    return () => window.clearTimeout(t);
+  }, [joining]);
+
   // ---- connect (the click that also raises iOS's motion prompt) ----
   const connect = (withCode: string) => {
     const asked = askMotionPermission(); // first line: must run inside the tap, before any await
@@ -236,8 +248,17 @@ function Controller() {
   } else if (joining) {
     view = (
       <Centered>
-        <h1 className="text-[2.1rem] leading-tight font-extrabold">Linking…</h1>
-        <p className="mt-3 text-lg text-[#c9c6b6]">Looking for the laptop that&apos;s showing {code ? formatCode(code) : "your code"}.</p>
+        <h1 className="text-[2.1rem] leading-tight font-extrabold">{slow ? "Can't reach the laptop." : "Linking…"}</h1>
+        <p className="mt-3 text-lg text-[#c9c6b6]" role={slow ? "alert" : undefined}>
+          {slow
+            ? "This is taking too long. The network may be blocking the link, or the code may be from an old page. Reload the laptop's page for a fresh code, then try again."
+            : <>Looking for the laptop that&apos;s showing {code ? formatCode(code) : "your code"}.</>}
+        </p>
+        {slow && (
+          <button type="button" onClick={startOver} className="mt-6 h-12 px-6 rounded-full bg-[var(--paper)] text-[var(--ink)] font-semibold">
+            Try again
+          </button>
+        )}
       </Centered>
     );
   } else {

@@ -42,6 +42,15 @@ export default function PrivacyPage() {
         say yes. Frames are read inside your browser, never uploaded or saved, and the camera
         stops when you close it. A photo you pick instead is handled the same way.
       </p>
+      <p>
+        <strong>Linking your phone.</strong> If you scan the code on the home screen, your
+        phone and this tab connect so your phone can tilt and unlock the one on screen. To find
+        each other, both connect to a small relay on this site&apos;s own server for a moment,
+        under a five-letter code that expires within two minutes. When your network allows,
+        they then talk directly; otherwise the relay passes their messages along (your
+        phone&apos;s tilt, taps and swipes) without reading or keeping them. Nothing is logged,
+        nothing is saved on either device, and closing either side ends it.
+      </p>
 
       <h2>Hosting logs</h2>
       <p>

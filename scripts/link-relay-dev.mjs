@@ -19,6 +19,8 @@
 
 import { registerHooks } from "node:module";
 import { createServer } from "node:http";
+import { createServer as createTlsServer } from "node:https";
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +49,15 @@ const port = Number(process.env.PORT ?? 3311);
 const bus = await createBus({ ...process.env, NODE_ENV: "development" });
 const hub = new RelayHub({ bus, log: (m) => console.log(m) });
 
-const server = createServer((req, res) => {
+// Testing on a real phone needs HTTPS (iOS only gives motion to secure pages),
+// and a secure page can only reach a wss:// relay. Point these at a local
+// certificate to serve wss:// instead:
+//   LINK_RELAY_TLS_KEY=key.pem LINK_RELAY_TLS_CERT=cert.pem npm run link:relay
+const tls = process.env.LINK_RELAY_TLS_KEY && process.env.LINK_RELAY_TLS_CERT
+  ? { key: readFileSync(process.env.LINK_RELAY_TLS_KEY), cert: readFileSync(process.env.LINK_RELAY_TLS_CERT) }
+  : null;
+const listen = (handler) => (tls ? createTlsServer(tls, handler) : createServer(handler));
+const server = listen((req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const send = (code, body) => {
     res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
@@ -71,7 +81,7 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server, maxPayload: 8 * 1024 });
 wss.on("connection", (ws) => attachSocket(hub, ws));
 
-server.listen(port, () => console.log(`link relay (dev) on ws://localhost:${port}  bus=${bus.kind}`));
+server.listen(port, () => console.log(`link relay (dev) on ${tls ? "wss" : "ws"}://localhost:${port}  bus=${bus.kind}`));
 
 const stop = () => {
   wss.close();

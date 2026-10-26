@@ -27,8 +27,11 @@ export const metadata: Metadata = {
 const H2 =
   "font-mono text-[11px] uppercase tracking-[0.16em] muted border-b border-[var(--border-strong)] pb-2 mb-5";
 
-/** shown in square brackets on the page, so an unfilled gap can't ship unnoticed */
+/** shown in square brackets while developing, so an unfilled gap is
+ *  impossible to miss; a production build leaves the gap out instead of
+ *  showing visitors a note to Rohin */
 function Todo({ p }: { p: Placeholder }) {
+  if (process.env.NODE_ENV === "production") return null;
   return (
     <span data-placeholder className="bg-[#f5c542]/45 px-1 font-mono text-[0.85em] text-[var(--ink)]">
       [TODO(rohin): {p.todo}]

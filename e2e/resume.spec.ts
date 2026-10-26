@@ -179,8 +179,10 @@ test.describe("/resume", () => {
     for (const t of ["WHOOP", "SiPhox Health", "Varidx", "Closet Organizer", "AiMessage", "BlueBikes"]) {
       await expect(page.getByRole("heading", { level: 3, name: new RegExp(t) })).toBeVisible();
     }
-    // nothing the repo doesn't say is invented: gaps are marked
-    await expect(page.locator("[data-placeholder]").first()).toContainText("TODO(rohin)");
+    // nothing the repo doesn't say is invented: gaps are marked in dev, and
+    // left out of a production build (CI tests one) rather than shown to visitors
+    if (process.env.CI) await expect(page.locator("[data-placeholder]")).toHaveCount(0);
+    else await expect(page.locator("[data-placeholder]").first()).toContainText("TODO(rohin)");
   });
 
   test('"Download PDF" appears only when public/resume.pdf exists', async ({ page }) => {
