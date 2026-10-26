@@ -9,7 +9,8 @@ import { pillLabel } from "@/lib/link/pill";
 import type { LinkMsg, LinkStats } from "@/lib/link/session";
 import { dragProgress, inSwipeZone, shouldUnlock } from "@/lib/link/swipe";
 import { isPaired } from "@/lib/link/state";
-import { useLink } from "@/lib/link/useLink";
+import { mockRequested, useLink } from "@/lib/link/useLink";
+import { PieceControls } from "./controllers";
 
 // The visitor's own phone, as a controller. It joins the code the laptop shows,
 // streams its tilt, swipes up to unlock the replica and taps apps to open them
@@ -57,6 +58,11 @@ function Controller() {
   const [announce, setAnnounce] = useState("");
   const [stats, setStats] = useState<LinkStats | null>(null);
   const everLive = useRef(false);
+  const onPiece = screen.name === "piece" && !leftPiece;
+
+  // controllers talk through these; stable so they can sit in effect deps
+  const send = useCallback((m: LinkMsg) => session?.send(m), [session]);
+  const subscribe = useCallback((cb: (m: LinkMsg) => void) => (session ? session.onMessage(cb) : () => {}), [session]);
 
   // the code: from the QR (#c=CODE); otherwise the visitor types it
   useEffect(() => {
@@ -143,8 +149,10 @@ function Controller() {
     });
   }, [session]);
 
+  // the tilt stream is for the home screen: on a game, only that game's own
+  // recogniser listens, so the orientation stream stops
   useEffect(() => {
-    if (!session || !liveish || motion === "denied" || motion === "unavailable") return;
+    if (!session || !liveish || onPiece || motion === "denied" || motion === "unavailable") return;
     let seq = 0;
     let last = 0;
     let got = false;
@@ -167,7 +175,7 @@ function Controller() {
       window.removeEventListener("deviceorientation", onOrient);
       window.clearTimeout(timer);
     };
-  }, [session, liveish, motion]);
+  }, [session, liveish, motion, onPiece]);
 
   useEffect(() => {
     if (!liveish) return;
@@ -201,6 +209,16 @@ function Controller() {
     const id = window.setInterval(read, 1000);
     return () => window.clearInterval(id);
   }, [session, liveish]);
+
+  // with the BroadcastChannel mock (tests, local work) a page can drive the phone's side directly
+  useEffect(() => {
+    if (!session || !mockRequested()) return;
+    const w = window as unknown as { __linkPhone?: { send: (m: LinkMsg) => void } };
+    w.__linkPhone = { send: (m) => session.send(m) };
+    return () => {
+      delete w.__linkPhone;
+    };
+  }, [session]);
 
   // ---- gestures ----
   const unlock = useCallback(() => {
@@ -237,7 +255,11 @@ function Controller() {
         showLock={showLock}
         screen={screen}
         leftPiece={leftPiece}
-        onBack={() => setLeftPiece(true)}
+        motion={motion}
+        send={send}
+        subscribe={subscribe}
+        onLeave={() => setLeftPiece(true)}
+        onList={() => setScreen({ name: "piece", piece: "list" })}
         onUnlock={unlock}
         onSession={(m) => session?.send(m)}
         onOpen={open}
@@ -387,7 +409,11 @@ function LiveScreen({
   showLock,
   screen,
   leftPiece,
-  onBack,
+  motion,
+  send,
+  subscribe,
+  onLeave,
+  onList,
   onUnlock,
   onSession,
   onOpen,
@@ -399,7 +425,11 @@ function LiveScreen({
   showLock: boolean;
   screen: Screen;
   leftPiece: boolean;
-  onBack: () => void;
+  motion: Motion | null;
+  send: (m: LinkMsg) => void;
+  subscribe: (cb: (m: LinkMsg) => void) => () => void;
+  onLeave: () => void;
+  onList: () => void;
   onUnlock: () => void;
   onSession: (m: LinkMsg) => void;
   onOpen: (a: App) => void;
@@ -414,7 +444,7 @@ function LiveScreen({
         {...inert(showLock)}
       >
         <Bar label={label} onRecentre={onRecentre} onDisconnect={onDisconnect} notes={notes} />
-        {onPiece ? <Piece piece={screen.piece} onBack={onBack} /> : <Home onOpen={onOpen} />}
+        {onPiece ? <PieceControls piece={screen.piece} send={send} subscribe={subscribe} motion={motion} onLeave={onLeave} onList={onList} /> : <Home onOpen={onOpen} />}
       </main>
 
       {/* the lock layer follows the finger up */}
@@ -446,23 +476,6 @@ function Bar({ label, onRecentre, onDisconnect, notes }: { label: string; onRece
         </p>
       ))}
     </header>
-  );
-}
-
-function Piece({ piece, onBack }: { piece?: string; onBack: () => void }) {
-  const game = !piece || piece.startsWith("/interests");
-  return (
-    <div className="flex-1 flex flex-col justify-center" data-testid="phone-piece">
-      <h1 className="text-[2rem] leading-tight font-extrabold text-balance">
-        {game ? "Controls for this game are coming soon; use your laptop." : "Your laptop has opened a page."}
-      </h1>
-      <p className="mt-3 text-lg leading-snug text-[#c9c6b6]">
-        {game ? "Soon this phone will be the controller." : "Read it on the laptop. Go back to its home screen to use this phone as a remote again."}
-      </p>
-      <button type="button" onClick={onBack} className={bigButton}>
-        Back
-      </button>
-    </div>
   );
 }
 

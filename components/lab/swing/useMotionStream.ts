@@ -5,8 +5,8 @@ import {
   createAccelSignDetector,
   flipAccel,
   motionSampleFromEvent,
-} from "@/lib/lab/swing";
-import type { DeviceMotionLike, MotionSample, OrientationAngles } from "@/lib/lab/swing";
+} from "@/lib/motion";
+import type { DeviceMotionLike, MotionSample, OrientationAngles } from "@/lib/motion";
 
 export type StreamStatus = "idle" | "requesting" | "listening" | "denied" | "unsupported" | "no-data";
 

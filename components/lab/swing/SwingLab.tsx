@@ -8,7 +8,7 @@ import {
   createTiltFilter,
   createTwistFilter,
   rowFromSample,
-} from "@/lib/lab/swing";
+} from "@/lib/motion";
 import type {
   DetectorOutput,
   FlickEvent,
@@ -18,7 +18,7 @@ import type {
   SwipeEvent,
   TiltState,
   TwistState,
-} from "@/lib/lab/swing";
+} from "@/lib/motion";
 import { useMotionStream } from "./useMotionStream";
 import type { MotionStream } from "./useMotionStream";
 import SensorGraph from "./SensorGraph";

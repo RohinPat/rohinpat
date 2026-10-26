@@ -13,7 +13,7 @@ import type { LinkPath, LinkSession, LinkState, Role } from "./session";
 // mock stands in where there's no relay to talk to: `next dev` can't upgrade
 // WebSockets, so the UI's tests and local work set NEXT_PUBLIC_LINK_MOCK=1 or
 // add ?linkmock to the page URL.
-function mockRequested(): boolean {
+export function mockRequested(): boolean {
   if (process.env.NEXT_PUBLIC_LINK_MOCK === "1") return true;
   return typeof location !== "undefined" && new URLSearchParams(location.search).has("linkmock");
 }
@@ -35,6 +35,7 @@ function getHost(): Promise<LinkSession> {
   if (!hostSession) {
     hostSession = createLink("host").then((s) => {
       hostResolved = s;
+      tellHostWatchers();
       return s;
     });
   }
@@ -46,6 +47,27 @@ export function dropHost(): void {
   hostSession = null;
   hostResolved = null;
   s?.close();
+  tellHostWatchers();
+}
+
+// Pages that only want to *use* a link that already exists (the games, which
+// are open on /interests long after the home page that created it has gone)
+// look at it with peekHost(). It never creates one, so a visitor with no phone
+// pays nothing: no network, no code on the relay.
+const hostWatchers = new Set<() => void>();
+function tellHostWatchers() {
+  hostWatchers.forEach((cb) => cb());
+}
+
+/** The host session if one has been created and is still usable; never starts one. */
+export function peekHost(): LinkSession | null {
+  return hostResolved && hostResolved.state !== "closed" ? hostResolved : null;
+}
+
+/** Called when the host session is created or dropped. */
+export function onHostChange(cb: () => void): () => void {
+  hostWatchers.add(cb);
+  return () => void hostWatchers.delete(cb);
 }
 
 export type LinkView = {

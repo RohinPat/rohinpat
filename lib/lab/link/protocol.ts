@@ -1,7 +1,7 @@
 // Wire format for the link lab: what rides on the unreliable `motion` channel
 // and which extra messages (beyond the mirror's) ride on the reliable `ctrl`.
 
-import type { FlickEvent, GolfSwingEvent } from "@/lib/lab/swing";
+import type { FlickEvent, GolfSwingEvent } from "@/lib/motion";
 
 export type Recogniser = "golf" | "flick";
 export type PhoneMode = "touchpad" | "swing";
