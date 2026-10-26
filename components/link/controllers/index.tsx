@@ -6,6 +6,8 @@ import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
 import Engine from "./Engine";
 import Golf from "./Golf";
+import Hoops from "./Hoops";
+import Penalty from "./Penalty";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import Watch from "./Watch";
@@ -26,6 +28,8 @@ export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>
   golf: Golf,
   engine: Engine,
   watch: Watch,
+  hoops: Hoops,
+  penalty: Penalty,
 };
 
 export type PieceControlsProps = {
