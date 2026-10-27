@@ -58,9 +58,14 @@ export const PIECE_META: PieceMeta[] = [
     id: "engine",
     index: 6,
     label: "Cars",
-    line: "Redline, then shift.",
-    title: "Rev and shift",
-    how: ["Hold the pedal (or Space) to rev", "Shift on the green light (or ↑)", "Quarter mile, 0–60 split"],
+    line: "A canyon road, after midnight.",
+    title: "Night run",
+    how: [
+      "Keyboard: ←/→ (or A/D) steer, ↑ (or Space) gas, ↓ brake, Shift handbrake",
+      "Lift or brake into a corner, or flick the handbrake, to kick the tail out, then hold the drift",
+      "Slide to score, straighten out to bank it, hit a rail and it's gone",
+      "Chase the target ghost through the checkpoints. Drag strip is in the corner",
+    ],
   },
   {
     id: "keyboard",
