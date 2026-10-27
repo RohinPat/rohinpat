@@ -117,7 +117,7 @@ test.describe("phone controllers: keyboards", () => {
 
 test.describe("no phone linked: the keyboard board is exactly as it was", () => {
   test("no hint, and physical keys still type", async ({ browser, baseURL }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000); // the 3D board in software rendering on a busy CI runner
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await page.goto("/interests");

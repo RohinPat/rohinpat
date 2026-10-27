@@ -43,6 +43,8 @@ type Options = {
   paused?: boolean;
   /** keep animating under reduced motion (games the visitor is driving) */
   animateAlways?: boolean;
+  /** most device pixels the canvas may have: a big window renders at less than the screen's pixel ratio (default: no limit beyond 2x) */
+  maxPixels?: number;
 };
 
 export function useCanvas(draw: (f: Frame) => void, options: Options = {}) {
@@ -100,9 +102,11 @@ export function useCanvas(draw: (f: Frame) => void, options: Options = {}) {
     runRef.current = run;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       w = canvas.clientWidth;
       h = canvas.clientHeight;
+      const budget = optsRef.current.maxPixels;
+      const screen = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = budget && w * h > 0 ? Math.min(screen, Math.max(1, Math.sqrt(budget / (w * h)))) : screen;
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

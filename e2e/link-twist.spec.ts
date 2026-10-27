@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-// The phone as the race dash's throttle grip and the watch's crown, end to end,
+// The phone as the drag strip's throttle grip and the watch's crown, end to end,
 // on the BroadcastChannel mock session (run the dev server with
 // NEXT_PUBLIC_LINK_MOCK=1): the home page on a "laptop" and /p on a "phone",
 // two pages of one browser context. Same setup as link-remote.spec.ts.
@@ -62,9 +62,11 @@ const pushMotion = (phone: Page, samples: unknown[]) =>
     for (const s of ss) (window as unknown as PhoneWindow).__linkMotion!.push(s);
   }, samples);
 
+// Cars opens on Night run (e2e/link-nightrun.spec.ts); the throttle grip is the Drag strip's
 async function openEngine(host: Page, phone: Page) {
   await phone.locator('[data-piece="engine"]').click();
   await expect(stage(host)).toBeVisible(SLOW);
+  await host.getByTestId("engine-mode-drag").click();
   await expect(phone.getByTestId("engine-controller")).toBeVisible(SLOW);
   await expect(host.getByTestId("engine-phone-hint")).toHaveText(/twist your phone/i, SLOW);
 }
@@ -78,8 +80,8 @@ async function openWatch(host: Page, phone: Page) {
 
 const reserve = async (phone: Page) => Number((await phone.getByTestId("watch-controller").getAttribute("data-reserve")) || NaN);
 
-test.describe("phone controllers: the race dash", () => {
-  test("the phone lists the dash with phone controls and opens its controller, and the laptop shows the hint", async ({ browser, baseURL }) => {
+test.describe("phone controllers: the drag strip", () => {
+  test("the phone lists Cars with phone controls and, once the laptop is on the Drag strip, shows the throttle grip and the laptop its hint", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await expect(phone.locator('[data-piece="engine"]')).toContainText(/phone controls/i);
     await openEngine(host, phone);
@@ -94,16 +96,18 @@ test.describe("phone controllers: the race dash", () => {
     await openEngine(host, phone);
     const send = (m: unknown) => phone.evaluate((x) => (window as unknown as PhoneWindow).__linkPhone!.send(x), m);
     const view = phone.getByTestId("engine-view");
+    // the gear stat's own number (the revs next to it have digits too)
+    const gear = view.locator("div").first().locator("p").nth(1);
 
     await send({ type: "axis", name: "throttle", v: 0.8 });
     await expect(view).toHaveAttribute("data-phase", "tree", { timeout: 15_000 });
     await expect(view).toHaveAttribute("data-phase", "run", { timeout: 15_000 });
-    await expect(view).toContainText(/\b1\b/);
+    await expect(gear).toHaveText("1");
 
     // the shift button changes gear on the laptop, and the dash says so
     await phone.getByTestId("engine-shift").click();
-    await expect(view).toContainText(/\b2\b/, { timeout: 10_000 });
     await expect(phone.getByTestId("engine-shift")).toHaveAttribute("data-shifted", "1");
+    await expect(gear).toHaveText("2", { timeout: 10_000 });
 
     // closing the throttle lets the revs fall
     await send({ type: "axis", name: "throttle", v: 0 });
