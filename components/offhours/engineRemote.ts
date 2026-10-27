@@ -143,8 +143,8 @@ export const ENGINE_CAL = {
     /** time on the clock at the start and added at each checkpoint, as a share of what the target driver needs for the leg, plus a flat amount, s */
     startShare: 1.45,
     startFlatS: 7,
-    legShare: 1.17,
-    legFlatS: 3,
+    legShare: 1.4,
+    legFlatS: 5,
     /** the clock does not run in the first moments after GO (the launch), s */
     graceS: 0.6,
     /** after the clock hits zero (or the finish) the car coasts this long before the end screen, s */
