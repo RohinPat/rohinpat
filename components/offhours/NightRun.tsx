@@ -41,6 +41,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const play = mode === "play";
   const gameRef = useRef<NightGame | null>(null);
   const attractRef = useRef<Attract | null>(null);
+  const tileDue = useRef(0);
   const assetsRef = useRef<Assets | null>(null);
   const soundRef = useRef<NightSound | null>(null);
   const held = useRef<Held>({ left: false, right: false, gas: false, space: false, brake: false, hand: false });
@@ -243,8 +244,12 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       if (!play) {
         let at = attractRef.current;
         if (!at) at = attractRef.current = new Attract(reduce);
-        at.update(dt);
-        drawScene(ctx, a, at.scene, Math.max(1, q.level));
+        // the canvas keeps the last frame, so skipping a paint leaves it on screen
+        tileDue.current += dt;
+        if (dt > 0 && tileDue.current < 1 / C.cam.tileFps) return;
+        at.update(tileDue.current);
+        tileDue.current = 0;
+        drawScene(ctx, a, at.scene, 2);
         drawAttractHud(ctx, w, h, at.scene.car.speed);
         return;
       }
@@ -322,7 +327,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       interactive: play,
       paused,
       animateAlways: play,
-      maxPixels: play ? C.cam.maxPixels : undefined,
+      maxPixels: play ? C.cam.maxPixels : C.cam.tileMaxPixels,
       keys: (e, down) => {
         const k = held.current;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;

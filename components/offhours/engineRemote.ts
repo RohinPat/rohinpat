@@ -198,6 +198,10 @@ export const ENGINE_CAL = {
     /** how many segments are drawn at each quality step, and the most device pixels the canvas may have (it renders at less than the screen's pixel ratio on a big window) */
     drawSegs: [190, 140, 100],
     maxPixels: 2_400_000,
+    /** the grid tile (attract mode) is a small card that runs while the visitor reads the page: it draws the shortest
+     *  distance, at this many device pixels at most, this many times a second, so it never competes with the page */
+    tileMaxPixels: 400_000,
+    tileFps: 30,
   },
 
   // ------------------------------------------------------------ night run: the phone
