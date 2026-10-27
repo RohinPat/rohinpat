@@ -63,6 +63,7 @@ async function openGolfRange(host: Page, phone: Page) {
 const carry = (text: string | null) => Number(/(\d+) yards carry/.exec(text ?? "")?.[1] ?? NaN);
 
 test.describe("phone controllers: opening games", () => {
+  test.setTimeout(75_000);
   test("the phone lists the nine games once the laptop is on /interests, and opens one like a click", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     const list = phone.getByTestId("phone-piece-list");
@@ -76,16 +77,26 @@ test.describe("phone controllers: opening games", () => {
     // it grew out of the tile: the stage opens with a clip-path animation
     await expect(phone.getByTestId("golf-controller")).toBeVisible();
 
-    // a game with no controller yet says so, with a way back
+    // Back puts the phone on its list; every game now has phone controls
     await phone.getByTestId("phone-back").click();
     await expect(stage(host)).toHaveCount(0, SLOW);
-    await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
+    await expect(list).toBeVisible();
+    await expect(list.getByText(/phone controls/i)).toHaveCount(9);
+    await expect(list.getByText(/laptop for now/i)).toHaveCount(0);
+    await context.close();
+  });
+
+  test("Back then straight into another game opens it, and it stays open", async ({ browser, baseURL }) => {
+    const { context, host, phone } = await onTheGrid(browser, baseURL);
+    await phone.locator('[data-piece="golf"]').click();
+    await expect(stage(host).getByRole("heading", { name: "Putt, drive, read" })).toBeVisible(SLOW);
+    // the phone is back on its list at once, while the laptop is still animating golf away
+    await phone.getByTestId("phone-back").click();
     await phone.locator('[data-piece="maze"]').click();
+    await expect(stage(host).getByRole("heading", { name: "Putt, drive, read" })).toHaveCount(0, SLOW);
     await expect(stage(host)).toBeVisible(SLOW);
-    await expect(phone.getByTestId("phone-soon")).toContainText(/coming soon; use your laptop/i);
-    await phone.getByRole("button", { name: "Back to the games" }).click();
-    await expect(stage(host)).toHaveCount(0, SLOW);
-    await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
+    await host.waitForTimeout(1500);
+    await expect(stage(host)).toBeVisible();
     await context.close();
   });
 

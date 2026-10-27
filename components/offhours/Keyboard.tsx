@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRemote } from "@/lib/link/remote";
 import type { PieceProps } from "./useCanvas";
 import { burst, getAudio, modal, tone } from "./audio";
 import Exploded3D from "./Exploded3D";
 import type { KeyboardState } from "./three/keyboard";
+import { KEYS_CAL, keyFromRemote } from "./keyboardRemote";
 
 // The 65% board I built, in thirteen parts, rendered in real 3D (three.js,
 // loaded only when this piece is on screen): sculpted PBT caps, clear
@@ -13,6 +15,8 @@ import type { KeyboardState } from "./three/keyboard";
 // and its brass weight. Type (or click or tap keys) and each one goes down with a
 // synthesized thock and comes back with its upstroke, and every keystroke
 // presses the stack back together. The Konami code lights the underglow.
+// A linked phone types on its own keyboard and each key goes down here like a
+// physical one (keyboardRemote.ts maps its characters to keys).
 // The model lives in three/keyboard.ts.
 
 const PARTS = [
@@ -123,6 +127,43 @@ export default function Keyboard({ mode, paused }: PieceProps) {
     }
   };
 
+  // A linked phone: each character it types presses that key for a beat, with
+  // the same sound and animation as a physical keypress. Shift rides along for
+  // capitals and symbols. Without a phone this does nothing at all.
+  const remoteTimers = useRef(new Map<string, number>());
+  const tap = (k: unknown) => {
+    const key = keyFromRemote(k);
+    if (!key) return;
+    const push = (code: string, char?: string) => {
+      const timers = remoteTimers.current;
+      const pending = timers.get(code);
+      if (pending !== undefined) window.clearTimeout(pending);
+      // a modifier already down just stays down a little longer; a repeated key lifts first
+      if (!(code === "ShiftLeft" && held.current.has(code))) {
+        release(code);
+        press(code, char);
+      }
+      timers.set(
+        code,
+        window.setTimeout(() => {
+          timers.delete(code);
+          release(code);
+        }, KEYS_CAL.holdMs),
+      );
+    };
+    if (key.shift) push("ShiftLeft");
+    push(key.code, key.char);
+  };
+  const remote = useRemote(play ? "keyboard" : null, {
+    gesture: (name, data) => {
+      if (name === "key") tap(data.k);
+    },
+  });
+  useEffect(() => {
+    const timers = remoteTimers.current;
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, []);
+
   // typing only while the stage has focus — never steals keys from the page
   useEffect(() => {
     if (!play) return;
@@ -170,6 +211,15 @@ export default function Keyboard({ mode, paused }: PieceProps) {
       className="absolute inset-0 flex flex-col bg-[#f2ead7] outline-none"
     >
       <div className="relative flex-1 min-h-0">
+        {remote.linked && (
+          <p
+            data-testid="keyboard-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Type on your phone
+          </p>
+        )}
         <Exploded3D
           build={async () => (await import("./three/keyboard")).buildKeyboard(state.current)}
           explode={explode}

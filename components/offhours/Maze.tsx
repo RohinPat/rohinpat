@@ -1,16 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRemote } from "@/lib/link/remote";
 import { seeded, useCanvas, type PieceProps } from "./useCanvas";
 import { getAudio, tone } from "./audio";
 import { display, mono } from "./font";
+import { MAZE_CAL } from "./mazeRemote";
+import { createAxisSmoother, shape } from "./remoteAxis";
 
 // A maze in 1-bit. Left: a first-person raycaster (DDA, one ray per column,
 // ordered Bayer dithering for the shading — two colours, no greys). Right:
 // the map, where you watch the solver think. Search algorithms (BFS, DFS,
 // A*) expand cells in order, then walk the path they found; the wall
 // follower feels its way round; Q-learning actually learns the maze, one
-// episode at a time, and walks its learned policy. Or walk it yourself.
+// episode at a time, and walks its learned policy. Or walk it yourself: arrows,
+// WASD, drag, or, with a phone linked, tilt it like a tray (see mazeRemote.ts).
 
 type Algo = "you" | "bfs" | "dfs" | "astar" | "wall" | "q";
 const ALGOS: { id: Algo; name: string; note: string }[] = [
@@ -258,6 +262,31 @@ export default function Maze({ mode, paused }: PieceProps) {
     fresh(a, tick.current, false);
   };
 
+  // A linked phone: its two tilt axes feed the same turn / walk the keys and the
+  // drag-stick do (blended in `step`), a big enough tilt takes over from a solver,
+  // and its buttons make a new maze. The phone is told whether you are driving and
+  // how the run ended. Without a phone none of this runs.
+  const pad = useRef({ x: createAxisSmoother(MAZE_CAL.smoothingS), y: createAxisSmoother(MAZE_CAL.smoothingS) });
+  const told = useRef("");
+  const remote = useRemote(play ? "maze" : null, {
+    axis: (name, v) => {
+      if (name !== "x" && name !== "y") return;
+      pad.current[name].set(v);
+      if (Math.abs(v) >= MAZE_CAL.engageAt && run.current && run.current.algo !== "you") pick("you");
+    },
+    gesture: (name) => {
+      if (name === "maze-new") fresh(run.current?.algo ?? algo, tick.current, true);
+      else if (name === "maze-sync") told.current = "";
+    },
+  });
+  useEffect(() => {
+    told.current = "";
+    if (!remote.linked) {
+      pad.current.x.reset();
+      pad.current.y.reset();
+    }
+  }, [remote.linked]);
+
   const ref = useCanvas(
     ({ ctx, w, h, t, dt }) => {
       tick.current = t;
@@ -265,6 +294,13 @@ export default function Maze({ mode, paused }: PieceProps) {
       const R = run.current!;
       const m = R.maze;
       step(R, dt, t);
+      if (remote.linked) {
+        const key = `${R.algo === "you"}|${R.phase === "done"}|${R.phase === "done" ? (R.doneAt - R.t0).toFixed(1) : ""}`;
+        if (key !== told.current) {
+          told.current = key;
+          remote.send({ type: "gesture", name: "maze-state", data: { you: R.algo === "you", done: R.phase === "done", secs: R.phase === "done" ? Math.round((R.doneAt - R.t0) * 10) / 10 : 0 } });
+        }
+      }
 
       // layout: view + map side by side, or stacked when narrow
       const side = w > h * 1.25 && w > 560;
@@ -335,6 +371,8 @@ export default function Maze({ mode, paused }: PieceProps) {
 
   function step(R: Run, dt: number, t: number) {
     const m = R.maze;
+    const phoneX = pad.current.x.update(dt);
+    const phoneY = pad.current.y.update(dt);
     const open_ = m.W * m.H * 0.55;
     if (R.phase === "think" && R.gen) {
       // expand at a rate that finishes a full BFS in ~3.5s
@@ -399,6 +437,9 @@ export default function Maze({ mode, paused }: PieceProps) {
         turn += ax(R.stick.x - R.stick.x0);
         fwd += ax(R.stick.y0 - R.stick.y);
       }
+      // a linked phone's tilt (0 when there is none)
+      turn += shape(phoneX, MAZE_CAL.deadZone, MAZE_CAL.curve) * MAZE_CAL.turnGain;
+      fwd += shape(phoneY, MAZE_CAL.deadZone, MAZE_CAL.curve) * MAZE_CAL.walkGain;
       R.cam.a += turn * 2.6 * dt;
       const sp = fwd * 2.6 * dt;
       const nx = R.cam.x + Math.cos(R.cam.a) * sp;
@@ -704,6 +745,15 @@ export default function Maze({ mode, paused }: PieceProps) {
         </div>
       )}
       <div className="relative flex-1 min-h-0">
+        {remote.linked && (
+          <p
+            data-testid="maze-phone-hint"
+            className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+          >
+            <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+            Tilt your phone
+          </p>
+        )}
         <canvas
           ref={ref}
           data-autofocus={play || undefined}

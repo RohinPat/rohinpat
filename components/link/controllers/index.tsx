@@ -4,9 +4,17 @@ import type { ComponentType } from "react";
 import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offhours/pieces";
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
+import Decks from "./Decks";
+import Engine from "./Engine";
 import Golf from "./Golf";
+import Hoops from "./Hoops";
+import Keyboard from "./Keyboard";
+import Maze from "./Maze";
+import Penalty from "./Penalty";
+import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
 import type { ControllerProps } from "./types";
+import Watch from "./Watch";
 
 // The phone's game controllers, routed from the `screen` message the laptop
 // sends ({name: "piece", piece}):
@@ -21,7 +29,15 @@ import type { ControllerProps } from "./types";
 // "Soon" tags all follow from the registry.
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
+  watch: Watch,
+  maze: Maze,
+  hoops: Hoops,
+  penalty: Penalty,
+  decks: Decks,
+  engine: Engine,
+  keyboard: Keyboard,
   golf: Golf,
+  powder: Powder,
 };
 
 export type PieceControlsProps = {

@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio, tone } from "./audio";
 import { display, mono } from "./font";
+import { useRemote } from "@/lib/link/remote";
+import { HOOPS_CAL, flickShot, parseFlick, parseSwipe, swipeShot } from "./hoopsRemote";
 
 // Arcade hoops, head-on. You stand at the line; swipe up to shoot and the
 // ball flies into the screen in 3D (a perspective camera over metres). The
@@ -13,7 +15,8 @@ import { display, mono } from "./font";
 // 30 seconds on the clock (it starts with your first shot). Three in a row
 // and you're on fire: double points. Ten points and the hoop starts to
 // slide; twenty and it speeds up. Keyboard: arrows aim, hold Space to
-// charge, let go to shoot.
+// charge, let go to shoot. A linked phone shoots too (see hoopsRemote.ts):
+// flick it up like a ball, or swipe its screen; both end in shoot() below.
 
 const G = 9.8;
 const BALL = 0.12;
@@ -51,6 +54,8 @@ export default function Hoops({ mode, paused }: PieceProps) {
     clock: CLOCK,
     running: false,
     over: false,
+    overAt: 0,
+    tickSent: -1,
     lateShot: false,
     pops: [] as Pop[],
     net: 0, // swing energy
@@ -141,6 +146,43 @@ export default function Hoops({ mode, paused }: PieceProps) {
     sfx("release");
   };
 
+  // A linked phone: its flick (or swipe) is a shot from the line, or a restart
+  // after the buzzer. It is told the score, the clock and how each shot went so
+  // its controller matches. Without a phone none of this does anything.
+  const { linked, send } = useRemote(play ? "hoops" : null, {
+    gesture: (name, data) => {
+      const s = S.current;
+      let shot: ReturnType<typeof flickShot> | null = null;
+      if (name === "hoops-flick") {
+        const f = parseFlick(data);
+        if (f) shot = flickShot(f.power, f.aim, s.ball.x);
+      } else if (name === "hoops-swipe") {
+        const v = parseSwipe(data);
+        if (v) shot = swipeShot(v.vx, v.vy, s.ball.x, s.ball.z, HOOP_Z, HOOPS_CAL.phoneSwipeGain);
+      } else if (name === "hoops-sync") tell();
+      if (!shot) return;
+      if (s.over) {
+        // a flick still in the air at the buzzer shouldn't skip the final screen
+        if (s.t - s.overAt > 1.2) reset();
+      } else shoot(shot.aimX, shot.power);
+      tell();
+    },
+  });
+  const tell = (result: "" | "swish" | "make" | "miss" = "", pts = 0) => {
+    if (!play) return; // the tile's autopilot isn't the visitor's game
+    const s = S.current;
+    send({
+      type: "gesture",
+      name: "hoops-state",
+      data: { score: s.score, makes: s.makes, shots: s.shots, streak: s.streak, clock: Math.ceil(s.clock), best: s.best, over: s.over, running: s.running, result, pts },
+    });
+  };
+  const tellRef = useRef(tell);
+  tellRef.current = tell;
+  useEffect(() => {
+    if (linked) tellRef.current();
+  }, [linked]);
+
   const ref = useCanvas(
     ({ ctx, w, h, t, dt }) => {
       const s = S.current;
@@ -165,6 +207,11 @@ export default function Hoops({ mode, paused }: PieceProps) {
         }
       }
       if (s.charging) s.power = Math.min(1.6, s.power + dt * 1.1);
+      // the phone's clock follows ours, once a second
+      if (s.running && !s.over && s.tickSent !== Math.ceil(s.clock)) {
+        s.tickSent = Math.ceil(s.clock);
+        tellRef.current();
+      }
 
       // ---- physics
       const n = 5;
@@ -352,7 +399,7 @@ export default function Hoops({ mode, paused }: PieceProps) {
       if (play && s.state === "ready" && !s.running && !s.over) {
         mono(ctx, 12);
         ctx.fillStyle = "rgba(242,234,215,0.8)";
-        ctx.fillText("SWIPE UP ON THE BALL TO SHOOT", w / 2, h - 18);
+        ctx.fillText(linked ? "FLICK YOUR PHONE UP TO SHOOT" : "SWIPE UP ON THE BALL TO SHOOT", w / 2, h - 18);
       }
       if (s.over) {
         ctx.fillStyle = "rgba(11,9,24,0.72)";
@@ -408,12 +455,9 @@ export default function Hoops({ mode, paused }: PieceProps) {
         const dtt = Math.max(16, b.t - a.t) / 1000;
         const vy = (b.y - a.y) / dtt, vx = (b.x - a.x) / dtt;
         const { h } = cam.current;
-        if (-vy < h * 0.5) return; // not a swipe up
-        // a natural flick is "right"; much faster or slower drifts long/short,
-        // on a log scale so the sweet spot is wide
-        const power = 1 + 0.45 * Math.log2(-vy / (h * 1.6));
-        const aim = s.ball.x + (vx / -vy) * (HOOP_Z - s.ball.z);
-        shoot(aim, power);
+        // the same shot the phone's swipe makes (hoopsRemote.ts), in screen heights per second
+        const sh = swipeShot(vx / h, vy / h, s.ball.x, s.ball.z, HOOP_Z);
+        if (sh) shoot(sh.aimX, sh.power);
       },
       keys: (e, down) => {
         const s = S.current;
@@ -445,9 +489,11 @@ export default function Hoops({ mode, paused }: PieceProps) {
     const s = S.current;
     if (s.over) return;
     s.over = true;
+    s.overAt = s.t;
     s.running = false;
     s.best = Math.max(s.best, s.score);
     sfx("buzzer");
+    tellRef.current();
     if (play) setStatus(`Time. ${s.score} points, ${s.makes} of ${s.shots}. Best ${s.best}.`);
   }
 
@@ -504,6 +550,7 @@ export default function Hoops({ mode, paused }: PieceProps) {
       const pts = (swish ? 3 : 2) * (fire ? 2 : 1);
       s.score += pts;
       s.net = 1;
+      tellRef.current(swish ? "swish" : "make", pts);
       sfx("swish");
       if (s.streak === 3) sfx("fire");
       const late = s.clock <= 0 && s.running;
@@ -525,7 +572,10 @@ export default function Hoops({ mode, paused }: PieceProps) {
     // back to the line quickly: after it drops through, or once a miss is dead
     const dead = (s.scored && b.y < 1.2) || (!s.scored && s.flyT > 1.2 && b.y < 0.6);
     if (dead || s.flyT > 2.2 || b.z > BOARD_Z + 3 || b.z < -1 || Math.abs(b.x) > 6) {
-      if (!s.scored) s.streak = 0;
+      if (!s.scored) {
+        s.streak = 0;
+        tellRef.current("miss");
+      }
       if (s.clock <= 0 && s.running) endGame();
       newBall();
     }
@@ -594,6 +644,15 @@ export default function Hoops({ mode, paused }: PieceProps) {
         aria-label={play ? "An arcade basketball hoop. Swipe up on the ball to shoot; or aim with the arrow keys and hold Space to charge, release to shoot. 30 seconds on the clock." : undefined}
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
+      {linked && (
+        <p
+          data-testid="hoops-phone-hint"
+          className="pointer-events-none absolute right-3 bottom-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+        >
+          <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+          Flick your phone
+        </p>
+      )}
       <p aria-live="polite" className="sr-only">
         {status}
       </p>

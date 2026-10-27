@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { seeded, useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio, tone } from "./audio";
 import { display, mono } from "./font";
+import { useRemote } from "@/lib/link/remote";
+import { isPhoneShot, kickFromSwipe, parseKick, type PhoneShot } from "./penaltyRemote";
 import {
   BALL_R, GH, GOAL_Z, GW, KEEPER_Z, NET_Z, RUNUP, SHOTS, SPOT_Z,
   clamp, contact, glovePos, keeperIdle, keeperRun, keeperStartPlan, launch, makeStrike, newBall, newKeeper,
@@ -18,6 +20,9 @@ import {
 // (see penaltyModel.ts): he watches, reads what he can of the ball, commits,
 // and dives with a real body you can beat, or that can get a glove to it.
 // Goals ripple a spring-grid net. Best of five; five from five and it goes on.
+// A linked phone kicks too (penaltyRemote.ts): swipe its screen, and the swipe's
+// heading, length, speed and bend become the aim, power and curl of the same
+// strike(). It is told how each kick went.
 
 const CAM = { y: 1.45, z: -4.6 };
 const COLS = 17, ROWS = 7;
@@ -81,7 +86,11 @@ export default function Penalty({ mode, paused }: PieceProps) {
     backTo: "aim" as Phase,
     replayReq: false,
     wrong: false,
+    now: 0,
+    overT: 0,
+    told: "",
   });
+  const choice = useRef<PhoneShot>("auto"); // the phone's shot picker
   const crowd = useRef(
     (() => {
       const r = seeded(10);
@@ -247,6 +256,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
       const w = word(s);
       setStatus(`${st.shot.name.replace(/[^\w ]/g, "").trim()}: ${r === "goal" ? "goal" : w.toLowerCase()}${detail ? `, ${detail.toLowerCase()}` : ""}. ${goals} from ${n}.`);
       setHasKick(true);
+      tellRef.current(r);
     }
   }
 
@@ -313,9 +323,70 @@ export default function Penalty({ mode, paused }: PieceProps) {
     }
   };
 
+  // A linked phone: penalty-kick is a swipe to kick with, penalty-shot its shot
+  // picker, penalty-sync "tell me where we are". Without a phone this is idle.
+  const { linked, send } = useRemote(play ? "penalty" : null, {
+    gesture: (name, data) => {
+      const s = S.current;
+      if (name === "penalty-kick") {
+        const sw = parseKick(data);
+        if (!sw) return;
+        if (s.phase === "replay") s.phase = s.backTo;
+        else if (s.phase === "over") {
+          // a swipe still in flight when the last kick landed shouldn't skip the result
+          if (s.now - s.overT > 1.2) {
+            s.kicks = [];
+            s.phase = "aim";
+            setStatus("New shootout.");
+          }
+        } else if (s.phase === "aim") {
+          const k = kickFromSwipe(sw, choice.current);
+          s.shot = k.shot;
+          setShotState(k.shot);
+          s.aim = k.aim;
+          s.dwell = 0; // no pointer hovering on the goal, so the keeper gets no tell
+          strike(k.power);
+        }
+      } else if (name === "penalty-shot") {
+        if (isPhoneShot(data.id)) choice.current = data.id;
+      }
+      tell();
+    },
+  });
+  const tell = (result: "" | Kick = "") => {
+    if (!play) return; // the tile's autopilot isn't the visitor's shootout
+    const s = S.current;
+    send({
+      type: "gesture",
+      name: "penalty-state",
+      data: {
+        phase: s.phase === "aim" ? "aim" : s.phase === "over" ? "over" : "busy",
+        kicks: s.kicks.map((k) => (k === "goal" ? "G" : k === "save" ? "S" : k === "post" ? "P" : "M")).join(""),
+        result,
+        word: result ? word(s) : "",
+        detail: result ? s.detail : "",
+        shot: result && s.strike ? s.strike.shot.name : "",
+        choice: choice.current,
+      },
+    });
+  };
+  const tellRef = useRef(tell);
+  tellRef.current = tell;
+  useEffect(() => {
+    if (linked) tellRef.current();
+  }, [linked]);
+
   const ref = useCanvas(
     ({ ctx, w, h, t, dt, p }) => {
       const s = S.current;
+      s.now = t;
+      // the phone is told when the kick is over and it can swipe again
+      const ph = s.phase === "aim" ? "aim" : s.phase === "over" ? "over" : "busy";
+      if (ph !== s.told) {
+        s.told = ph;
+        if (ph === "over") s.overT = t;
+        tellRef.current();
+      }
       const f = Math.min(w * 1.12, h * 1.7);
       const cz = CAM.z + s.dolly;
       cam.current = { f, cx: w / 2, cy: h * 0.86 - (f * (CAM.y - BALL_R)) / (SPOT_Z - cz), cz };
@@ -981,6 +1052,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
 
   const def = shotById(shot);
   const body = (
+    <>
     <canvas
       ref={ref}
       data-autofocus={play || undefined}
@@ -992,6 +1064,16 @@ export default function Penalty({ mode, paused }: PieceProps) {
       }
       className="absolute inset-0 w-full h-full outline-none touch-none"
     />
+    {linked && (
+      <p
+        data-testid="penalty-phone-hint"
+        className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]"
+      >
+        <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 rounded-full bg-[#8ad9a8] align-middle" />
+        Swipe on your phone
+      </p>
+    )}
+    </>
   );
   if (!play) return body;
   return (
