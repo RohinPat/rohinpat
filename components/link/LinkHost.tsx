@@ -119,6 +119,12 @@ export default function LinkHost(props: Props) {
     else latest.current.onPair({ state: stale ? "closed" : state, paired, code, pairUrl, stale, renew });
   }, [state, paired, code, pairUrl, stale, renew]);
 
+  // back on the home screen with a phone still paired (it brought the laptop
+  // home, or the visitor clicked back): put the phone on the matching controls
+  useEffect(() => {
+    if (session && paired) session.send({ type: "screen", name: latest.current.locked ? "lock" : "home" });
+  }, [session, paired]);
+
   // phone -> host
   useEffect(() => {
     if (!session) return;
@@ -143,7 +149,9 @@ export default function LinkHost(props: Props) {
           }
           break;
         case "open":
-          if (!c.locked && typeof m.app === "string") c.onOpen(m.app);
+          // "home" is the phone's way back from another page; here it's already done
+          if (m.app === "home") session.send({ type: "screen", name: c.locked ? "lock" : "home" });
+          else if (!c.locked && typeof m.app === "string") c.onOpen(m.app);
           break;
         case "recenter":
           t.recentre(performance.now());

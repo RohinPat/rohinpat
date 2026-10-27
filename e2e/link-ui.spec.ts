@@ -257,13 +257,13 @@ test.describe("link UI: linked", () => {
     await phone.getByRole("button", { name: /^Work: opens on your laptop/ }).click();
     await expect(host).toHaveURL(/\/projects$/);
 
-    // the laptop left the home screen: the phone says so, and Back is there
+    // the laptop left the home screen: the phone says so, and its Back takes both home
     await expect(phone.getByTestId("phone-piece")).toBeVisible();
     await phone.getByRole("button", { name: "Back" }).click();
     await expect(phone.getByTestId("phone-home")).toBeVisible();
 
-    // coming home again: the link survived the navigation, and it's tilting and unlocked
-    await host.goBack();
+    // home again: the link survived the navigation, and it's tilting and unlocked
+    await host.waitForURL((u) => new URL(u).pathname === "/");
     await expect(host.getByTestId("link-pill")).toBeVisible();
     await expect(host.getByRole("button", { name: /swipe up to unlock/i })).toHaveCount(0);
     await context.close();

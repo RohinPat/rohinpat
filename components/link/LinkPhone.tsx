@@ -258,7 +258,10 @@ function Controller() {
         motion={motion}
         send={send}
         subscribe={subscribe}
-        onLeave={() => setLeftPiece(true)}
+        onLeave={() => {
+          session?.send({ type: "open", app: "home" });
+          setLeftPiece(true);
+        }}
         onList={() => setScreen({ name: "piece", piece: "list" })}
         onUnlock={unlock}
         onSession={(m) => session?.send(m)}
