@@ -96,16 +96,18 @@ test.describe("phone controllers: the drag strip", () => {
     await openEngine(host, phone);
     const send = (m: unknown) => phone.evaluate((x) => (window as unknown as PhoneWindow).__linkPhone!.send(x), m);
     const view = phone.getByTestId("engine-view");
+    // the gear stat's own number (the revs next to it have digits too)
+    const gear = view.locator("div").first().locator("p").nth(1);
 
     await send({ type: "axis", name: "throttle", v: 0.8 });
     await expect(view).toHaveAttribute("data-phase", "tree", { timeout: 15_000 });
     await expect(view).toHaveAttribute("data-phase", "run", { timeout: 15_000 });
-    await expect(view).toContainText(/\b1\b/);
+    await expect(gear).toHaveText("1");
 
     // the shift button changes gear on the laptop, and the dash says so
     await phone.getByTestId("engine-shift").click();
-    await expect(view).toContainText(/\b2\b/, { timeout: 10_000 });
     await expect(phone.getByTestId("engine-shift")).toHaveAttribute("data-shifted", "1");
+    await expect(gear).toHaveText("2", { timeout: 10_000 });
 
     // closing the throttle lets the revs fall
     await send({ type: "axis", name: "throttle", v: 0 });

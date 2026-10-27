@@ -224,7 +224,7 @@ export default function EngineNightController({ send, subscribe, motionOk }: Con
             : view.phase === "done"
               ? { text: grouped(view.score), sub: `${view.miles.toFixed(2)} mi · best drift ${grouped(view.best)}`, warn: false }
               : driving
-                ? { text: `×${view.combo}  ${grouped(view.pending)}`, sub: "Straighten out to bank it.", warn: false }
+                ? { text: `×${view.combo} · ${grouped(view.pending)}`, sub: "Straighten out to bank it.", warn: false }
                 : { text: `Checkpoint ${Math.min(view.cp + 1, view.cps)} / ${view.cps}`, sub: view.auto ? "Lift or brake into a corner, flick for the handbrake." : "Shift with the paddles.", warn: false };
 
   const zone = (name: "gas" | "brake" | "hand" | "left" | "right", label: string, cls: string, testid: string) => (

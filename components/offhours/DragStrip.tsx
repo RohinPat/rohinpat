@@ -81,6 +81,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const held = useRef(false);
   const phone = useRef({ target: 0, smooth: 0 });
   const told = useRef({ at: -Infinity, key: "" });
+  const mineRef = useRef<RemoteHandlers | null>(null);
 
   useEffect(
     () => () => {
@@ -122,7 +123,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
 
   // A linked phone: its throttle axis is a pedal, its shift gesture is the up
   // arrow, and it is told the revs, gear and shift light. Without one this does nothing.
-  bus.current = {
+  const mine: RemoteHandlers = {
     axis: (name, v) => {
       if (name === "throttle") phone.current.target = parseThrottle(v);
     },
@@ -132,12 +133,15 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       else if (name === "engine-sync") told.current.key = "";
     },
   };
-  useEffect(
-    () => () => {
-      bus.current = {};
-    },
-    [bus],
-  );
+  mineRef.current = mine;
+  bus.current = mine;
+  // leaving hands the phone's messages to nobody, unless the other mode has already taken them
+  useEffect(() => {
+    bus.current = mineRef.current ?? {};
+    return () => {
+      if (bus.current === mineRef.current) bus.current = {};
+    };
+  }, [bus]);
   const linkRef = useRef(remote);
   linkRef.current = remote;
   useEffect(() => {

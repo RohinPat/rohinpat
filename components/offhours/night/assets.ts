@@ -46,10 +46,12 @@ export type Assets = {
   hy0: number;
   /** px of panorama per radian of heading */
   px: number;
-  sky: CanvasGradient;
-  ground: CanvasGradient;
-  vignette: CanvasGradient;
-  haze: CanvasGradient;
+  /** the sky, its glow on the horizon and the dark ground below, baked once and slid up and down with the horizon */
+  backdrop: HTMLCanvasElement;
+  /** how far above the screen's top the backdrop starts, px */
+  backdropTop: number;
+  /** a soft dark edge, small, stretched over the screen */
+  vignette: HTMLCanvasElement;
   stars: Pano;
   far: Pano;
   city: Pano;
@@ -86,7 +88,7 @@ function makePalette(): Palette {
     pal.reflL.push(css([255, 176, 66], Math.min(1, 0.22 + 0.78 * refl)));
     const rockBeam = Math.exp(-Math.max(0, z - 6) / 22);
     pal.rock.push(css(tone([10, 13, 18], [46, 48, 52], rockBeam)));
-    pal.rockAlt.push(css(tone([12, 15, 20], [52, 54, 57], rockBeam)));
+    pal.rockAlt.push(css(tone([11, 14, 19], [49, 51, 54], rockBeam)));
     const lampLit = 0.3 + 0.7 * Math.exp(-z / 70);
     pal.tunnel.push(css(tone([20, 22, 25], [158, 146, 118], lampLit)));
     pal.ceiling.push(css(tone([12, 13, 16], [96, 90, 72], lampLit * 0.7)));
@@ -291,25 +293,41 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   const px = W / (Math.PI * 2);
   const s = Math.max(0.6, Math.min(1.6, h / 700));
 
-  const sky = ctx.createLinearGradient(0, 0, 0, hy0 + h * 0.1);
+  // the backdrop: taller than the screen, so a hill's tilt of the horizon only slides it
+  const margin = Math.round(h * 0.42);
+  const bd = canvas(w, h + margin * 2);
+  const bx = bd.getContext("2d")!;
+  const sky = bx.createLinearGradient(0, 0, 0, margin + hy0 + h * 0.1);
   sky.addColorStop(0, "#02040a");
   sky.addColorStop(0.5, "#07101c");
   sky.addColorStop(0.82, "#0f1d2d");
   sky.addColorStop(1, "#1d2a38");
-
-  const ground = ctx.createLinearGradient(0, hy0 + h * 0.08, 0, h);
-  ground.addColorStop(0, "#0a1016");
-  ground.addColorStop(0.35, "#070b0f");
-  ground.addColorStop(1, "#030507");
-
-  const vignette = ctx.createRadialGradient(w / 2, h * 0.56, Math.min(w, h) * 0.35, w / 2, h * 0.56, Math.hypot(w, h) * 0.62);
-  vignette.addColorStop(0, "rgba(0,0,0,0)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.62)");
-
-  const haze = ctx.createLinearGradient(0, hy0 - h * 0.1, 0, hy0 + h * 0.16);
+  bx.fillStyle = sky;
+  bx.fillRect(0, 0, w, margin + hy0 + h * 0.14);
+  const haze = bx.createLinearGradient(0, margin + hy0 - h * 0.1, 0, margin + hy0 + h * 0.16);
   haze.addColorStop(0, "rgba(255,170,110,0)");
   haze.addColorStop(0.55, "rgba(255,160,100,0.1)");
   haze.addColorStop(1, "rgba(255,150,90,0)");
+  bx.globalCompositeOperation = "lighter";
+  bx.fillStyle = haze;
+  bx.fillRect(0, margin + hy0 - h * 0.1, w, h * 0.26);
+  bx.globalCompositeOperation = "source-over";
+  const ground = bx.createLinearGradient(0, margin + hy0 + h * 0.08, 0, margin * 2 + h);
+  ground.addColorStop(0, "#0a1016");
+  ground.addColorStop(0.35, "#070b0f");
+  ground.addColorStop(1, "#030507");
+  bx.fillStyle = ground;
+  bx.fillRect(0, margin + hy0 + h * 0.1, w, margin * 2 + h);
+
+  const vw = 96;
+  const vh = Math.max(24, Math.round((96 * h) / w));
+  const vig = canvas(vw, vh);
+  const vx = vig.getContext("2d")!;
+  const vg = vx.createRadialGradient(vw / 2, vh * 0.56, Math.min(vw, vh) * 0.35, vw / 2, vh * 0.56, Math.hypot(vw, vh) * 0.62);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.62)");
+  vx.fillStyle = vg;
+  vx.fillRect(0, 0, vw, vh);
 
   const starsH = Math.round(hy0 + h * 0.25);
   const starPano = stars(rng, W, starsH, W * 0.14, Math.max(14, 22 * s));
@@ -318,5 +336,5 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   const mid = mountains(rng, W, Math.round(h * 0.17), [15, 22, 33], [9, 14, 21], 0.1, 0.12, 0.8);
   const near = mountains(rng, W, Math.round(h * 0.12), [9, 14, 21], [6, 10, 15], 0.05, 0.1, 0.7);
 
-  return { w, h, hy0, px, sky, ground, vignette, haze, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(), pal: makePalette() };
+  return { w, h, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(), pal: makePalette() };
 }

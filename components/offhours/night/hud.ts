@@ -298,7 +298,7 @@ function drawDrift(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
 
 function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean) {
   ctx.textAlign = "center";
-  let y = h * 0.27;
+  let y = h * 0.4;
   for (let i = g.toasts.length - 1; i >= 0; i--) {
     const t = g.toasts[i];
     const inT = ease(t.age / 0.18);
@@ -369,7 +369,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   ctx.fillStyle = "rgba(4,7,6,0.62)";
   ctx.fillRect(0, 0, w, h);
   const pw = Math.min(460 * u, w - 32);
-  const ph = 330 * u;
+  const ph = 372 * u;
   const x = w / 2 - pw / 2;
   const y = Math.max(16, h * 0.5 - ph / 2 - 10 * u);
   ctx.fillStyle = "rgba(10,13,12,0.9)";
@@ -395,7 +395,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     ["DRIFT BANKED", grouped(r.driftTotal)],
   ];
   rows.forEach(([k, v], i) => {
-    const ry = y + 160 * u + i * 30 * u;
+    const ry = y + 160 * u + i * 31 * u;
     font(ctx, "m", 11 * u, 500);
     ctx.fillStyle = MUTED;
     ctx.textAlign = "left";
@@ -409,9 +409,9 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   font(ctx, "m", 11 * u, 700);
   if (r.newBest) {
     ctx.fillStyle = MINT;
-    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, y + ph - 56 * u);
+    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, y + ph - 64 * u);
   }
   ctx.fillStyle = CREAM;
-  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 28 * u);
+  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 30 * u);
   void LIMIT;
 }

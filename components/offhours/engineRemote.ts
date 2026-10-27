@@ -97,7 +97,7 @@ export const ENGINE_CAL = {
     steerHalfMs: 13,
     steerRate: 7,
     /** the road turns the wheel this share of the way round its own corner (0 = all on you), so the steering is for the line and the slide */
-    roadAssist: 0.7,
+    roadAssist: 0.85,
     /** the stability help: it counter-steers this share of the way (0 = none) by the slip angle, to most this many rad, and damps yaw (N m s) */
     assist: 1.2,
     assistMaxRad: 0.6,
@@ -197,7 +197,7 @@ export const ENGINE_CAL = {
     fastFrameMs: 17.2,
     /** how many segments are drawn at each quality step, and the most device pixels the canvas may have (it renders at less than the screen's pixel ratio on a big window) */
     drawSegs: [190, 140, 100],
-    maxPixels: 3_000_000,
+    maxPixels: 2_400_000,
   },
 
   // ------------------------------------------------------------ night run: the phone

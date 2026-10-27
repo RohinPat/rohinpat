@@ -167,7 +167,7 @@ export function buildRoad(seed = C.seed): Road {
     for (let q = 0; q < len && j + q < n; q++) flags[j + q] |= f;
     j += len;
   }
-  for (let j = 0; j < n; j++) if (flags[j] & BRIDGE) flags[j] &= ~(ROCK_L | ROCK_R);
+  for (let j = 0; j < n; j++) if (flags[j] & (BRIDGE | TUNNEL)) flags[j] &= ~(ROCK_L | ROCK_R);
 
   // chevron boards on the outside of the corners that bite
   const signs: Sign[] = [];

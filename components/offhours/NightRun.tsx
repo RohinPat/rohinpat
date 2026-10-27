@@ -58,6 +58,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const touchRef = useRef(false);
   const lastAudioTry = useRef(0);
   const lastData = useRef(0);
+  const mineRef = useRef<RemoteHandlers | null>(null);
 
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<string>("ready");
@@ -158,7 +159,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       if ((g.phase as string) === "count") setStatus("Race starting. Three, two, one.");
     }
   };
-  bus.current = {
+  const mine: RemoteHandlers = {
     axis: (name, v) => {
       if (!play) return;
       if (setPhoneAxis(phone.current, name, v) && name === "gas" && v > 0.5 && gameRef.current?.phase === "ready") startOrAgain();
@@ -176,12 +177,15 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       else if (name === "engine-sync") told.current.key = "";
     },
   };
-  useEffect(
-    () => () => {
-      bus.current = {};
-    },
-    [bus],
-  );
+  mineRef.current = mine;
+  bus.current = mine;
+  // leaving hands the phone's messages to nobody, unless the other mode has already taken them
+  useEffect(() => {
+    bus.current = mineRef.current ?? {};
+    return () => {
+      if (bus.current === mineRef.current) bus.current = {};
+    };
+  }, [bus]);
   useEffect(() => {
     // no phone (or it dropped): the wheel and the pedals let go
     if (!remote.linked) {
@@ -460,7 +464,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           data-testid="night-again"
           onClick={startOrAgain}
           className="absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-[var(--mint)] px-6 py-2.5 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink)]"
-          style={{ top: "calc(50% + 11.5rem)" }}
+          style={{ top: "calc(50% + 12.8rem)" }}
         >
           Drive again
         </button>

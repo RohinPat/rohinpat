@@ -94,17 +94,10 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
   if (shx) ctx.translate(shx, 0);
 
   // ---- the sky and the far country
-  ctx.fillStyle = a.sky;
-  ctx.fillRect(-4, 0, w + 8, hy + h * 0.14);
+  ctx.drawImage(a.backdrop, -4, hy - a.hy0 - a.backdropTop, w + 8, a.backdrop.height);
   pano(ctx, a.stars, cam.heading, a.px, 0.96, hy, w);
   pano(ctx, a.far, cam.heading, a.px, 1.0, hy + 3, w);
   pano(ctx, a.city, cam.heading, a.px, 1.04, hy + h * 0.115, w);
-  ctx.fillStyle = a.haze;
-  ctx.globalCompositeOperation = "lighter";
-  ctx.fillRect(-4, hy - h * 0.1, w + 8, h * 0.26);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = a.ground;
-  ctx.fillRect(-4, hy + h * 0.1, w + 8, h - hy - h * 0.1 + 4);
   pano(ctx, a.mid, cam.heading, a.px, 1.1, hy + h * 0.125, w);
   pano(ctx, a.near, cam.heading, a.px, 1.22, hy + h * 0.15, w);
 
@@ -479,8 +472,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
 
   // ---- a soft shade around the edges, and speed lines
   ctx.restore();
-  ctx.fillStyle = a.vignette;
-  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(a.vignette, 0, 0, w, h);
   if (!sc.reduce) speedLines(ctx, a, sc, hy, shx);
 }
 

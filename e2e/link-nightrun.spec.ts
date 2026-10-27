@@ -50,10 +50,10 @@ async function onTheGrid(browser: Browser, baseURL: string | undefined) {
   await context.addInitScript(() => {
     const w = window as unknown as Win;
     w.__buzz = [];
-    navigator.vibrate = (p: VibratePattern) => {
+    navigator.vibrate = ((p: VibratePattern) => {
       w.__buzz!.push(Array.isArray(p) ? p : [p]);
       return true;
-    };
+    }) as typeof navigator.vibrate;
   });
   const host = await context.newPage();
   await host.goto("/");
@@ -458,6 +458,10 @@ test.describe("Night run: the phone as the wheel", () => {
     await host.getByTestId("engine-mode-night").click();
     await expect(phone.getByTestId("night-controller")).toBeVisible(SLOW);
     await expect(host.getByTestId("night-phone-hint")).toBeVisible();
+    // and the phone's messages reach whichever game is showing, after the round trip too
+    await send(phone, { type: "axis", name: "gas", v: 1 });
+    await expect(canvas(host)).toHaveAttribute("data-phase", "count", SLOW);
+    await send(phone, { type: "axis", name: "gas", v: 0 });
     await context.close();
   });
 });
