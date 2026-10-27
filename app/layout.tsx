@@ -4,6 +4,7 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import SiteEasterEggs from "@/components/SiteEasterEggs";
 import LaunchTracker from "@/components/LaunchTracker";
+import LinkReturn from "@/components/link/LinkReturn";
 import PersonJsonLd from "@/components/PersonJsonLd";
 import SiteFooter from "@/components/SiteFooter";
 import { description, site } from "@/lib/site";
@@ -96,6 +97,7 @@ export default function RootLayout({
         <SiteFooter />
         <SiteEasterEggs />
         <LaunchTracker />
+        <LinkReturn />
       </body>
     </html>
   );

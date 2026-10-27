@@ -90,7 +90,7 @@ function OtherPage({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center" data-testid="phone-piece">
       <h1 className="text-[2rem] leading-tight font-extrabold text-balance">Your laptop has opened a page.</h1>
-      <p className="mt-3 text-lg leading-snug text-[#c9c6b6]">Read it on the laptop. Go back to its home screen to use this phone as a remote again.</p>
+      <p className="mt-3 text-lg leading-snug text-[#c9c6b6]">Read it on the laptop. Back takes both screens home, and this phone is the remote again.</p>
       <button type="button" onClick={onBack} className={`${bigButton} mt-7`}>
         Back
       </button>

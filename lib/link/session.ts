@@ -36,7 +36,7 @@ export type LinkMsg =
   | { type: "lock" }
   /** phone: a tap at a fraction of its screen, 0..1 */
   | { type: "tap"; x: number; y: number }
-  /** phone: open a home-screen app by id (apps.tsx), as if tapped */
+  /** phone: open a home-screen app by id (apps.tsx), as if tapped; "home" brings the laptop back to / from any page */
   | { type: "open"; app: string }
   /** host: which screen the big phone is on, so the phone can show the right controls */
   | { type: "screen"; name: "lock" | "home" | "piece"; piece?: string }

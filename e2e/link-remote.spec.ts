@@ -100,6 +100,22 @@ test.describe("phone controllers: opening games", () => {
     await context.close();
   });
 
+  test("from a game, the phone takes both screens home, and can come back again", async ({ browser, baseURL }) => {
+    const { context, host, phone } = await onTheGrid(browser, baseURL);
+    await phone.locator('[data-piece="golf"]').click();
+    await expect(stage(host)).toBeVisible(SLOW);
+    await phone.getByTestId("phone-back").click();
+    await phone.getByTestId("phone-list-back").click();
+    await host.waitForURL((u) => new URL(u).pathname === "/", SLOW);
+    await expect(phone.getByTestId("phone-home")).toBeVisible();
+    await expect(host.getByTestId("link-pill")).toBeVisible();
+    // still a remote: Off hours again
+    await phone.locator('[data-app="offhours"]').click();
+    await host.waitForURL("**/interests", SLOW);
+    await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
+    await context.close();
+  });
+
   test("Esc on the laptop puts the phone back on the list", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
