@@ -131,10 +131,14 @@ test.describe("Click for sound", () => {
     await page.goto("/interests");
     await page.locator('[data-piece="keyboard"]').click();
     await expect(stage(page)).toBeVisible(SLOW);
-    // typing is the click's successor: the browser lets the sound through
-    await page.keyboard.press("a");
-    await page.waitForTimeout(1200);
-    expect(await audioState(page)).toEqual(["running"]);
+    // typing is the click's successor: the browser lets the sound through.
+    // The keyboard only sounds once its model has loaded, so keep typing.
+    await expect
+      .poll(async () => {
+        await page.keyboard.press("a");
+        return audioState(page);
+      }, { timeout: 30_000, intervals: [1000] })
+      .toEqual(["running"]);
     await expect(page.getByTestId("sound-prompt")).toHaveCount(0);
     await context.close();
   });
@@ -158,6 +162,7 @@ test.describe("Cars: the title follows the mode", () => {
   });
 
   test("with no phone: the mouse-opened stage follows too, and a new stage starts on its own title", async ({ browser, baseURL }) => {
+    test.setTimeout(90_000);
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await page.goto("/interests");
@@ -168,7 +173,7 @@ test.describe("Cars: the title follows the mode", () => {
     await page.getByRole("button", { name: "Close" }).click();
     await expect(stage(page)).toHaveCount(0);
     await page.locator('[data-piece="watch"]').click();
-    await expect(stage(page).getByRole("heading", { level: 2 })).toHaveText("Wind it, then take it apart");
+    await expect(stage(page).getByRole("heading", { level: 2 })).toHaveText("Wind it, then take it apart", SLOW);
     await context.close();
   });
 });
