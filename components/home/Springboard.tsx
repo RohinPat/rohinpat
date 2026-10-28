@@ -4,6 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import PairLock from "@/components/link/PairLock";
 import QuickCard from "@/components/QuickCard";
 import { pov, site } from "@/lib/site";
 import { burst, getAudio } from "@/components/offhours/audio";
@@ -30,9 +31,8 @@ const CameraApp = dynamic(() => import("./CameraApp"), { ssr: false });
 // the phone link (components/link): loaded only on a mouse-first wide screen,
 // after the page has settled, so the home page's first load doesn't carry it
 const LinkHost = dynamic(() => import("@/components/link/LinkHost"), { ssr: false });
-const PairCard = dynamic(() => import("@/components/link/PairCard"), { ssr: false });
-// the pairing card, offered to whichever lock screen is showing
-const PairSlot = createContext<React.ReactNode>(null);
+// what the padlock opens into (PairLock), offered to whichever lock screen is showing
+const PairSlot = createContext<PairInfo | null>(null);
 // the lock screen that's showing, so a linked phone's finger can move it
 let remoteDrag: ((p: number | null) => void) | null = null;
 
@@ -178,7 +178,7 @@ export default function Springboard() {
   };
 
   return (
-    <PairSlot.Provider value={linkOk && pair ? <PairCard info={pair} /> : null}>
+    <PairSlot.Provider value={linkOk ? pair : null}>
     <section
       ref={section}
       aria-labelledby="home-title"
@@ -600,7 +600,7 @@ function LockScreen({
   const [torch, setTorch] = useState(false);
   const [flash, setFlash] = useState(false);
   const [camera, setCamera] = useState(false);
-  const pairCard = useContext(PairSlot);
+  const pair = useContext(PairSlot);
   const remote = useRef(false); // a linked phone's finger is on it
 
   // a linked phone drags this layer the way a finger would
@@ -667,7 +667,8 @@ function LockScreen({
         transition: start.current !== null || remote.current ? "none" : "transform 0.48s cubic-bezier(0.32,0.72,0,1), opacity 0.48s ease",
       }}
       onPointerDown={(e) => {
-        if ((e.target as HTMLElement).closest("button")) return;
+        // buttons, and the pairing card under the padlock, aren't a swipe
+        if ((e.target as HTMLElement).closest("button, [data-no-swipe]")) return;
         if (torch) aim(e);
         start.current = e.clientY;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -696,7 +697,8 @@ function LockScreen({
         }}
       />
       {flash && <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 bg-white opacity-0 [animation:shutter_380ms_ease-out]" />}
-      <div className="mt-[132px] md:mt-[96px] text-center">
+      <PairLock info={pair} locked={locked} />
+      <div className="mt-1 text-center">
         <p className="text-[17px] font-semibold opacity-90">{now?.date ?? " "}</p>
         <p
           className="hero-field tabular-nums leading-none mt-1"
@@ -709,7 +711,6 @@ function LockScreen({
       <QuickCard dark={dark} />
 
       <div className="mt-auto w-full px-10 pb-5 flex flex-col items-center gap-4">
-        {pairCard}
         <div className="w-full flex justify-between">
           <button
             type="button"

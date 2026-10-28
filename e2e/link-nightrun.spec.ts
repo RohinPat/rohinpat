@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { pairCode } from "./pair-code";
 
 // Cars: Night run and the Drag strip, end to end. The keys, the checkpoints and
 // the end screen with no phone at all; then the phone as a steering wheel with
@@ -57,7 +58,7 @@ async function onTheGrid(browser: Browser, baseURL: string | undefined) {
   });
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   expect(code).toMatch(/^[A-Z0-9]{6}$/);
   const phone = await context.newPage();
   await phone.setViewportSize(PHONE);

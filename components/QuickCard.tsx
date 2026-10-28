@@ -36,6 +36,7 @@ export default function QuickCard({ dark }: { dark: boolean }) {
         type="button"
         onClick={open}
         aria-haspopup="dialog"
+        aria-label={`${site.name}. The 30-second version, opens a summary`}
         data-venom
         className={`mt-6 block rounded-[22px] px-4 py-3 text-center backdrop-blur-xl transition-transform duration-150 active:scale-[0.98] ${
           dark ? "bg-[rgba(242,234,215,0.12)]" : "bg-[rgba(242,234,215,0.6)]"
@@ -43,9 +44,8 @@ export default function QuickCard({ dark }: { dark: boolean }) {
       >
         <span className="block font-semibold">{site.name}</span>
         <span className="block text-sm opacity-80">
-          {site.role} · {site.employer}
+          The 30-second version <span aria-hidden="true">›</span>
         </span>
-        <span className="sr-only">. Opens the 30-second summary.</span>
       </button>
       {host && createPortal(<Card framed={host !== document.body} onClose={close} returnTo={trigger} />, host)}
     </>

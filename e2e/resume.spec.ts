@@ -5,7 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 
 // The recruiter fast lane: the lock screen's 30-second card, and /resume.
 
-const NAME = /Rohin Patel Software Engineer · WHOOP/;
+const NAME = /^Rohin Patel\. The 30-second version, opens a summary$/;
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1400, height: 900 };
 const DUO = { width: 1700, height: 1000 };
