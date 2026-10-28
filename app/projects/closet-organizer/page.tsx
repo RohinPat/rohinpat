@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import CodeBlock from "@/components/writeup/CodeBlock";
 import Cover, { MediaView } from "@/components/writeup/Cover";
+import DemoVideo from "@/components/writeup/DemoVideo";
+import PhoneFrame from "@/components/writeup/PhoneFrame";
 import PipelineDiagram from "@/components/writeup/PipelineDiagram";
 import { projectBySlug } from "@/lib/projects";
 
@@ -14,6 +16,12 @@ import { projectBySlug } from "@/lib/projects";
 const REPO = "https://github.com/RohinPat/Closet-Org";
 const SHA = "a3ff9ae6778c163bc4e3f6e0aaa8ea561d40e543";
 const src = (path: string, lines: string) => `${REPO}/blob/${SHA}/${path}#${lines}`;
+
+// Screens: captured from the Expo app's web build at the commit above, on a
+// local backend with a throwaway database. The wardrobe is ten synthetic
+// flat-colour garments and their tags were entered by hand, so nothing on
+// screen is classifier output. Files live in /public/projects/closet-organizer.
+const SHOTS = "/projects/closet-organizer";
 
 export const metadata: Metadata = {
   title: "Closet Organizer",
@@ -175,6 +183,27 @@ export default function ClosetOrganizerCaseStudy() {
             what style it reads as, which season it suits and what colours it is. Then let
             the app turn a closet of those into outfits, on a phone or in a browser.
           </p>
+          <figure className="wide">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 max-w-[36rem] mx-auto">
+              <PhoneFrame
+                src={`${SHOTS}/closet-grid.webp`}
+                alt="The Closet tab: search box, category chips for T-Shirt, Sweater, Jeans, Shirt and Pants, colour chips for Black, Beige, White and Navy, and a two-column grid of garments starting with brown boots and white sneakers."
+                width={780}
+                height={1688}
+              />
+              <PhoneFrame
+                src={`${SHOTS}/item-detail.webp`}
+                alt="An item page for a navy shirt: a large photo, the title Shirt, and tag chips for Top, Business, All-Season, Navy with a navy swatch, and Solid."
+                width={780}
+                height={1688}
+              />
+            </div>
+            <figcaption className="note max-w-[36rem] mx-auto">
+              The app&apos;s closet, and one item&apos;s tags. Demo wardrobe: ten synthetic
+              garments, with tags entered by hand for this capture rather than predicted.
+              Captured from the app at commit {SHA.slice(0, 7)}.
+            </figcaption>
+          </figure>
 
           <h2>Constraints</h2>
           <ul>
@@ -316,6 +345,28 @@ export default function ClosetOrganizerCaseStudy() {
             isn&apos;t valid JSON, the locally written copy ships instead and you still get your
             outfits.
           </p>
+          <figure className="wide">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 max-w-[36rem] mx-auto">
+              <PhoneFrame
+                src={`${SHOTS}/outfits.webp`}
+                alt="The Outfits tab, scrolled to three suggestions. Each card shows a top, a bottom and footwear from the demo wardrobe with a score: Outfit 1 and Outfit 2 are 109, Outfit 3 is 65."
+                width={780}
+                height={1688}
+              />
+              <DemoVideo
+                src={`${SHOTS}/outfits-demo.webm`}
+                poster={`${SHOTS}/outfits-demo-poster.webp`}
+                alt="A 14-second screen recording of the Outfits tab: the Casual and Winter filters are chosen, Refresh outfits is pressed and new suggestions appear, the list scrolls, then the Work filter is chosen and refreshed."
+                width={390}
+                height={844}
+              />
+            </div>
+            <figcaption className="note max-w-[36rem] mx-auto">
+              Suggestions from the demo wardrobe, and 14 seconds of the same screen changing
+              occasion and season. These come from the rule-based recommender alone; no language
+              model was called.
+            </figcaption>
+          </figure>
 
           <h2>Trade-offs</h2>
           <ul>
