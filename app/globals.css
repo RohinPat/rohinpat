@@ -330,6 +330,26 @@ main h1:not(.hero-field) {
 /* Entrances + small motion, all CSS (no animation library) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
+/* The lock screen's padlock (components/link/PairLock.tsx): the shackle
+   swings open on a link like Face ID unlocking, the pairing card grows out
+   of the padlock, and an idle one gets a single wiggle. */
+.pl-shackle { transform-origin: 15.5px 10.5px; transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1); }
+.pl-shackle[data-state="open"] { transform: translateY(-2px) rotate(28deg); }
+@keyframes pl-pop-in { from { opacity: 0; transform: scale(0.55); } }
+@keyframes pl-pop-out { to { opacity: 0; transform: scale(0.55); } }
+@keyframes pl-scrim-in { from { opacity: 0; } }
+@keyframes pl-scrim-out { to { opacity: 0; } }
+.pl-scrim { background: rgba(13, 16, 14, 0.62); animation: pl-scrim-in 0.28s ease-out backwards; }
+.pl-scrim[data-state="closing"] { animation: pl-scrim-out 0.2s ease-in forwards; }
+.pl-pop { transform-origin: 50% -44px; animation: pl-pop-in 0.28s cubic-bezier(0.32, 0.72, 0, 1) backwards; }
+.pl-pop[data-state="closing"] { animation: pl-pop-out 0.2s cubic-bezier(0.32, 0.72, 0, 1) forwards; pointer-events: none; }
+@keyframes pl-wiggle { 20% { transform: rotate(-9deg); } 45% { transform: rotate(7deg); } 70% { transform: rotate(-4deg); } 90% { transform: rotate(1.5deg); } }
+.pl-wiggle { transform-origin: 50% 60%; animation: pl-wiggle 0.6s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .pl-shackle { transition: none; }
+  .pl-pop, .pl-pop[data-state="closing"], .pl-scrim, .pl-scrim[data-state="closing"], .pl-wiggle { animation: none; }
+}
+
 /* Page entrance (app/template.tsx). `backwards` fill only applies the start
    state, so no transform lingers to trap position:fixed children. */
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }

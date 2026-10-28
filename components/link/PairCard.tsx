@@ -7,9 +7,8 @@ import { makeQr, qrBox, qrPath } from "@/lib/link/qr";
 import type { LinkState } from "@/lib/link/session";
 
 // The card on the laptop phone's lock screen (and the Duo's cover). Cream on
-// the dark wallpaper, like the name card above it. It sits inside the lock
-// layer, so a swipe or a scroll that starts on it still unlocks; only its own
-// button swallows a press. Loaded on demand with the link code.
+// the dark wallpaper. It opens out of the padlock (PairLock), which also
+// announces its status. Loaded on demand with the link code.
 
 export type PairInfo = {
   state: LinkState | "idle";
@@ -22,7 +21,7 @@ export type PairInfo = {
   renew: () => void;
 };
 
-export default function PairCard({ info }: { info: PairInfo }) {
+export default function PairCard({ info, announce = true }: { info: PairInfo; announce?: boolean }) {
   const [how, setHow] = useState(false);
   const { state, paired, code, pairUrl, stale, renew } = info;
 
@@ -53,9 +52,11 @@ export default function PairCard({ info }: { info: PairInfo }) {
         <strong className="font-extrabold text-[var(--signal)]">Pick up yours.</strong>
       </h2>
 
-      <p className="sr-only" role="status" aria-live="polite">
-        {status}
-      </p>
+      {announce && (
+        <p className="sr-only" role="status" aria-live="polite">
+          {status}
+        </p>
+      )}
 
       {how ? (
         <div className="mt-2.5 min-h-[112px] text-[12.5px] leading-snug">

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { genGolf } from "../tests/unit/lab-swing-traces";
+import { pairCode } from "./pair-code";
 
 // The phone as a game controller, end to end, on the BroadcastChannel mock
 // session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1, or the pages with
@@ -22,7 +23,7 @@ async function newContext(browser: Browser, baseURL: string | undefined) {
 async function openHost(context: BrowserContext) {
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   expect(code).toMatch(/^[A-Z0-9]{6}$/);
   return { host, code };
 }

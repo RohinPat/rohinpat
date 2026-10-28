@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { pairCode } from "./pair-code";
 
 // The phone as the drag strip's throttle grip and the watch's crown, end to end,
 // on the BroadcastChannel mock session (run the dev server with
@@ -20,7 +21,7 @@ async function newContext(browser: Browser, baseURL: string | undefined) {
 async function openHost(context: BrowserContext) {
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   expect(code).toMatch(/^[A-Z0-9]{6}$/);
   return { host, code };
 }

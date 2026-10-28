@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { pairCode } from "./pair-code";
 
 // The phone as the keyboard board's keyboard and the music board's turntable,
 // end to end, on the BroadcastChannel mock session (run the dev server with
@@ -25,7 +26,7 @@ async function onTheGrid(browser: Browser, baseURL: string | undefined) {
   });
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   const phone = await context.newPage();
   await phone.setViewportSize(PHONE);
   await phone.goto(`/p#c=${code}`);

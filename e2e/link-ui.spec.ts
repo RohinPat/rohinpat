@@ -1,4 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { pairCode } from "./pair-code";
 
 // The phone link's two faces, end to end, with the BroadcastChannel mock
 // session standing in for the relay: the home page on a "laptop" and /p on a
@@ -15,14 +17,16 @@ async function newContext(browser: Browser, baseURL: string | undefined, viewpor
   return browser.newContext({ baseURL, viewport, permissions: ["accelerometer", "gyroscope", "magnetometer"], ...extra });
 }
 
-/** the home page on a laptop: waits for the card, returns the code it shows */
+/** the home page on a laptop: opens the padlock, returns the code on the card */
 async function openHost(context: BrowserContext) {
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
-  expect(code).toMatch(/^[A-Z0-9]{6}$/);
+  const code = await pairCode(host);
   return { host, code };
 }
+
+const padlock = (page: Page) => page.getByRole("button", { name: "Pair your phone with this one" });
+const unlockButton = (page: Page) => page.getByRole("button", { name: /swipe up to unlock/i });
 
 async function openPhone(context: BrowserContext, path: string) {
   const phone = await context.newPage();
@@ -69,12 +73,26 @@ async function swipeUp(phone: Page, fromY: number, toY: number, x = 120) {
 }
 
 test.describe("link UI: laptop", () => {
-  test("the lock screen offers a pairing card with a QR, the code and a how-it-works", async ({ browser, baseURL }) => {
+  test("the padlock opens a pairing card with a QR, the code and a how-it-works", async ({ browser, baseURL }) => {
     const context = await newContext(browser, baseURL);
     const { host, code } = await openHost(context);
 
+    // closed: a padlock with its label, no card
+    await expect(host.getByTestId("pair-card")).toHaveCount(0);
+    await expect(padlock(host)).toHaveAttribute("aria-expanded", "false");
+    await expect(host.getByTestId("pair-lock-label")).toHaveText("Scan to pair");
+    await expect(host.getByTestId("pair-shackle")).toHaveAttribute("data-state", "closed");
+
+    await padlock(host).click();
+    await expect(padlock(host)).toHaveAttribute("aria-expanded", "true");
     const card = host.getByTestId("pair-card");
     await expect(card).toBeVisible();
+    // it hangs from the padlock, inside the phone's screen
+    const lockBox = (await padlock(host).boundingBox())!;
+    const cardBox = (await card.boundingBox())!;
+    expect(cardBox.y).toBeGreaterThan(lockBox.y);
+    expect(Math.abs(cardBox.x + cardBox.width / 2 - (lockBox.x + lockBox.width / 2))).toBeLessThan(40);
+    await expect(unlockButton(host)).toBeVisible();
     await expect(card.getByRole("heading", { name: /this phone's a replica\. pick up yours\./i })).toBeVisible();
     const qr = card.getByRole("img", { name: /qr code/i });
     await expect(qr).toBeVisible();
@@ -98,6 +116,7 @@ test.describe("link UI: laptop", () => {
     const context = await newContext(browser, baseURL);
     const { host } = await openHost(context);
     const card = host.getByTestId("pair-card");
+    await padlock(host).click();
     await card.getByRole("button", { name: "How this works" }).click();
     const read = card.getByRole("link", { name: "Read how it works" });
     await expect(read).toHaveAttribute("href", "/projects/phone-link");
@@ -108,28 +127,146 @@ test.describe("link UI: laptop", () => {
     await context.close();
   });
 
-  test("the card never blocks unlocking: the button, a swipe that starts on it, or scrolling", async ({ browser, baseURL }) => {
+  test("Enter and Space open the padlock; Escape, a second press or a press outside close it", async ({ browser, baseURL }) => {
     const context = await newContext(browser, baseURL);
     const { host } = await openHost(context);
-    const unlock = host.getByRole("button", { name: /swipe up to unlock/i });
-    await expect(unlock).toBeVisible();
+    const card = host.getByTestId("pair-card");
 
-    // a scroll over the card unlocks
-    const box = (await host.getByTestId("pair-card").boundingBox())!;
-    await host.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await host.mouse.wheel(0, 120);
-    await expect(unlock).toHaveCount(0);
+    await padlock(host).focus();
+    await host.keyboard.press("Enter");
+    await expect(card).toBeVisible();
+    // Tab goes into the card
+    await host.keyboard.press("Tab");
+    await expect(card.getByRole("button", { name: "How this works" })).toBeFocused();
+    // Escape closes it and focus goes back to the padlock
+    await host.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(padlock(host)).toBeFocused();
+    await expect(padlock(host)).toHaveAttribute("aria-expanded", "false");
+    await expect(unlockButton(host)).toBeVisible();
 
-    // reload: a drag that starts on the card unlocks too
-    await host.reload();
-    await expect(host.getByTestId("pair-card")).toBeVisible();
-    // (unlocked state lives in module memory, so a reload locks it again)
-    const b2 = (await host.getByTestId("pair-card").boundingBox())!;
-    await host.mouse.move(b2.x + 20, b2.y + b2.height - 8);
+    await host.keyboard.press("Space");
+    await expect(card).toBeVisible();
+    await padlock(host).click();
+    await expect(card).toHaveCount(0);
+
+    // a press outside (on the dark wallpaper) closes it, and is no unlock
+    await padlock(host).click();
+    await expect(card).toBeVisible();
+    const screen = (await host.locator(".dev-screen").boundingBox())!;
+    await host.mouse.click(screen.x + screen.width / 2, screen.y + screen.height * 0.6);
+    await expect(card).toHaveCount(0);
+    await expect(unlockButton(host)).toBeVisible();
+    await context.close();
+  });
+
+  test("the open card is not part of the swipe: dragging, selecting and scrolling on it leave the phone locked", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const { host } = await openHost(context);
+    await padlock(host).click();
+    const card = host.getByTestId("pair-card");
+    await expect(card).toBeVisible();
+    const b = (await card.boundingBox())!;
+    const x = b.x + b.width - 30;
+
+    // a long drag up across the card
+    await host.mouse.move(x, b.y + b.height - 12);
     await host.mouse.down();
-    for (let i = 1; i <= 8; i++) await host.mouse.move(b2.x + 20, b2.y + b2.height - 8 - i * 30);
+    for (let i = 1; i <= 10; i++) await host.mouse.move(x, b.y + b.height - 12 - i * 25);
     await host.mouse.up();
-    await expect(host.getByRole("button", { name: /swipe up to unlock/i })).toHaveCount(0);
+    await expect(unlockButton(host)).toBeVisible();
+    await expect(host.locator("[data-lock-layer]")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+
+    // so can text be selected (the code, for typing)
+    await card.getByTestId("pair-code").click({ clickCount: 3 });
+    expect(await host.evaluate(() => window.getSelection()?.toString().trim() ?? "")).not.toBe("");
+
+    // a scroll over it
+    await host.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await host.mouse.wheel(0, 400);
+    await host.waitForTimeout(200);
+    await expect(unlockButton(host)).toBeVisible();
+    await expect(card).toBeVisible();
+    await context.close();
+  });
+
+  test("the lock screen still unlocks the old ways: the button, a swipe, a scroll", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const { host } = await openHost(context);
+
+    // a scroll over the clock
+    const clock = (await host.locator("[data-lock-layer] p.hero-field").boundingBox())!;
+    await host.mouse.move(clock.x + clock.width / 2, clock.y + clock.height / 2);
+    await host.mouse.wheel(0, 120);
+    await expect(unlockButton(host)).toHaveCount(0);
+
+    // reload (unlocked state lives in module memory, so it locks again): a drag from empty wallpaper
+    await host.reload();
+    await expect(padlock(host)).toBeVisible();
+    const s = (await host.locator(".dev-screen").boundingBox())!;
+    const x = s.x + s.width / 2;
+    await host.mouse.move(x, s.y + s.height * 0.7);
+    await host.mouse.down();
+    for (let i = 1; i <= 8; i++) await host.mouse.move(x, s.y + s.height * 0.7 - i * 30);
+    await host.mouse.up();
+    await expect(unlockButton(host)).toHaveCount(0);
+
+    await host.reload();
+    await padlock(host).waitFor();
+    await unlockButton(host).click();
+    await expect(unlockButton(host)).toHaveCount(0);
+    await context.close();
+  });
+
+  test("the padlock gives one small wiggle if nobody touches the lock screen, and never again", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const host = await context.newPage();
+    await host.goto("/");
+    await padlock(host).waitFor();
+    await expect(padlock(host)).not.toHaveAttribute("data-wiggle", "true");
+    await expect(padlock(host)).toHaveAttribute("data-wiggle", "true", { timeout: 9000 });
+    expect(await host.locator(".pl-wiggle").count()).toBe(1);
+    await context.close();
+  });
+
+  test("a visitor who touches the lock screen first gets no wiggle; reduced motion gets none either", async ({ browser, baseURL }) => {
+    const touched = await newContext(browser, baseURL);
+    const a = await touched.newPage();
+    await a.goto("/");
+    await padlock(a).waitFor();
+    await padlock(a).hover();
+    const reduced = await newContext(browser, baseURL, LAPTOP, { reducedMotion: "reduce" });
+    const b = await reduced.newPage();
+    await b.goto("/");
+    await padlock(b).waitFor();
+    await a.waitForTimeout(6500);
+    await expect(padlock(a)).not.toHaveAttribute("data-wiggle", "true");
+    await expect(padlock(b)).not.toHaveAttribute("data-wiggle", "true");
+    await touched.close();
+    await reduced.close();
+  });
+
+  test("the name notification reads the 30-second version and still opens the summary", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const host = await context.newPage();
+    await host.goto("/");
+    const note = host.getByRole("button", { name: /^Rohin Patel\. The 30-second version, opens a summary$/ });
+    await expect(note).toContainText("The 30-second version");
+    await expect(note).not.toContainText("WHOOP");
+    await note.click();
+    await expect(host.getByRole("dialog", { name: "Rohin Patel" })).toBeVisible();
+    await context.close();
+  });
+
+  test("axe finds nothing on the lock screen with the padlock closed or open", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const { host } = await openHost(context);
+    const scan = async () => (await new AxeBuilder({ page: host }).analyze()).violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`);
+    expect(await scan()).toEqual([]);
+    await padlock(host).click();
+    await expect(host.getByTestId("pair-card")).toBeVisible();
+    await host.waitForTimeout(400); // past the pop-in, so contrast is read on the settled card
+    expect(await scan()).toEqual([]);
     await context.close();
   });
 
@@ -150,6 +287,10 @@ test.describe("link UI: laptop", () => {
     await page.waitForTimeout(3000); // well past the idle callback that would start a host
     await expect(page.getByTestId("pair-card")).toHaveCount(0);
     await expect(page.getByText(/pick up yours/i)).toHaveCount(0);
+    // the padlock is only the glyph an iPhone shows: no button, no label
+    await expect(padlock(page)).toHaveCount(0);
+    await expect(page.getByText("Scan to pair")).toHaveCount(0);
+    await expect(page.getByTestId("pair-shackle")).toHaveCount(1);
     await context.close();
   });
 
@@ -172,8 +313,16 @@ test.describe("link UI: linked", () => {
     await expect(phone.getByTestId("phone-pill").first()).toContainText(/Linked · direct/);
 
     // the card turns into a confirmation, the QR goes
+    // the lock opens (the shackle lifts), the label says so, and the card is out of the way
+    await expect(host.getByTestId("pair-shackle")).toHaveAttribute("data-state", "open");
+    await expect(host.getByTestId("pair-lock-label")).toHaveText("Linked · swipe up on your phone");
+    await expect(host.getByTestId("pair-card")).toHaveCount(0);
+    await expect(host.getByRole("status").filter({ hasText: "Phone linked" })).toHaveCount(1);
+    // opening it now shows the confirmation, not the QR
+    await padlock(host).click();
     await expect(host.getByTestId("pair-linked")).toBeVisible();
     await expect(host.getByTestId("pair-qr")).toHaveCount(0);
+    await host.keyboard.press("Escape");
 
     // click the pill: a three-line live readout and Disconnect
     await pill.click();
@@ -186,6 +335,58 @@ test.describe("link UI: linked", () => {
     await expect(pill).toHaveAttribute("aria-expanded", "true");
     await host.keyboard.press("Escape");
     await expect(how).toHaveCount(0);
+    await context.close();
+  });
+
+  test("on the Duo's cover the padlock opens the card too", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL, { width: 1700, height: 1000 });
+    const host = await context.newPage();
+    await host.goto("/");
+    await expect(host.locator(".duo")).toHaveAttribute("data-duo", "closed");
+    await padlock(host).click();
+    const card = host.locator(".duo-outer").getByTestId("pair-card");
+    await expect(card).toBeVisible();
+    const outer = (await host.locator(".duo-outer").boundingBox())!;
+    const b = (await card.boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(outer.x);
+    expect(b.x + b.width).toBeLessThanOrEqual(outer.x + outer.width);
+    await host.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(host.locator(".duo")).toHaveAttribute("data-duo", "closed");
+    await context.close();
+  });
+
+  test("a phone linking while the card is open closes it and opens the lock; dropping the link closes the lock again", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const host = await context.newPage();
+    await host.goto("/");
+    await padlock(host).click();
+    const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+    await expect(host.getByTestId("pair-card")).toBeVisible();
+    const { phone, orient } = await openPhone(context, `/p#c=${code}`);
+    await orient(137, 62, -4);
+    await phone.getByTestId("connect").click();
+    await expect(phone.getByTestId("phone-live")).toBeVisible();
+    await expect(host.getByTestId("pair-shackle")).toHaveAttribute("data-state", "open");
+    await expect(host.getByTestId("pair-lock-label")).toHaveText("Linked · swipe up on your phone");
+    await expect(host.getByTestId("pair-card")).toHaveCount(0);
+    await expect(padlock(host)).toHaveAttribute("aria-expanded", "false");
+
+    await host.getByTestId("link-pill").click();
+    await host.getByRole("button", { name: "Disconnect" }).click();
+    await expect(host.getByTestId("pair-shackle")).toHaveAttribute("data-state", "closed");
+    await expect(host.getByTestId("pair-lock-label")).toHaveText("Scan to pair");
+    await context.close();
+  });
+
+  test("unlocking with the card open takes it along cleanly", async ({ browser, baseURL }) => {
+    const { context, host, phone } = await linked(browser, baseURL);
+    await padlock(host).click();
+    await expect(host.getByTestId("pair-card")).toBeVisible();
+    await swipeUp(phone, 650, 250); // the linked phone drags the lock layer, and lets go
+    await expect(unlockButton(host)).toHaveCount(0);
+    await expect(host.getByTestId("pair-card")).toHaveCount(0);
+    await expect(host.locator("[data-home] a").first()).toBeFocused();
     await context.close();
   });
 
@@ -290,10 +491,13 @@ test.describe("link UI: linked", () => {
     await host.getByRole("button", { name: "Disconnect" }).click();
     await expect(phone.getByRole("heading", { name: /the laptop left/i })).toBeVisible();
     await expect(host.getByTestId("link-pill")).toHaveCount(0);
-    const readCode = async () => ((await host.getByTestId("pair-code").textContent({ timeout: 10000 })) ?? "").replace(/\s/g, "");
+    // the card is behind the padlock: open it (once) and read the code on it
+    await padlock(host).click();
+    const readCode = async () => ((await host.getByTestId("pair-code").textContent({ timeout: 1500 }).catch(() => "")) ?? "").replace(/\s/g, "");
     await expect.poll(readCode, { timeout: 10000 }).not.toBe(code);
     const fresh = await readCode();
     expect(fresh).toHaveLength(6);
+    await host.keyboard.press("Escape");
     // and the dead code can't be used again
     await phone.getByLabel("Code on the laptop").fill(code);
     await phone.getByTestId("connect").click();
@@ -306,10 +510,10 @@ test.describe("link UI: linked", () => {
     await context.close();
   });
 
-  test("on the Duo the card lives on the cover, and a phone swipe unfolds it", async ({ browser, baseURL }) => {
+  test("on the Duo the padlock lives on the cover, and a phone swipe unfolds it", async ({ browser, baseURL }) => {
     const { context, host, phone } = await linked(browser, baseURL, { width: 1700, height: 1000 });
     await expect(host.locator(".duo")).toHaveAttribute("data-duo", "closed");
-    await expect(host.locator(".duo-outer").getByTestId("pair-card")).toBeVisible();
+    await expect(host.locator(".duo-outer").getByTestId("pair-shackle")).toHaveAttribute("data-state", "open");
     await host.waitForTimeout(300);
     await swipeUp(phone, 650, 250);
     await expect(host.locator(".duo")).toHaveAttribute("data-duo", "open");
