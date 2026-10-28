@@ -60,6 +60,16 @@ export const projects: Entry[] = [
     // ],
   },
   {
+    slug: "phone-link",
+    title: "The phone link",
+    line: "This site's home screen is a replica phone. Scan its QR code and your real phone tilts it, unlocks it, then plays the nine Off hours games as a motion controller.",
+    year: "2026",
+    kind: "project",
+    tags: ["WebSocket", "WebRTC", "Redis"],
+    caseStudy: "/projects/phone-link",
+    links: [{ label: "Code", href: "https://github.com/RohinPat/rohinpat/tree/main/lib/link" }],
+  },
+  {
     slug: "aimessage",
     title: "AiMessage",
     // TODO(Rohin): verify — the old line said it "notices how a conversation

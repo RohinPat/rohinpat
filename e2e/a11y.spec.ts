@@ -9,6 +9,7 @@ const routes = [
   "/",
   "/projects",
   "/projects/closet-organizer",
+  "/projects/phone-link",
   "/interests",
   "/contact",
   "/colophon",

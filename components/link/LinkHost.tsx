@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pathExplainer, pillLabel } from "@/lib/link/pill";
 import type { LinkMsg, LinkSession, LinkStats } from "@/lib/link/session";
@@ -259,14 +260,19 @@ export default function LinkHost(props: Props) {
               {reduced ? "Live tilt is off (reduced motion). Unlocking and tapping still work." : "Your phone's motion is off, so tilt won't follow. Unlocking and tapping still work."}
             </p>
           )}
-          <button
-            type="button"
-            data-venom
-            onClick={() => session?.close()}
-            className="mt-3 rounded-full bg-[var(--paper)] text-[var(--ink)] px-4 py-1.5 text-[13px] font-semibold"
-          >
-            Disconnect
-          </button>
+          <div className="mt-3 flex items-center gap-4">
+            <button
+              type="button"
+              data-venom
+              onClick={() => session?.close()}
+              className="rounded-full bg-[var(--paper)] text-[var(--ink)] px-4 py-1.5 text-[13px] font-semibold"
+            >
+              Disconnect
+            </button>
+            <Link href="/projects/phone-link" data-venom className="py-1 font-semibold underline underline-offset-2 text-[var(--mint)]">
+              Read how it works
+            </Link>
+          </div>
         </div>
       )}
       <button

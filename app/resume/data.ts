@@ -75,6 +75,9 @@ export const experience = jobs.map((j) => ({
 
 // Extra detail for a project, only where a repo page states it.
 const projectDetail: Record<string, string> = {
+  // app/projects/phone-link/page.tsx, FACTS
+  "phone-link":
+    "A visitor's phone pairs with the site by QR code and becomes a motion controller for it: a WebSocket relay on a Vercel Function with Redis pub/sub, a direct WebRTC channel when the network allows, and gesture recognisers in plain TypeScript.",
   // app/projects/closet-organizer/page.tsx, FACTS
   "closet-organizer":
     "CLIP ViT-B/32 zero-shot tagging, rembg cutouts and per-pixel colour voting; Expo app for iOS and Android, a web app, one FastAPI backend; 136 pytest functions, plus Playwright, Jest, Bandit and ShellCheck in CI.",

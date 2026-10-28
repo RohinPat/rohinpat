@@ -191,7 +191,7 @@ export default function Keyboard({ mode, paused }: PieceProps) {
 
   // preview: a ghost types
   useEffect(() => {
-    if (play) return;
+    if (play || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const id = window.setInterval(() => {
       const codes = ["KeyR", "KeyO", "KeyH", "KeyI", "KeyN", "Space", "KeyP", "KeyA", "KeyT", "KeyE", "KeyL"];
       const c = codes[Math.floor(Math.random() * codes.length)];

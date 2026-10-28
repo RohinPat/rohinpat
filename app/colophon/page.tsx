@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Colophon",
-  description: "How this site is built: the stack, the canvas pieces, accessibility testing, privacy, and live numbers measured in your browser.",
+  description: "How this site is built: the stack, the phone link, the canvas pieces, accessibility testing, privacy, and live numbers measured in your browser.",
   alternates: { canonical: "/colophon" },
 };
 
@@ -44,9 +44,12 @@ export default function ColophonPage() {
           <h2 className="!mt-0">Stack</h2>
           <p>
             Next.js 14 with the App Router, React 18, TypeScript and Tailwind CSS, hosted on
-            Vercel. There are four runtime dependencies: <code>next</code>, <code>react</code>,{" "}
-            <code>react-dom</code>, and <code>three</code> for the 3D exploded views, which only loads
-            when one of those pieces is on screen. Two typefaces: Archivo, whose width
+            Vercel. There are nine runtime dependencies. Four build the pages: <code>next</code>,{" "}
+            <code>react</code>, <code>react-dom</code>, and <code>three</code> for the 3D exploded
+            views, which only loads when one of those pieces is on screen. Five are for the{" "}
+            <Link href="/projects/phone-link">phone link</Link>: <code>ws</code>, <code>redis</code>{" "}
+            and <code>@vercel/functions</code> on the server, <code>qrcode-generator</code> to draw
+            the pairing code, and <code>jsqr</code>, which only the hidden lab pages use. Two typefaces: Archivo, whose width
             axis does both the condensed titles and the text you&apos;re reading, and DM Mono.
             next/font downloads them at build time and serves them from this domain.
           </p>
@@ -58,6 +61,22 @@ export default function ColophonPage() {
             the Duo&apos;s fold is a two-faced layer turned 180° on its hinge. With{" "}
             <code>prefers-reduced-motion</code> set, the entrances, the launch and the previews
             hold still.
+          </p>
+
+          <h2>Your phone, as a controller</h2>
+          <p>
+            On a laptop, the home screen&apos;s lock screen shows a QR code. Scan it with your
+            phone and the real phone tilts the replica, unlocks it, then plays the nine pieces on
+            the Off hours page as a motion controller. The two devices talk through a WebSocket
+            relay on this site&apos;s own server, with Redis passing messages between server
+            instances and a direct WebRTC connection tried on top. Nothing is stored, no third
+            party is contacted, and every page works the same without a phone. Pages other than
+            the home screen only look for a paired phone; they never start a link themselves.
+          </p>
+          <p>
+            The write-up covers pairing, why the relay is the base path, a bug that only
+            happened in production, and how motion becomes a golf swing:{" "}
+            <Link href="/projects/phone-link">A website your phone can drive</Link>.
           </p>
 
           <h2>Nine pieces, written from scratch</h2>
@@ -116,8 +135,9 @@ export default function ColophonPage() {
           <h2>Privacy</h2>
           <p>
             No cookies, no local storage, no analytics, and no third-party scripts, embeds or
-            font requests. A test plays with the Off hours pieces and fails if the page contacts
-            any other host or writes a cookie or a local-storage key. Response headers switch off
+            font requests. The phone link talks only to this site&apos;s own relay. A test plays with
+            the Off hours pieces and fails if the page contacts any other host or writes a cookie or
+            a local-storage key. Response headers switch off
             microphone and location access everywhere, and the camera everywhere but the home
             screen, where its camera names colours only when you ask; frames are read in your
             browser and go nowhere. Pages refuse to be framed. The{" "}
