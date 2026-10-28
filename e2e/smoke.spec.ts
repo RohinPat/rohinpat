@@ -244,6 +244,52 @@ test("colophon measures this page in the browser: no other domains, no cookies",
   await expect(stat("Other domains")).toHaveText("0");
 });
 
+test("case study: screenshots are self-hosted, sized and described", async ({ page }) => {
+  await page.goto("/projects/closet-organizer");
+  const shots = page.locator(".prose figure img[src*='closet-organizer']");
+  expect(await shots.count()).toBe(3);
+  for (const img of await shots.all()) {
+    await expect(img).toHaveAttribute("width", /^\d+$/);
+    await expect(img).toHaveAttribute("height", /^\d+$/);
+    expect((await img.getAttribute("alt"))?.length ?? 0).toBeGreaterThan(40);
+  }
+  const video = page.locator(".prose video");
+  await expect(video).toHaveAttribute("preload", "metadata");
+  await expect(video).toHaveAttribute("poster", /^\/projects\/closet-organizer\//);
+  expect(await video.evaluate((v: HTMLVideoElement) => [v.muted, v.loop, v.controls])).toEqual([true, true, true]);
+  // nothing leaves the site
+  const srcs = await page
+    .locator(".prose figure :is(img, video)")
+    .evaluateAll((els) => els.map((e) => e.getAttribute("src") ?? ""));
+  for (const s of srcs.filter(Boolean)) expect(s.startsWith("/")).toBe(true);
+  // the recording is only requested once it is near the viewport
+  expect(await video.evaluate((v: HTMLVideoElement) => v.getAttribute("src"))).toBeNull();
+  await video.scrollIntoViewIfNeeded();
+  await expect(video).toHaveAttribute("src", /\/projects\/closet-organizer\/.+\.webm$/);
+});
+
+test("case study: the recording plays in view and stays paused under reduced motion", async ({ browser, baseURL }) => {
+  const playing = async (reduce: "reduce" | "no-preference") => {
+    const ctx = await browser.newContext({ reducedMotion: reduce, baseURL });
+    const page = await ctx.newPage();
+    await page.goto("/projects/closet-organizer");
+    const video = page.locator(".prose video");
+    // paused until it is scrolled into view
+    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+    await video.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1500);
+    const inView = await video.evaluate((v: HTMLVideoElement) => !v.paused);
+    // and paused again once it is scrolled away
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(500);
+    const away = await video.evaluate((v: HTMLVideoElement) => !v.paused);
+    await ctx.close();
+    return { inView, away };
+  };
+  expect(await playing("no-preference")).toEqual({ inView: true, away: false });
+  expect(await playing("reduce")).toEqual({ inView: false, away: false });
+});
+
 test("case study: 'On this page' tracks the section you're reading", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/projects/closet-organizer");
