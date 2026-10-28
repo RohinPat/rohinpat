@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { makePacer } from "../tileSchedule";
 
 // A small studio for the exploded models: physically based rendering with
 // ACES tone mapping, an image-based "softbox room" for reflections, one
@@ -7,6 +8,9 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // animates each part along its explode vector, can isolate a part (the rest
 // turn to ghosts), and reports where each part's label anchor lands on
 // screen so the page can draw leader lines. It only renders while visible.
+// A tile preview is kept light: 30 frames a second at most, slower if a frame
+// is costly, one step down in resolution if it is very costly, and a single
+// still frame under prefers-reduced-motion.
 
 // dir moves with the explode; late only joins in near the end (and leaves
 // first on the way back), for sub-assemblies that come apart last
@@ -116,7 +120,9 @@ function watchStudio() {
 
 export function createViewer(container: HTMLElement, model: Model, opts: { interactive: boolean; preview: boolean; breathe?: boolean }): Viewer {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.preview ? 1.5 : 2));
+  const still = opts.preview && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let ratio = Math.min(window.devicePixelRatio || 1, opts.preview ? 1.5 : 2);
+  renderer.setPixelRatio(ratio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -287,8 +293,8 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     if (model.view.fit) fitFor(camera.aspect);
+    if (still) run(); // a still tile draws again when it changes size
   };
-  resize();
   const ro = new ResizeObserver(resize);
   ro.observe(container);
 
@@ -301,16 +307,26 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
   let lastAz = 0;
   const v = new THREE.Vector3();
 
-  let skip = false;
+  const pacer = makePacer();
   const frame = (now: number) => {
-    raf = requestAnimationFrame(frame);
-    // tile previews run at half rate: cheaper, and nobody can tell
-    if (opts.preview && (skip = !skip)) return;
-    const dt = Math.min(0.05, (now - last) / 1000);
+    if (!still) raf = requestAnimationFrame(frame);
+    if (opts.preview && !still) {
+      if (!pacer.due(now)) return;
+      pacer.draw(() => step(now));
+      // a very slow device: render fewer pixels before slowing down further
+      if (pacer.frames() > 10 && pacer.cost() > 24 && ratio > 1) {
+        ratio = 1;
+        renderer.setPixelRatio(ratio);
+        resize();
+      }
+    } else step(now);
+  };
+  const step = (now: number) => {
+    const dt = Math.min(opts.preview ? 0.1 : 0.05, (now - last) / 1000);
     last = now;
     t += dt;
-    if (opts.breathe) want = 0.5 - 0.5 * Math.cos(t * 0.45);
-    cur += (want - cur) * Math.min(1, dt * 6);
+    if (opts.breathe && !still) want = 0.5 - 0.5 * Math.cos(t * 0.45);
+    cur = still ? want : cur + (want - cur) * Math.min(1, dt * 6);
     const n = model.parts.length;
     model.parts.forEach((p, i) => {
       const e = model.ease ? model.ease(cur, i, n) : cur;
@@ -365,9 +381,13 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
       labelCb(pts, w, h);
     }
   };
+  // a tile compiles its shaders off the main thread (where the browser can) and
+  // draws its first frame once they are ready, so the page doesn't stall on it
+  let warm = !opts.preview;
+  let gone = false;
   const run = () => {
     cancelAnimationFrame(raf);
-    if (visible && !paused && !document.hidden) {
+    if (warm && visible && !paused && !document.hidden) {
       last = performance.now();
       raf = requestAnimationFrame(frame);
     }
@@ -378,11 +398,20 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
   });
   io.observe(container);
   document.addEventListener("visibilitychange", run);
-  run();
+  resize();
+  if (warm) run();
+  else {
+    const go = () => {
+      warm = true;
+      if (!gone) run();
+    };
+    renderer.compileAsync(scene, camera).then(go, go);
+  }
 
   return {
     setExplode: (e) => {
       want = e;
+      if (still) run();
     },
     setSolo: (id) => {
       solo = id;
@@ -400,6 +429,7 @@ export function createViewer(container: HTMLElement, model: Model, opts: { inter
     },
     orbitImpulse: () => impulse,
     dispose: () => {
+      gone = true;
       cancelAnimationFrame(raf);
       io.disconnect();
       ro.disconnect();
