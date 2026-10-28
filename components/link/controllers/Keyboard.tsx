@@ -5,6 +5,7 @@ import { KEYS_CAL } from "@/components/offhours/keyboardRemote";
 import { ghostButton } from "./Shell";
 import { readField, SENTINEL } from "./keyboardInput";
 import type { ControllerProps } from "./types";
+import { buzz } from "@/lib/haptics";
 
 // The keyboard board's controller: the phone's own keyboard types on the
 // laptop's 3D one. A real text field takes the typing (so the phone's keyboard
@@ -56,11 +57,7 @@ export default function KeyboardController({ send }: ControllerProps) {
         }
         return t.slice(-ECHO_LEN).join("");
       });
-      try {
-        navigator.vibrate?.(6);
-      } catch {
-        /* no haptics here */
-      }
+      buzz(6);
     },
     [send],
   );

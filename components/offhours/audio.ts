@@ -4,11 +4,16 @@
 // synthesized here in the browser — no audio files, no requests. The
 // context is created on the first sound (always after a click or key), and
 // the stage's sound switch mutes the master bus. Nothing is remembered.
+//
+// A game opened from a linked phone can make a sound before the visitor has
+// touched the laptop. The browser then keeps the context suspended; the stage
+// watches `audioBlocked()` and asks for one click or key (SoundPrompt.tsx).
 
 let ctx: AudioContext | null = null;
 let bus: GainNode | null = null;
 let muted = false;
 const subs = new Set<() => void>();
+const stateSubs = new Set<() => void>();
 const LEVEL = 0.8;
 
 export type Audio = { ctx: AudioContext; out: GainNode };
@@ -25,12 +30,29 @@ export function getAudio(): Audio | null {
     limiter.threshold.value = -10;
     limiter.ratio.value = 8;
     bus.connect(limiter).connect(ctx.destination);
+    ctx.addEventListener("statechange", () => stateSubs.forEach((f) => f()));
+    stateSubs.forEach((f) => f());
   }
   if (ctx.state === "suspended") void ctx.resume();
   return { ctx, out: bus! };
 }
 
 export const isMuted = () => muted;
+
+/** A game has asked for sound (so there is a context) and the browser is not letting it play yet. */
+export const audioBlocked = () => !!ctx && ctx.state !== "running";
+
+export function onAudioState(f: () => void) {
+  stateSubs.add(f);
+  return () => {
+    stateSubs.delete(f);
+  };
+}
+
+/** Call from a click or key: the one gesture the browser wants before it plays anything. */
+export function resumeAudio() {
+  if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
+}
 
 export function setMuted(m: boolean) {
   muted = m;

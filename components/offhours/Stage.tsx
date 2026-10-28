@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { isMuted, onMuteChange, setMuted } from "./audio";
+import SoundPrompt from "./SoundPrompt";
 
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
 // (a clip-path from the tile's rect to the whole window) and shrinks back on
@@ -12,6 +13,22 @@ import { isMuted, onMuteChange, setMuted } from "./audio";
 // bar and resize the canvas mid-shot.
 
 export type StageMeta = { index: number; label: string; title: string; how: string[] };
+
+/** What a piece with modes can say about itself while it is open: the heading and hints follow the mode. */
+export type StageLabel = { title: string; how?: string[] };
+const StageLabelContext = createContext<((l: StageLabel | null) => void) | null>(null);
+
+/** Call from inside a piece (play mode only): the stage's heading and hints show this instead of the piece's own. */
+export function useStageLabel(label: StageLabel | null) {
+  const set = useContext(StageLabelContext);
+  const title = label?.title;
+  const how = label?.how ? JSON.stringify(label.how) : undefined;
+  useEffect(() => {
+    if (!set || title === undefined) return;
+    set({ title, how: how ? (JSON.parse(how) as string[]) : undefined });
+    return () => set(null);
+  }, [set, title, how]);
+}
 
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 const MS = 440;
@@ -47,9 +64,12 @@ export default function Stage({
   const [shown, setShown] = useState(false);
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
+  const [label, setLabel] = useState<StageLabel | null>(null);
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
-  const how = touch ? forTouch(meta.how) : meta.how;
+  const title = label?.title ?? meta.title;
+  const hints = label?.how ?? meta.how;
+  const how = touch ? forTouch(hints) : hints;
 
   const close = () => {
     if (closing) return;
@@ -195,10 +215,11 @@ export default function Stage({
             {String(meta.index).padStart(2, "0")} — {meta.label}
           </p>
           <h2 id="stage-title" className="hero-field mt-1 text-[clamp(1.6rem,4.2vw,3.4rem)] leading-[0.92]">
-            {meta.title}
+            {title}
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <SoundPrompt returnFocus={() => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true })} />
           <button
             type="button"
             onClick={() => setMuted(!muted)}
@@ -236,7 +257,7 @@ export default function Stage({
         ))}
       </ul>
       <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 rounded-[14px] overflow-hidden border border-white/10">
-        {children}
+        <StageLabelContext.Provider value={setLabel}>{children}</StageLabelContext.Provider>
       </div>
     </div>,
     document.body,

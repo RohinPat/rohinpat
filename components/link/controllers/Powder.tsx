@@ -8,6 +8,7 @@ import { createAxes } from "./axes";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The slalom's controller. Handlebars: hold the phone upright with both hands,
 // screen toward you, landscape (portrait works too), and turn it like a
@@ -172,11 +173,7 @@ export default function PowderController({ send, subscribe, motionOk }: Controll
 
   const recentre = () => {
     filter.current.recalibrate();
-    try {
-      navigator.vibrate?.(20);
-    } catch {
-      /* no haptics here */
-    }
+    buzz(20);
   };
   const start = () => send({ type: "gesture", name: "powder-start", data: {} });
   const hold = (on: boolean) => {

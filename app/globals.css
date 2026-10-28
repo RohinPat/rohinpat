@@ -330,6 +330,11 @@ main h1:not(.hero-field) {
 /* Entrances + small motion, all CSS (no animation library) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
+/* "Click for sound" pill on a game stage: fades in, nothing moves */
+@keyframes fade-in { from { opacity: 0; } }
+.sound-prompt { animation: fade-in 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .sound-prompt { animation: none; } }
+
 /* Page entrance (app/template.tsx). `backwards` fill only applies the start
    state, so no transform lingers to trap position:fixed children. */
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }

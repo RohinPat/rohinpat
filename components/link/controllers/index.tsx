@@ -13,6 +13,7 @@ import Maze from "./Maze";
 import Penalty from "./Penalty";
 import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
+import SoundNote from "./SoundNote";
 import type { ControllerProps } from "./types";
 import Watch from "./Watch";
 
@@ -27,6 +28,8 @@ import Watch from "./Watch";
 // TO ADD A CONTROLLER: write a component taking ControllerProps (see types.ts),
 // add one line to CONTROLLERS. That's it: the list, routing, Back button and
 // "Soon" tags all follow from the registry.
+// For haptics call `buzz` from lib/haptics, never navigator.vibrate: iPhones have
+// no vibrate, and `buzz` glows the screen there instead.
 
 export const CONTROLLERS: Partial<Record<PieceId, ComponentType<ControllerProps>>> = {
   watch: Watch,
@@ -71,6 +74,7 @@ export function PieceControls({ piece, send, subscribe, motion, onLeave, onList 
   };
   return (
     <Shell label={meta.label} index={meta.index} onBack={back}>
+      <SoundNote send={send} subscribe={subscribe} />
       {Controller ? (
         <Controller piece={which} send={send} subscribe={subscribe} motion={motion} motionOk={motion === "granted" || motion === "not-needed"} />
       ) : (

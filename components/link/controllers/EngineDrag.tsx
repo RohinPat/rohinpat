@@ -7,6 +7,7 @@ import type { MotionSample } from "@/lib/motion";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The drag strip's controller (Cars' second mode; Engine.tsx picks it when the
 // laptop says the strip is up). Twist: hold the phone upright, screen toward you,
@@ -22,14 +23,6 @@ import { useMotionSamples } from "./useMotionSamples";
 // Hears   gesture engine-state  {rpm, gear, phase, shift, call, time}   ten times a second at most
 
 type Mode = "twist" | "touch";
-
-const buzz = (ms: number | number[]) => {
-  try {
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(ms);
-  } catch {
-    /* no haptics here */
-  }
-};
 
 const PHASE_LINE: Record<string, string> = {
   idle: "Hold the throttle to stage.",

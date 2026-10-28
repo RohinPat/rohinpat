@@ -5,6 +5,7 @@ import { PENALTY_CAL, PHONE_SHOTS, isPhoneShot, kickFromSwipe, type PhoneShot } 
 import { createSwipeTracker } from "@/lib/motion";
 import type { TouchPoint } from "@/lib/motion";
 import type { ControllerProps } from "./types";
+import { buzz } from "@/lib/haptics";
 
 // The penalty controller: the phone's screen is the spot, and a ball sits on it.
 // Swipe the ball like a finger-flick football game. Direction is the aim, the
@@ -102,11 +103,7 @@ export default function PenaltyController({ send, subscribe }: ControllerProps) 
         setKicked(null);
         setPhase("aim");
       }, 4500);
-      try {
-        navigator.vibrate?.(35);
-      } catch {
-        /* no haptics here */
-      }
+      buzz(35);
     },
     [send, choice],
   );

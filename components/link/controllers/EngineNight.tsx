@@ -8,6 +8,7 @@ import { createAxes } from "./axes";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // Night run's controller. Hold the phone landscape like a steering wheel,
 // screen toward you, and turn it: clockwise steers right (the same wheel filter
@@ -32,14 +33,6 @@ import { useMotionSamples } from "./useMotionSamples";
 // Hears   gesture night-state {phase, speed, gear, auto, combo, pending, score, time, cp, cps, cpN, hitN, count, miles, best}
 
 type Mode = "wheel" | "touch";
-
-const buzz = (ms: number | number[]) => {
-  try {
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(ms);
-  } catch {
-    /* no haptics here */
-  }
-};
 
 const grouped = (n: number) => Math.round(n).toLocaleString("en-US");
 const W = ENGINE_CAL.wheel;

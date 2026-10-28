@@ -8,6 +8,7 @@ import { createAxes } from "./axes";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The maze's controller. Tilt: hold the phone flat, screen up, like a tray with
 // a marble on it. Tip the top edge down to walk forward (up to walk back), the
@@ -100,11 +101,7 @@ export default function MazeController({ send, subscribe, motionOk }: Controller
 
   const recentre = () => {
     filter.current.recalibrate();
-    try {
-      navigator.vibrate?.(20);
-    } catch {
-      /* no haptics here */
-    }
+    buzz(20);
   };
   const newMaze = () => send({ type: "gesture", name: "maze-new", data: {} });
 
