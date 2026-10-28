@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { pairCode } from "./pair-code";
 
 // The phone as the maze's tray and the slalom's handlebars, end to end, on the
 // BroadcastChannel mock session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1):
@@ -43,7 +44,7 @@ async function onTheGrid(browser: Browser, baseURL: string | undefined) {
   const context = await newContext(browser, baseURL);
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   const phone = await context.newPage();
   await phone.setViewportSize(PHONE);
   await phone.goto(`/p#c=${code}`);

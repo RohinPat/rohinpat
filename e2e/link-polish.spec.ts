@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
+import { pairCode } from "./pair-code";
 
 // Three small things around the phone-as-controller, on the BroadcastChannel
 // mock session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1): the "Click
@@ -17,7 +18,7 @@ async function pair(browser: Browser, baseURL: string | undefined, init?: () => 
   if (init) await context.addInitScript(init);
   const host = await context.newPage();
   await host.goto("/");
-  const code = ((await host.getByTestId("pair-code").textContent({ timeout: 15000 })) ?? "").replace(/\s/g, "");
+  const code = await pairCode(host);
   const phone = await context.newPage();
   await phone.setViewportSize(PHONE);
   await phone.goto(`/p#c=${code}`);
@@ -71,10 +72,19 @@ const autoplayPolicy = () => {
   window.AudioContext = Gated as typeof AC;
 };
 
+// Reading the code means clicking the padlock, and that click is a user gesture
+// the laptop page keeps across the client-side move to /interests. Forget it, to
+// stand in for a laptop nobody has touched yet (a reload, a fresh tab).
+const forgetGesture = (host: Page) =>
+  host.evaluate(() => {
+    (window as unknown as { __gesture: boolean }).__gesture = false;
+  });
+
 test.describe("Click for sound", () => {
   test("a game opened from the phone asks for one click; clicking it starts audio and the pill goes", async ({ browser, baseURL }) => {
     test.setTimeout(90_000);
     const { context, host, phone } = await pair(browser, baseURL, autoplayPolicy);
+    await forgetGesture(host);
     await phone.locator('[data-piece="watch"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
     await expect(phone.getByTestId("phone-piece")).toBeVisible();
@@ -100,6 +110,7 @@ test.describe("Click for sound", () => {
   test("a key press on the laptop starts audio too, and the pill can be used from the keyboard", async ({ browser, baseURL }) => {
     test.setTimeout(90_000);
     const { context, host, phone } = await pair(browser, baseURL, autoplayPolicy);
+    await forgetGesture(host);
     await phone.locator('[data-piece="watch"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
     await turnCrown(phone);
@@ -114,6 +125,7 @@ test.describe("Click for sound", () => {
     await context.close();
 
     const b = await pair(browser, baseURL, autoplayPolicy);
+    await forgetGesture(b.host);
     await b.phone.locator('[data-piece="watch"]').click();
     await expect(stage(b.host)).toBeVisible(SLOW);
     await turnCrown(b.phone);
