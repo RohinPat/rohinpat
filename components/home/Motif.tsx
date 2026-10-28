@@ -43,6 +43,18 @@ const MOTIFS: Record<string, () => JSX.Element> = {
     </g>
   ),
 
+  // A phone, with a signal arc leaving each side: one device driving another.
+  "phone-link": () => (
+    <g>
+      <rect x={84} y={34} width={72} height={152} rx={14} />
+      <line x1={108} y1={46} x2={132} y2={46} />
+      <circle cx={120} cy={168} r={5} />
+      <path d="M62 84a62 62 0 0 0 0 52M44 70a88 88 0 0 0 0 80" />
+      <path d="M178 84a62 62 0 0 1 0 52M196 70a88 88 0 0 1 0 80" />
+      <rect x={100} y={62} width={40} height={76} fill="currentColor" opacity={0.18} stroke="none" />
+    </g>
+  ),
+
   // Chat bubbles with a sentiment line underneath.
   aimessage: () => (
     <g>

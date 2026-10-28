@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { LabelPoint, Model, Viewer } from "./three/viewer";
+import { afterSettle, whenIdle } from "./tileSchedule";
 
-// Mounts a 3D exploded model (three.js is loaded only when this mounts) and
+// Mounts a 3D exploded model (three.js is loaded only when this mounts, and a
+// tile preview waits until it is near the screen) and
 // draws technical-drawing labels: a dot on each part, a leader line, and the
 // name in a column beside the model, kept apart so they never overlap.
 // Labels fade in as the model comes apart; clicking one isolates the part.
@@ -42,11 +44,18 @@ export default function Exploded3D({
   explodeRef.current = explode;
   const readyRef = useRef(onReady);
   readyRef.current = onReady;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  // a tile whose turn came while a stage was open: it boots when the stage closes
+  const lateBoot = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let dead = false;
     let v: Viewer | null = null;
-    (async () => {
+    let io: IntersectionObserver | null = null;
+    let cancelWait: (() => void) | null = null;
+    let cancelSettle: (() => void) | null = null;
+    const boot = async () => {
       try {
         const [{ createViewer }, model] = await Promise.all([import("./three/viewer"), build()]);
         if (dead || !host.current) return;
@@ -58,9 +67,34 @@ export default function Exploded3D({
       } catch {
         setFailed(true);
       }
-    })();
+    };
+    if (!preview) void boot();
+    else if (host.current) {
+      // a tile loads three.js and builds its model only when it is about to be
+      // seen (on a phone, a few seconds after the page has loaded), and then
+      // waits its turn behind the other tiles (tileSchedule)
+      io = new IntersectionObserver(
+        ([e]) => {
+          if (!e.isIntersecting) return;
+          io?.disconnect();
+          cancelSettle = afterSettle(() => {
+            cancelWait = whenIdle(() => {
+              // no 3D scene boots behind an open stage
+              if (pausedRef.current) lateBoot.current = () => void boot();
+              else void boot();
+            });
+          });
+        },
+        { rootMargin: "200px 0px" },
+      );
+      io.observe(host.current);
+    }
     return () => {
       dead = true;
+      io?.disconnect();
+      cancelSettle?.();
+      cancelWait?.();
+      lateBoot.current = null;
       v?.dispose();
       viewer.current = null;
     };
@@ -70,6 +104,12 @@ export default function Exploded3D({
   useEffect(() => viewer.current?.setExplode(explode), [explode]);
   useEffect(() => viewer.current?.setSolo(solo), [solo, parts]);
   useEffect(() => viewer.current?.setPaused(!!paused), [paused, parts]);
+  useEffect(() => {
+    if (paused || !lateBoot.current) return;
+    const go = lateBoot.current;
+    lateBoot.current = null;
+    go();
+  }, [paused]);
 
   // label layout, every frame, straight to the DOM
   useEffect(() => {
@@ -115,10 +155,10 @@ export default function Exploded3D({
     <div className={`absolute inset-0 ${className}`}>
       <div ref={host} className={`absolute inset-0 ${interactive ? "cursor-grab active:cursor-grabbing" : ""}`} />
       {!parts.length && !failed && (
-        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-[0.18em] text-[#77736b]">Loading the model…</div>
+        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-[0.18em] text-[#5f5b53]">Loading the model…</div>
       )}
       {failed && (
-        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-[0.18em] text-[#77736b]">3D isn&apos;t available in this browser</div>
+        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-[0.18em] text-[#5f5b53]">3D isn&apos;t available in this browser</div>
       )}
       {labels && !preview && parts.length > 0 && (
         <>

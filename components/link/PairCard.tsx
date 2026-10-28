@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatCode } from "@/lib/link/code";
 import { makeQr, qrBox, qrPath } from "@/lib/link/qr";
@@ -64,6 +65,15 @@ export default function PairCard({ info, announce = true }: { info: PairInfo; an
             <li>Tilt to tilt this phone, swipe up to unlock it, tap an app to open it here.</li>
             <li>Devices talk directly when they can, through this site&apos;s relay when not. Nothing is stored; no accounts.</li>
           </ul>
+          {/* a press on a link would start the lock layer's swipe and capture the pointer; stop it here */}
+          <Link
+            href="/projects/phone-link"
+            data-venom
+            onPointerDown={(e) => e.stopPropagation()}
+            className="mt-1.5 inline-block py-0.5 font-semibold underline underline-offset-2 decoration-[var(--signal)] text-[var(--signal)]"
+          >
+            Read how it works
+          </Link>
         </div>
       ) : live ? (
         <div className="mt-2.5 min-h-[112px] flex items-center gap-3" data-testid="pair-linked">

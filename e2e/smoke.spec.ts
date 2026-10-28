@@ -163,6 +163,37 @@ test("case study: renders, links its code, and every excerpt links to GitHub", a
   }
 });
 
+test("phone-link case study: renders, links its code, and every excerpt links to a pinned source", async ({ page }) => {
+  const res = await page.goto("/projects/phone-link");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveTitle(/A website your phone can drive/);
+  await expect(page.getByRole("heading", { level: 1, name: /A website your phone can drive/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Read the code on GitHub/ })).toHaveAttribute(
+    "href",
+    /^https:\/\/github\.com\/RohinPat\/rohinpat\/tree\/[0-9a-f]{40}\/lib\/link$/,
+  );
+  // three diagrams, each a labelled image
+  for (const name of [/How a phone pairs/, /How messages travel/, /golf swing as the recogniser sees it/]) {
+    await expect(page.getByRole("img", { name })).toBeVisible();
+  }
+  const excerpts = page.locator("figure.code-block figcaption a");
+  expect(await excerpts.count()).toBeGreaterThanOrEqual(4);
+  for (const href of await excerpts.evaluateAll((els) => els.map((e) => e.getAttribute("href")))) {
+    expect(href).toMatch(
+      /^https:\/\/github\.com\/(RohinPat\/rohinpat\/blob\/[0-9a-f]{40}|websockets\/ws\/blob\/8\.22\.0)\/.+#L\d+-L\d+$/,
+    );
+  }
+});
+
+test("colophon, Work and the Work page's list point at the phone-link write-up", async ({ page }) => {
+  await page.goto("/colophon");
+  await expect(page.getByRole("link", { name: "A website your phone can drive" })).toHaveAttribute("href", "/projects/phone-link");
+  await page.goto("/projects");
+  const row = page.locator("#phone-link");
+  await expect(row.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/phone-link");
+  await expect(row.getByRole("link", { name: /Code/ })).toHaveAttribute("href", /^https:\/\/github\.com\/RohinPat\/rohinpat\/tree\/main\/lib\/link$/);
+});
+
 test("work page links the write-up and the code", async ({ page }) => {
   await page.goto("/projects");
   const row = page.locator("#closet-organizer");
@@ -242,6 +273,52 @@ test("colophon measures this page in the browser: no other domains, no cookies",
   await expect(stat("Storage keys")).toHaveText("0");
   await page.getByRole("button", { name: "Measure again" }).click();
   await expect(stat("Other domains")).toHaveText("0");
+});
+
+test("case study: screenshots are self-hosted, sized and described", async ({ page }) => {
+  await page.goto("/projects/closet-organizer");
+  const shots = page.locator(".prose figure img[src*='closet-organizer']");
+  expect(await shots.count()).toBe(3);
+  for (const img of await shots.all()) {
+    await expect(img).toHaveAttribute("width", /^\d+$/);
+    await expect(img).toHaveAttribute("height", /^\d+$/);
+    expect((await img.getAttribute("alt"))?.length ?? 0).toBeGreaterThan(40);
+  }
+  const video = page.locator(".prose video");
+  await expect(video).toHaveAttribute("preload", "metadata");
+  await expect(video).toHaveAttribute("poster", /^\/projects\/closet-organizer\//);
+  expect(await video.evaluate((v: HTMLVideoElement) => [v.muted, v.loop, v.controls])).toEqual([true, true, true]);
+  // nothing leaves the site
+  const srcs = await page
+    .locator(".prose figure :is(img, video)")
+    .evaluateAll((els) => els.map((e) => e.getAttribute("src") ?? ""));
+  for (const s of srcs.filter(Boolean)) expect(s.startsWith("/")).toBe(true);
+  // the recording is only requested once it is near the viewport
+  expect(await video.evaluate((v: HTMLVideoElement) => v.getAttribute("src"))).toBeNull();
+  await video.scrollIntoViewIfNeeded();
+  await expect(video).toHaveAttribute("src", /\/projects\/closet-organizer\/.+\.webm$/);
+});
+
+test("case study: the recording plays in view and stays paused under reduced motion", async ({ browser, baseURL }) => {
+  const playing = async (reduce: "reduce" | "no-preference") => {
+    const ctx = await browser.newContext({ reducedMotion: reduce, baseURL });
+    const page = await ctx.newPage();
+    await page.goto("/projects/closet-organizer");
+    const video = page.locator(".prose video");
+    // paused until it is scrolled into view
+    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+    await video.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1500);
+    const inView = await video.evaluate((v: HTMLVideoElement) => !v.paused);
+    // and paused again once it is scrolled away
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(500);
+    const away = await video.evaluate((v: HTMLVideoElement) => !v.paused);
+    await ctx.close();
+    return { inView, away };
+  };
+  expect(await playing("no-preference")).toEqual({ inView: true, away: false });
+  expect(await playing("reduce")).toEqual({ inView: false, away: false });
 });
 
 test("case study: 'On this page' tracks the section you're reading", async ({ page }) => {

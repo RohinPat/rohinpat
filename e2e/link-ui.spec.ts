@@ -112,6 +112,21 @@ test.describe("link UI: laptop", () => {
     await context.close();
   });
 
+  test("the card's how-it-works opens the write-up, and a click on that link does not unlock the phone", async ({ browser, baseURL }) => {
+    const context = await newContext(browser, baseURL);
+    const { host } = await openHost(context);
+    const card = host.getByTestId("pair-card");
+    await padlock(host).click();
+    await card.getByRole("button", { name: "How this works" }).click();
+    const read = card.getByRole("link", { name: "Read how it works" });
+    await expect(read).toHaveAttribute("href", "/projects/phone-link");
+    await expect(host.getByRole("button", { name: /swipe up to unlock/i })).toBeVisible();
+    await read.click();
+    await expect(host).toHaveURL(/\/projects\/phone-link$/);
+    await expect(host.getByRole("heading", { level: 1, name: /A website your phone can drive/ })).toBeVisible();
+    await context.close();
+  });
+
   test("Enter and Space open the padlock; Escape, a second press or a press outside close it", async ({ browser, baseURL }) => {
     const context = await newContext(browser, baseURL);
     const { host } = await openHost(context);
@@ -316,6 +331,7 @@ test.describe("link UI: linked", () => {
     await expect(how.getByTestId("link-path")).toContainText(/direct/i);
     await expect(how.getByTestId("link-rtt")).toContainText(/\d+ ms/);
     await expect(how.getByTestId("link-hz")).toContainText(/\d+ \/ s/);
+    await expect(how.getByRole("link", { name: "Read how it works" })).toHaveAttribute("href", "/projects/phone-link");
     await expect(pill).toHaveAttribute("aria-expanded", "true");
     await host.keyboard.press("Escape");
     await expect(how).toHaveCount(0);
