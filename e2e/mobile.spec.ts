@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // Mobile-specific checks. Runs only under the "mobile" project (iPhone 13 viewport).
 // Catches the worst mobile failure mode: horizontal scroll / clipped content.
 
-const routes = ["/", "/projects", "/projects/closet-organizer", "/interests", "/contact", "/privacy"];
+const routes = ["/", "/projects", "/projects/closet-organizer", "/projects/phone-link", "/interests", "/contact", "/privacy"];
 
 for (const path of routes) {
   test(`${path} has no horizontal overflow on mobile`, async ({ page }) => {

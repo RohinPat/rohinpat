@@ -163,6 +163,37 @@ test("case study: renders, links its code, and every excerpt links to GitHub", a
   }
 });
 
+test("phone-link case study: renders, links its code, and every excerpt links to a pinned source", async ({ page }) => {
+  const res = await page.goto("/projects/phone-link");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveTitle(/A website your phone can drive/);
+  await expect(page.getByRole("heading", { level: 1, name: /A website your phone can drive/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Read the code on GitHub/ })).toHaveAttribute(
+    "href",
+    /^https:\/\/github\.com\/RohinPat\/rohinpat\/tree\/[0-9a-f]{40}\/lib\/link$/,
+  );
+  // three diagrams, each a labelled image
+  for (const name of [/How a phone pairs/, /How messages travel/, /golf swing as the recogniser sees it/]) {
+    await expect(page.getByRole("img", { name })).toBeVisible();
+  }
+  const excerpts = page.locator("figure.code-block figcaption a");
+  expect(await excerpts.count()).toBeGreaterThanOrEqual(4);
+  for (const href of await excerpts.evaluateAll((els) => els.map((e) => e.getAttribute("href")))) {
+    expect(href).toMatch(
+      /^https:\/\/github\.com\/(RohinPat\/rohinpat\/blob\/[0-9a-f]{40}|websockets\/ws\/blob\/8\.22\.0)\/.+#L\d+-L\d+$/,
+    );
+  }
+});
+
+test("colophon, Work and the Work page's list point at the phone-link write-up", async ({ page }) => {
+  await page.goto("/colophon");
+  await expect(page.getByRole("link", { name: "A website your phone can drive" })).toHaveAttribute("href", "/projects/phone-link");
+  await page.goto("/projects");
+  const row = page.locator("#phone-link");
+  await expect(row.getByRole("link", { name: /Read the write-up/ })).toHaveAttribute("href", "/projects/phone-link");
+  await expect(row.getByRole("link", { name: /Code/ })).toHaveAttribute("href", /^https:\/\/github\.com\/RohinPat\/rohinpat\/tree\/main\/lib\/link$/);
+});
+
 test("work page links the write-up and the code", async ({ page }) => {
   await page.goto("/projects");
   const row = page.locator("#closet-organizer");

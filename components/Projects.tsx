@@ -15,8 +15,9 @@ export default function Projects() {
         <div className="max-w-6xl mx-auto">
           <h1 className="!mb-6">Work</h1>
           <p className="mb-14 md:mb-20 text-lg md:text-xl max-w-[46ch] text-pretty muted">
-            Things I&apos;ve built and places I&apos;ve worked. The long version of one of
-            them is <Link href="/projects/closet-organizer" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">the Closet Organizer write-up</Link>.
+            Things I&apos;ve built and places I&apos;ve worked. The long versions of two of
+            them are <Link href="/projects/closet-organizer" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">the Closet Organizer write-up</Link>{" "}
+            and <Link href="/projects/phone-link" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">how this site&apos;s phone link works</Link>.
           </p>
           <MadeIndex entries={made} />
         </div>
