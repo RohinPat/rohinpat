@@ -199,9 +199,9 @@ export const ENGINE_CAL = {
     drawSegs: [190, 140, 100],
     maxPixels: 2_400_000,
     /** the grid tile (attract mode) is a small card that runs while the visitor reads the page: it draws the shortest
-     *  distance, at this many device pixels at most, this many times a second, so it never competes with the page */
+     *  distance, at this many device pixels at most, and useCanvas paces it (30 frames a second at most, slower if a
+     *  frame is costly), so it never competes with the page */
     tileMaxPixels: 400_000,
-    tileFps: 30,
   },
 
   // ------------------------------------------------------------ night run: the phone
