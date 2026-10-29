@@ -367,7 +367,8 @@ function drawCue(ctx: CanvasRenderingContext2D, w: number, h: number, u: number,
 
 function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean) {
   ctx.textAlign = "center";
-  let y = h * 0.4;
+  // a corner warning (drawCue) sits just above: give it room
+  let y = h * 0.4 + (g.cue.on ? 40 * u : 0);
   for (let i = g.toasts.length - 1; i >= 0; i--) {
     const t = g.toasts[i];
     const inT = ease(t.age / 0.18);
