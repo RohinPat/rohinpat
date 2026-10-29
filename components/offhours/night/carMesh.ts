@@ -65,12 +65,12 @@ export const EXHAUST: [number, number, number][] = [[-0.5, 0.34, -2.3], [0.5, 0.
 // ---- the palette: kind x brightness step
 const STEPS = 8;
 const BASE: Record<Kind, [number, number, number]> = {
-  [BODY]: [52, 62, 78],
-  [GLASS]: [11, 15, 21],
-  [WHEEL]: [7, 8, 10],
-  [MINT]: [118, 190, 146],
+  [BODY]: [36, 52, 52],
+  [GLASS]: [9, 15, 17],
+  [WHEEL]: [6, 8, 8],
+  [MINT]: [118, 200, 152],
   [TAIL]: [0, 0, 0],
-  [WING]: [36, 43, 54],
+  [WING]: [24, 34, 35],
 };
 const PAL: string[][] = [];
 for (let k = 0; k < 6; k++) {
@@ -226,7 +226,38 @@ export function drawCar(ctx: CanvasRenderingContext2D, v: View, pose: CarPose, l
     ctx.closePath();
     ctx.fill();
   }
+  // glints on the edges that face up: the roof, the boot lip, the wing and the shoulders catch the sky and the lamps
+  ctx.strokeStyle = "rgba(214,236,228,0.4)";
+  ctx.lineWidth = 1.1;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (let e = 0; e < GLINTS.length; e++) {
+    const g = GLINTS[e];
+    if (!glintPoint(pose, v, g[0], g[1], g[2], sinT, cosT)) continue;
+    const x0 = P.x, y0 = P.y;
+    if (!glintPoint(pose, v, g[3], g[4], g[5], sinT, cosT)) continue;
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(P.x, P.y);
+  }
+  ctx.stroke();
   return true;
+}
+
+/** the bright edges, in the car's frame: x0 y0 z0 x1 y1 z1 */
+const GLINTS: number[][] = [
+  [-0.6, 1.24, -0.62, 0.6, 1.24, -0.62],
+  [-0.78, 0.82, -2.05, 0.78, 0.82, -2.05],
+  [-0.86, 1.07, -2.28, 0.86, 1.07, -2.28],
+  [-0.78, 0.82, -2.05, -0.9, 0.6, -1.9],
+  [0.78, 0.82, -2.05, 0.9, 0.6, -1.9],
+  [-0.9, 0.6, -1.9, -0.9, 0.6, 0.8],
+  [0.9, 0.6, -1.9, 0.9, 0.6, 0.8],
+];
+function glintPoint(pose: CarPose, v: View, x: number, y0: number, z: number, sinT: number, cosT: number): boolean {
+  const wxx = pose.x + cosT * x + sinT * z;
+  const wzz = pose.z - sinT * x + cosT * z;
+  const wyy = pose.y + y0 + x * pose.roll + z * pose.slope;
+  return project(v, wxx, wyy, wzz);
 }
 
 /** A point on the car (its own frame) in the world, written to out[0..2]. */

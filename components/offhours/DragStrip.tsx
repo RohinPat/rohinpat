@@ -9,6 +9,7 @@ import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, rpmRate, type En
 import { IDLE, LIMIT, REDLINE, RATIOS, FINAL, SHIFT_AT, WHEEL, torque, wheelRpm } from "./engineModel";
 import { EngineVoice } from "./engineVoice";
 import { DRAG_GHOST_DT, gapToGhost, ghostAt, type DragPath } from "./dragGhost";
+import { paintStrip, stripGeom } from "./night/stripScene";
 
 // The drag strip: a race dash and a quarter mile (Cars' second mode; Night run
 // is the first). The engine is the shared model (engineModel.ts: torque curve,
@@ -18,7 +19,10 @@ import { DRAG_GHOST_DT, gapToGhost, ghostAt, type DragPath } from "./dragGhost";
 // part way down), shifts with `engine-shift`, and is told the revs and gear
 // back. Engine.tsx owns the phone link and hands the messages down. The strip
 // shows two lanes, you in one and the best run of this visit (a ghost, in memory
-// only) in the other, with the gap to it as you go.
+// only) in the other, with the gap to it as you go. The lanes are a floodlit strip
+// at night (night/stripScene.ts: a grandstand, a ridge and a town, towers, a wall,
+// rubber on the line), with the start tree beside the line and the distances on
+// boards along the foot.
 
 const QUARTER = 402.3;
 
@@ -138,7 +142,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const mineRef = useRef<RemoteHandlers | null>(null);
   /** this run's distance every DRAG_GHOST_DT seconds from the green (it becomes the ghost if it is the best), and the layers and smoke */
   const rec = useRef<number[]>([]);
-  const layers = useRef<{ ground?: Layer; face?: Layer }>({});
+  const layers = useRef<{ ground?: Layer; face?: Layer; beam?: Layer; bulbs?: Record<string, HTMLCanvasElement> }>({});
   const puffs = useRef<Puffs>(newPuffs());
   const wasThrottle = useRef(false);
 
@@ -474,6 +478,13 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     const hh = len * 0.19;
     const x = nose - len;
     ctx.globalAlpha = o.alpha ?? 1;
+    // a soft shadow under the body, thrown a little down and back from the floodlights
+    if (!o.ghost) {
+      ctx.fillStyle = "rgba(0,0,0,0.38)";
+      ctx.beginPath();
+      ctx.roundRect(x - 2, yc - hh + 3, len + 4, hh * 2 + 1, len * 0.14);
+      ctx.fill();
+    }
     // wheels first, a little proud of the body
     ctx.fillStyle = o.ghost ? "rgba(242,234,215,0.35)" : "#06080a";
     for (const wx of [x + len * 0.12, x + len * 0.68]) {
@@ -509,29 +520,80 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.globalAlpha = 1;
   }
 
+  /** the start tree, on the wall beside the line: the stage lights, three ambers a half second apart, and the green (steady: nothing here flashes) */
+  function startTree(ctx: CanvasRenderingContext2D, c: Car, geo: ReturnType<typeof stripGeom>) {
+    const th = Math.min(118, geo.ry * 0.22);
+    const tx = geo.x0 + 30;
+    const top = geo.ry - th;
+    ctx.fillStyle = "#0a100e";
+    ctx.beginPath();
+    ctx.roundRect(tx - 11, top, 22, th, 6);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(242,234,215,0.28)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    const staged = (c.phase === "tree" || (c.phase === "idle" && c.stageHeld > 0.15)) && c.throttle;
+    const run = c.phase === "run" && c.t < 0.9;
+    const rows = 5;
+    const dy = (th - 12) / rows;
+    for (let i = 0; i < rows; i++) {
+      const y = top + 9 + dy * (i + 0.5);
+      let on = false;
+      let col = "255,179,0";
+      if (i === 0) {
+        on = staged;
+        col = "225,240,255";
+      } else if (i <= 3) on = c.phase === "tree" && c.tree >= (i - 1) * 0.5;
+      else {
+        on = run;
+        col = "61,220,132";
+      }
+      const r = i === 0 ? 4 : 5.5;
+      if (i === 0) {
+        for (const ox of [-5, 5]) {
+          ctx.fillStyle = on ? `rgb(${col})` : "#1c211e";
+          ctx.beginPath();
+          ctx.arc(tx + ox, y, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = on ? `rgb(${col})` : "#1c211e";
+        ctx.beginPath();
+        ctx.arc(tx, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (on) {
+        // the glow is a small picture made once per colour
+        const bulbs = (layers.current.bulbs ??= {});
+        let spr = bulbs[col];
+        if (!spr) {
+          spr = bulbs[col] = document.createElement("canvas");
+          spr.width = spr.height = 40;
+          const x = spr.getContext("2d")!;
+          const g = x.createRadialGradient(20, 20, 0, 20, 20, 20);
+          g.addColorStop(0, `rgba(${col},0.45)`);
+          g.addColorStop(1, `rgba(${col},0)`);
+          x.fillStyle = g;
+          x.fillRect(0, 0, 40, 40);
+        }
+        ctx.globalCompositeOperation = "lighter";
+        ctx.drawImage(spr, tx - 20, y - 20);
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
+  }
+
   function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number, dt: number, reduce: boolean) {
     const dpr = Math.max(1, ctx.getTransform().a);
     // the lanes at the bottom: two when played (you, and the best run of this visit), one on the tile
-    const lanes = play ? 2 : 1;
-    const roadH = play ? Math.max(76, Math.min(150, h * 0.26)) : Math.max(40, h * 0.18);
-    const ry = h - roadH;
-    const laneH = roadH / lanes;
+    const geo = stripGeom(w, h, play);
+    const { lanes, roadH, ry, laneH, carLen, x0, x1 } = geo;
 
-    // ground and carbon weave: drawn once per size
-    layers.current.ground = layer(layers.current.ground, `${w}x${h}@${dpr}`, w, h, dpr, (x) => {
-      x.fillStyle = "#0b0d0c";
-      x.fillRect(0, 0, w, h);
-      x.fillStyle = "rgba(255,255,255,0.025)";
-      for (let y = 0; y < h; y += 6) for (let px = (y / 6) % 2 ? 0 : 3; px < w; px += 6) x.fillRect(px, y, 3, 3);
-    });
+    // the place: sky, stands, towers, wall and asphalt, drawn once per size
+    layers.current.ground = layer(layers.current.ground, `${w}x${h}@${dpr}|${play}`, w, h, dpr, (x) => paintStrip(x, w, h, play));
     ctx.drawImage(layers.current.ground.c, 0, 0, w, h);
 
     // ---- the lanes: start line, eighth mile, thousand feet and the line, you and your best
-    ctx.fillStyle = "#151816";
-    ctx.fillRect(0, ry, w, roadH);
-    const carLen = Math.max(30, Math.min(88, laneH * 1.25));
-    const x0 = carLen + 14;
-    const x1 = play ? w - 22 : w - 132;
     const at = (m: number) => x0 + (Math.min(m, QUARTER + 60) / QUARTER) * (x1 - x0);
     // flowing streaks behind the cars at speed
     if (!reduce && c.v > 14) {
@@ -566,13 +628,24 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillRect(x1 + 5, ry + k * sq, 5, Math.min(sq, roadH - k * sq));
     }
     if (play) {
+      // the distances, on boards along the foot of the strip, lit
       mono(ctx, 9);
-      ctx.fillStyle = "rgba(181,182,171,0.8)";
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
-      ctx.fillText("1/8 MILE", at(201.2), h - 5);
-      ctx.fillText("1000 FT", at(304.8), h - 5);
+      for (const [m, label] of [[201.2, "1/8 MILE"], [304.8, "1000 FT"]] as const) {
+        const bw = ctx.measureText(label).width + 12;
+        ctx.fillStyle = "rgba(8,12,10,0.9)";
+        ctx.beginPath();
+        ctx.roundRect(at(m) - bw / 2, h - 17, bw, 13, 3);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(242,234,215,0.35)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = "rgba(242,234,215,0.9)";
+        ctx.fillText(label, at(m), h - 7);
+      }
       ctx.textAlign = "left";
+      if (w >= 560) startTree(ctx, c, geo);
     }
     // the ghost and the car
     const yMe = ry + laneH * (lanes - 0.5);
@@ -622,6 +695,26 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.lineTo(meX - carLen - (8 + 22 * c.pop), yMe);
       ctx.lineTo(meX - carLen, yMe + 3);
       ctx.fill();
+    }
+    if (play && c.phase !== "done") {
+      // the headlights, thrown down the lane (a picture made once per size)
+      const bw = carLen * 2.6;
+      layers.current.beam = layer(layers.current.beam, `${laneH.toFixed(1)}|${carLen.toFixed(1)}@${dpr}`, bw, laneH, dpr, (x) => {
+        const beam = x.createLinearGradient(0, 0, bw, 0);
+        beam.addColorStop(0, "rgba(255,244,214,0.2)");
+        beam.addColorStop(1, "rgba(255,244,214,0)");
+        x.fillStyle = beam;
+        x.beginPath();
+        x.moveTo(0, laneH / 2 - carLen * 0.12);
+        x.lineTo(bw, laneH / 2 - laneH * 0.42);
+        x.lineTo(bw, laneH / 2 + laneH * 0.42);
+        x.lineTo(0, laneH / 2 + carLen * 0.12);
+        x.closePath();
+        x.fill();
+      });
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(layers.current.beam.c, meX, yMe - laneH / 2, bw, laneH);
+      ctx.globalCompositeOperation = "source-over";
     }
     topCar(ctx, meX, yMe, carLen, { brake: c.phase === "done" || !c.throttle });
 
@@ -771,8 +864,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       });
     }
 
-    // christmas tree while staging
-    if (c.phase === "tree" || c.phase === "idle") {
+    // the tree again in the corner where there is no room for one on the wall (a phone) or no wall (the tile)
+    if ((c.phase === "tree" || c.phase === "idle") && (stacked || !play)) {
       const tx = stacked ? w - 16 : rx + (play ? 210 : 120), ty = stacked ? dialTop + 4 : area * 0.22;
       for (let i = 0; i < 4; i++) {
         const lit = c.phase === "tree" && (i < 3 ? c.tree >= i * 0.5 : c.tree >= 1.6);

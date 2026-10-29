@@ -31,7 +31,11 @@ export type Phase = "ready" | "count" | "run" | "done";
 export type Tone = "good" | "bad" | "info" | "drift";
 /** where a toast is drawn: the middle of the road (what just happened), or by the drift panel (what a slide paid) */
 export type Slot = "main" | "bank";
-export type Toast = { text: string; sub: string; tone: Tone; age: number; life: number; slot: Slot };
+/** `age` below zero is a message waiting its turn; `held` is the time the corner warning has kept one off the screen */
+export type Toast = { text: string; sub: string; tone: Tone; age: number; life: number; slot: Slot; held?: number };
+
+/** a message is on screen at least this long before the next one takes its place, s */
+const TOAST_MIN_S = 0.8;
 
 export type GameEvent =
   | { kind: "count"; n: number }
@@ -76,11 +80,14 @@ export type CornerCue = { on: boolean; dir: -1 | 1; dist: number };
 /** The best run of this visit: memory only, gone when the page is. */
 let bestRun: Ghost | null = null;
 let bestScore = 0;
+/** runs finished this visit: the coach speaks on the first and not after */
+let runsDone = 0;
 export const getBestRun = () => bestRun;
 export const getBestScore = () => bestScore;
 export const forgetBestRun = () => {
   bestRun = null;
   bestScore = 0;
+  runsDone = 0;
   coached.clear();
 };
 
@@ -187,7 +194,7 @@ export class NightGame {
   start() {
     if (this.phase === "ready" || (this.phase === "done" && this.phaseT > 0.7)) {
       this.reset();
-      this.firstRun = bestScore === 0;
+      this.firstRun = runsDone === 0;
       this.phase = "count";
       this.phaseT = 0;
       this.lastCount = 4;
@@ -234,16 +241,30 @@ export class NightGame {
   }
 
   toast(text: string, sub: string, tone: Tone, life = 1.6, slot: Slot = "main") {
-    // a few at a time in the middle of the road, one by the drift panel: a new one makes room by dropping the oldest of its place
-    const cap = slot === "main" ? 2 : 1;
-    let same = this.toasts.filter((t) => t.slot === slot).length;
-    for (let i = 0; i < this.toasts.length && same >= cap; ) {
-      if (this.toasts[i].slot === slot) {
-        this.toasts.splice(i, 1);
-        same--;
-      } else i++;
+    if (slot === "bank") {
+      // one by the drift panel: a new one replaces the one there
+      this.toasts = this.toasts.filter((t) => t.slot !== "bank");
+      this.toasts.push({ text, sub, tone, age: 0, life, slot });
+      return;
     }
-    this.toasts.push({ text, sub, tone, age: 0, life, slot });
+    // One message at a time in the middle of the road. A new one waits its turn behind the one showing (which keeps the
+    // screen for a moment at least), and if another is already waiting the newest of them is the one kept.
+    let showing: Toast | null = null;
+    let waiting: Toast | null = null;
+    for (const t of this.toasts) {
+      if (t.slot !== "main") continue;
+      if (t.age >= 0) showing = t;
+      else waiting = t;
+    }
+    if (!showing) {
+      this.toasts.push({ text, sub, tone, age: 0, life, slot });
+      return;
+    }
+    showing.life = Math.min(showing.life, Math.max(showing.age, TOAST_MIN_S));
+    const start = -Math.max(0, showing.life - showing.age);
+    if (waiting) {
+      Object.assign(waiting, { text, sub, tone, life, age: start });
+    } else this.toasts.push({ text, sub, tone, age: start, life, slot });
   }
 
   /** a line of help for a first run, once per visit */
@@ -294,6 +315,11 @@ export class NightGame {
     this.goFlash = Math.max(0, this.goFlash - dt);
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       const t = this.toasts[i];
+      // the corner warning has the middle of the screen: what is on it waits (for a while at most)
+      if (t.slot === "main" && this.cue.on && t.age >= 0 && (t.held ?? 0) < 1.2) {
+        t.held = (t.held ?? 0) + dt;
+        continue;
+      }
       t.age += dt;
       if (t.age >= t.life) this.toasts.splice(i, 1);
     }
@@ -523,6 +549,7 @@ export class NightGame {
     if (newBest) bestRun = run;
     const prevBestScore = bestScore;
     bestScore = Math.max(bestScore, score);
+    runsDone++;
     this.result = {
       finished,
       time: run.time,
