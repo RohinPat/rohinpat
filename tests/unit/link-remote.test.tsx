@@ -19,7 +19,7 @@ vi.mock("@/lib/link/useLink", () => ({
   },
 }));
 
-import { routeRemote, useRemote, useRemoteList } from "@/lib/link/remote";
+import { routeRemote, useRemote, useRemoteList, useRemoteReport } from "@/lib/link/remote";
 
 class FakeSession implements LinkSession {
   readonly role = "host" as const;
@@ -194,6 +194,36 @@ describe("useRemote", () => {
     s.state = "closed";
     result.current.send({ type: "recenter" });
     expect(s.sent).toHaveLength(n);
+  });
+});
+
+describe("useRemoteReport", () => {
+  const gestures = (s: FakeSession) => s.sent.filter((m) => m.type === "gesture");
+
+  it("tells the phone a fact, again when it changes, and when the phone says hello or asks", () => {
+    const s = new FakeSession();
+    current = s;
+    const { rerender } = renderHook(({ blocked }) => useRemoteReport("audio", "audio-sync", { blocked }), { initialProps: { blocked: true } });
+    expect(gestures(s)).toEqual([{ type: "gesture", name: "audio", data: { blocked: true } }]);
+    rerender({ blocked: true });
+    expect(gestures(s)).toHaveLength(1);
+    rerender({ blocked: false });
+    expect(gestures(s).at(-1)).toEqual({ type: "gesture", name: "audio", data: { blocked: false } });
+    act(() => s.hear({ type: "hello", role: "phone", ua: "x", motion: "granted" }));
+    expect(gestures(s)).toHaveLength(3);
+    act(() => s.hear({ type: "gesture", name: "audio-sync", data: {} }));
+    expect(gestures(s)).toHaveLength(4);
+    act(() => s.hear({ type: "gesture", name: "something-else", data: {} }));
+    expect(gestures(s)).toHaveLength(4);
+  });
+
+  it("says nothing without a session or while unpaired", () => {
+    renderHook(() => useRemoteReport("audio", "audio-sync", { blocked: true }));
+    const s = new FakeSession();
+    s.state = "waiting";
+    current = s;
+    renderHook(() => useRemoteReport("audio", "audio-sync", { blocked: true }));
+    expect(s.sent).toEqual([]);
   });
 });
 

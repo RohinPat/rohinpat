@@ -16,8 +16,10 @@ import { onHostChange, peekHost } from "./useLink";
 //                                  grid is showing, and turns the phone's
 //                                  `open piece:<id>` / `open piece:list` into
 //                                  callbacks (open that tile / close the stage).
+//   useRemoteReport(...)           the laptop tells the phone one fact about itself
+//                                  (a `gesture` going the other way), now and on request.
 //
-// Both only ever *look at* the host session the home page already made
+// All of them only ever *look at* the host session the home page already made
 // (peekHost), so without a paired phone they are effectively no-ops: no
 // network, no relay client in the games' bundles, nothing created.
 
@@ -116,6 +118,27 @@ export function useRemote(pieceId: PieceId | null, handlers: RemoteHandlers = {}
   }, []);
 
   return { linked: !!pieceId && linked, send };
+}
+
+/**
+ * Tell a linked phone one thing about this laptop as a `gesture` (e.g. "audio" {blocked: true}):
+ * when it changes, when a phone (re)connects, and whenever the phone sends the gesture `ask`.
+ * A no-op with no phone linked.
+ */
+export function useRemoteReport(name: string, ask: string, data: GestureData): void {
+  const { session, linked } = useHostLink();
+  const key = JSON.stringify(data);
+  const latest = useRef(data);
+  latest.current = data;
+
+  useEffect(() => {
+    if (!session || !linked) return;
+    const say = () => session.send({ type: "gesture", name, data: latest.current });
+    say();
+    return session.onMessage((m) => {
+      if (m.type === "hello" || (m.type === "gesture" && m.name === ask)) say();
+    });
+  }, [session, linked, name, ask, key]);
 }
 
 export type RemoteListOptions = {

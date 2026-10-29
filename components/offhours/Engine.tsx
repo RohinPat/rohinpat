@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRemote, type RemoteHandlers } from "@/lib/link/remote";
+import { useStageLabel } from "./Stage";
 import type { PieceProps } from "./useCanvas";
 import DragStrip from "./DragStrip";
 import NightRun from "./NightRun";
@@ -20,10 +21,19 @@ const MODES: { id: EngineMode; label: string }[] = [
   { id: "drag", label: "Drag strip" },
 ];
 
+// The stage's heading follows the mode (pieces.ts has Night run, the way it opens);
+// the strip has its own hints.
+const DRAG_HOW = [
+  "Keyboard: hold Space (or ↑) for throttle, ↑ shifts up",
+  "Hold the throttle to stage, then launch between 3.2k and 6.5k",
+  "Shift when the light comes on. Night run is in the corner",
+];
+
 export default function EnginePiece({ mode, paused }: PieceProps) {
   const play = mode === "play";
   const [game, setGame] = useState<EngineMode>("night");
   const bus = useRef<RemoteHandlers>({});
+  useStageLabel(play ? (game === "drag" ? { title: "Drag strip", how: DRAG_HOW } : { title: "Night run" }) : null);
   const gameRef = useRef(game);
   gameRef.current = game;
 

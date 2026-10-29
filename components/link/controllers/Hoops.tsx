@@ -7,6 +7,7 @@ import type { FlickEvent, MotionSample, TouchPoint } from "@/lib/motion";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The basketball controller. Flick: hold the phone flat in your palm like a
 // ball, top edge toward the screen, and snap it upward like a shot. Only the
@@ -81,11 +82,7 @@ export default function HoopsController({ send, subscribe, motionOk }: Controlle
     setLaunched(true);
     window.clearTimeout(launchTimer.current);
     launchTimer.current = window.setTimeout(() => setLaunched(false), 600);
-    try {
-      navigator.vibrate?.(30);
-    } catch {
-      /* no haptics here */
-    }
+    buzz(30);
   }, []);
 
   // ---- flick mode: the recogniser, only while this mode is up ----

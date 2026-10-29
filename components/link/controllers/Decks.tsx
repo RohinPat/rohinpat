@@ -9,6 +9,7 @@ import type { MotionSample } from "@/lib/motion";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The music board's controller: this phone is the turntable's platter. Put a
 // finger on the record and go round in circles to scratch it; the laptop plays
@@ -104,11 +105,7 @@ export default function DecksController({ send, subscribe, motionOk }: Controlle
       window.clearInterval(s.timer);
       s.timer = window.setInterval(sendNow, 1000 / DECKS_CAL.sendHz);
       setHeld(true);
-      try {
-        navigator.vibrate?.(12);
-      } catch {
-        /* no haptics here */
-      }
+      buzz(12);
     },
     [send, sendNow],
   );

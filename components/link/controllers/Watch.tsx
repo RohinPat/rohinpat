@@ -8,6 +8,7 @@ import type { MotionSample } from "@/lib/motion";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The watch's controller: a crown. Twist: hold the phone upright, screen toward
 // you, and turn it clockwise like winding a crown, then back and again (the
@@ -22,14 +23,6 @@ import { useMotionSamples } from "./useMotionSamples";
 // Hears   gesture watch-state  {reserve, explode, flip}   power reserve 0..1 and the laptop's settings
 
 type Mode = "twist" | "touch";
-
-const buzz = (ms: number) => {
-  try {
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(ms);
-  } catch {
-    /* no haptics here */
-  }
-};
 
 export default function WatchController({ send, subscribe, motionOk }: ControllerProps) {
   const [mode, setMode] = useState<Mode>(motionOk ? "twist" : "touch");

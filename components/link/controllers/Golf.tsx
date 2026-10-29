@@ -8,6 +8,7 @@ import type { GolfSwingEvent, MotionSample } from "@/lib/motion";
 import { ghostButton } from "./Shell";
 import type { ControllerProps } from "./types";
 import { useMotionSamples } from "./useMotionSamples";
+import { buzz } from "@/lib/haptics";
 
 // The driving range's controller. Swing: hold the phone like a club grip, screen
 // toward you, stay still for a moment (address), then swing. Only the golf
@@ -65,11 +66,7 @@ export default function GolfController({ send, subscribe, motionOk }: Controller
       send({ type: "gesture", name: "golf-swing", data: { speedMph: round(s.speedMph), tempo: round(s.tempo, 2), faceDeg: round(s.faceDeg) } });
       setLast({ speedMph: round(s.speedMph), tempo: round(s.tempo, 1), faceDeg: round(s.faceDeg) });
       setNote("");
-      try {
-        navigator.vibrate?.(35);
-      } catch {
-        /* no haptics here */
-      }
+      buzz(35);
     },
     [send],
   );

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { parseEngineMode, type EngineMode } from "@/components/offhours/engineRemote";
 import EngineDrag from "./EngineDrag";
 import EngineNight from "./EngineNight";
+import { useShellNote } from "./Shell";
 import type { ControllerProps } from "./types";
 
 // Cars' controller picks which of its two controllers to show by what the
@@ -29,6 +30,8 @@ export default function EngineController(props: ControllerProps) {
       window.clearTimeout(t);
     };
   }, [send, subscribe]);
+
+  useShellNote(mode === "drag" ? "Drag strip" : mode === "night" ? "Night run" : null);
 
   if (mode === "drag") return <EngineDrag {...props} />;
   if (mode === "night") return <EngineNight {...props} />;

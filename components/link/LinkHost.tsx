@@ -86,9 +86,12 @@ export default function LinkHost(props: Props) {
       latest.current.onPair(null);
       // the visitor opened an app (or left): tell the phone it's off the home screen.
       // A moment's grace so a remount (strict mode, hot reload) doesn't flicker it.
+      // Off hours says where it is itself (useRemoteList, then each game), and on a
+      // busy page this timer can fire after a game has opened, so it stays quiet there.
       const s = sessionRef.current;
       window.setTimeout(() => {
-        if (attached === 0 && s && isPaired(s.state, s.path)) s.send({ type: "screen", name: "piece", piece: location.pathname.startsWith("/interests") ? "list" : location.pathname });
+        if (location.pathname.startsWith("/interests")) return;
+        if (attached === 0 && s && isPaired(s.state, s.path)) s.send({ type: "screen", name: "piece", piece: location.pathname });
       }, 80);
     };
   }, [start]);

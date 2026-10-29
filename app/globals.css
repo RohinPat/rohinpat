@@ -330,6 +330,11 @@ main h1:not(.hero-field) {
 /* Entrances + small motion, all CSS (no animation library) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
+/* "Click for sound" pill on a game stage: fades in, nothing moves */
+@keyframes fade-in { from { opacity: 0; } }
+.sound-prompt { animation: fade-in 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .sound-prompt { animation: none; } }
+
 /* The lock screen's padlock (components/link/PairLock.tsx): the shackle
    swings open on a link like Face ID unlocking, the pairing card grows out
    of the padlock, and an idle one gets a single wiggle. */
