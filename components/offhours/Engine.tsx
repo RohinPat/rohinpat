@@ -5,6 +5,7 @@ import { useRemote, type RemoteHandlers } from "@/lib/link/remote";
 import { useStageLabel } from "./Stage";
 import type { PieceProps } from "./useCanvas";
 import DragStrip from "./DragStrip";
+import Scope, { ScopeToggle } from "./Scope";
 import NightRun from "./NightRun";
 import type { EngineMode } from "./engineRemote";
 
@@ -32,6 +33,7 @@ const DRAG_HOW = [
 export default function EnginePiece({ mode, paused }: PieceProps) {
   const play = mode === "play";
   const [game, setGame] = useState<EngineMode>("night");
+  const [scope, setScope] = useState(false);
   const bus = useRef<RemoteHandlers>({});
   useStageLabel(play ? (game === "drag" ? { title: "Drag strip", how: DRAG_HOW } : { title: "Night run" }) : null);
   const gameRef = useRef(game);
@@ -58,19 +60,33 @@ export default function EnginePiece({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 bg-[#05080c]">
       {game === "night" ? <NightRun mode="play" paused={paused} remote={remote} bus={bus} /> : <DragStrip mode="play" paused={paused} remote={remote} bus={bus} />}
-      <div role="group" aria-label="Mode" className="absolute right-3 top-3 z-20 flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/80 font-mono text-[11px] uppercase tracking-[0.14em]">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            aria-pressed={game === m.id}
-            data-testid={`engine-mode-${m.id}`}
-            onClick={() => setGame(m.id)}
-            className={`h-8 px-3.5 ${game === m.id ? "bg-[var(--mint)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
-          >
-            {m.label}
-          </button>
-        ))}
+      <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
+        <div className="flex items-center gap-2">
+          {/* not on a phone: there it would cover the rev counter */}
+          <span className="hidden md:contents">
+            <ScopeToggle on={scope} onChange={setScope} small />
+          </span>
+          <div role="group" aria-label="Mode" className="flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/80 font-mono text-[11px] uppercase tracking-[0.14em]">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={game === m.id}
+                data-testid={`engine-mode-${m.id}`}
+                onClick={() => setGame(m.id)}
+                className={`h-8 px-3.5 ${game === m.id ? "bg-[var(--mint)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* the V8's harmonics, live: they slide right as the revs climb */}
+        {scope && (
+          <div className="hidden md:block w-[300px]">
+            <Scope paused={paused} compact />
+          </div>
+        )}
       </div>
     </div>
   );

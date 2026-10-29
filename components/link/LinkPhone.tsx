@@ -10,6 +10,7 @@ import type { LinkMsg, LinkStats } from "@/lib/link/session";
 import { dragProgress, inSwipeZone, shouldUnlock } from "@/lib/link/swipe";
 import { isPaired } from "@/lib/link/state";
 import { mockRequested, useLink } from "@/lib/link/useLink";
+import { POINTER_SCREEN } from "@/lib/link/pointer";
 import { PieceControls } from "./controllers";
 
 // The visitor's own phone, as a controller. It joins the code the laptop shows,
@@ -150,9 +151,11 @@ function Controller() {
   }, [session]);
 
   // the tilt stream is for the home screen: on a game, only that game's own
-  // recogniser listens, so the orientation stream stops
+  // recogniser listens, so the orientation stream stops. The air pointer lab
+  // aims with it, so it keeps flowing there.
+  const aiming = onPiece && screen.piece === POINTER_SCREEN;
   useEffect(() => {
-    if (!session || !liveish || onPiece || motion === "denied" || motion === "unavailable") return;
+    if (!session || !liveish || (onPiece && !aiming) || motion === "denied" || motion === "unavailable") return;
     let seq = 0;
     let last = 0;
     let got = false;
@@ -175,7 +178,7 @@ function Controller() {
       window.removeEventListener("deviceorientation", onOrient);
       window.clearTimeout(timer);
     };
-  }, [session, liveish, motion, onPiece]);
+  }, [session, liveish, motion, onPiece, aiming]);
 
   useEffect(() => {
     if (!liveish) return;

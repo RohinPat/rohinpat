@@ -76,6 +76,21 @@ export default function LabIndex() {
             orientation message rate and loss, the phone&apos;s real devicemotion interval and both user agents), plus: laptop and phone models and browsers, which network,
             whether the tilt felt laggy or smooth, whether the golf and flick numbers looked plausible, and anything that failed or confused you.
           </p>
+
+          <h2>Test 3: air pointer (laptop plus phone)</h2>
+          <p>
+            Page: <a href="/lab/pointer">/lab/pointer</a> on the laptop. Question: can the phone, held like a TV remote, point at and click things on the laptop,
+            and does the dot drift?
+          </p>
+          <ol>
+            <li>Open /lab/pointer on the laptop and scan its QR code with the phone. Tap Connect and allow motion.</li>
+            <li>Point the top of the phone at the middle of the laptop screen and tap Center on the phone.</li>
+            <li>Start the drill and click about 20 targets by tapping the phone. Try the sliders if the dot is too fast, too slow or shaky.</li>
+            <li>Tap Center again, then Drift test, and hold the phone still on the middle for 30 seconds.</li>
+          </ol>
+          <p>
+            <b>Report back:</b> the drill table (hits, misses and median time for each size), the drift result, the slider values that felt best, and the phone model.
+          </p>
         </div>
       </main>
     </Portal>

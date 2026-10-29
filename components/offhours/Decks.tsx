@@ -6,6 +6,7 @@ import { useCanvas, type PieceProps } from "./useCanvas";
 import { getAudio } from "./audio";
 import { display, mono } from "./font";
 import { DECKS_CAL, OMEGA, scratchRate } from "./decksRemote";
+import Scope, { ScopeToggle } from "./Scope";
 
 // A 16-step drum machine that plays through a turntable. Each change to the
 // pattern re-renders one bar offline (OfflineAudioContext: kick, snare,
@@ -153,6 +154,7 @@ export default function Decks({ mode, paused }: PieceProps) {
   const [bpm, setBpm] = useState(92);
   const [running, setRunning] = useState(!play);
   const [step, setStep] = useState(-1);
+  const [scope, setScope] = useState(false);
   const deck = useRef<Deck | null>(null);
   const booting = useRef<Promise<void> | null>(null);
   const S = useRef({
@@ -526,8 +528,10 @@ export default function Decks({ mode, paused }: PieceProps) {
             >
               Cut · hold
             </button>
+            <ScopeToggle on={scope} onChange={setScope} />
           </div>
         )}
+        {play && scope && <Scope paused={paused} />}
         {/* played: steps are never smaller than 28px, so on a phone the rows scroll sideways together */}
         <div
           role={play ? "group" : undefined}

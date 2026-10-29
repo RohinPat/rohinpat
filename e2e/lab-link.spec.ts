@@ -250,13 +250,14 @@ test.describe("lab link", () => {
     await expect(page.getByTestId("status")).toContainText("/lab/link");
   });
 
-  test("the lab index lists both tests, is not indexable, and the camera is allowed only where needed", async ({ page, request }) => {
+  test("the lab index lists its tests, is not indexable, and the camera is allowed only where needed", async ({ page, request }) => {
     const res = await page.goto("/lab");
     expect(res!.status()).toBe(200);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     await expect(page.getByRole("link", { name: "/lab/swing" })).toHaveAttribute("href", "/lab/swing");
     await expect(page.getByRole("link", { name: "/lab/link" })).toHaveAttribute("href", "/lab/link");
-    await expect(page.getByText("Report back:")).toHaveCount(2);
+    await expect(page.getByRole("link", { name: "/lab/pointer" })).toHaveAttribute("href", "/lab/pointer");
+    await expect(page.getByText("Report back:")).toHaveCount(3);
 
     for (const p of ["/lab", "/lab/link", "/lab/link/phone", "/lab/swing"]) {
       const h = (await request.get(p)).headers()["permissions-policy"];

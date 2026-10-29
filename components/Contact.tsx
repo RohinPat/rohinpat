@@ -47,6 +47,12 @@ export default function Contact() {
             </a>
           </li>
           <li>
+            {/* a vCard (lib/vcard.ts): on a phone it opens straight into "new contact" */}
+            <a href="/rohin-patel.vcf" download="rohin-patel.vcf" className="inline-block py-1 link-underline">
+              Save contact
+            </a>
+          </li>
+          <li>
             <a href={site.github} target="_blank" rel="noopener noreferrer" className="inline-block py-1 link-underline">
               GitHub ↗<span className="sr-only"> (opens in a new tab)</span>
             </a>

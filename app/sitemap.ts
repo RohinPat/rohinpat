@@ -7,6 +7,7 @@ const ROUTES = [
   "/projects/closet-organizer",
   "/projects/phone-link",
   "/interests",
+  "/resume",
   "/contact",
   "/colophon",
   "/privacy",

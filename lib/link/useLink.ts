@@ -112,7 +112,12 @@ export function useLink(role: Role): UseLink {
 
   const start = useCallback(
     (code?: string) => {
-      if (live.current) return;
+      if (live.current) {
+        // the host's session was dropped and made again by someone else on the
+        // page (two Pair chips, Off hours and a game's): follow it to the new one
+        if (role !== "host" || !hostSession || live.current.session === hostResolved) return;
+        detach();
+      }
       const mine = ++gen.current;
       const made = role === "host" ? getHost() : createLink("phone", code);
       void made.then((s) => {
@@ -124,7 +129,7 @@ export function useLink(role: Role): UseLink {
         attach(s);
       });
     },
-    [role, attach],
+    [role, attach, detach],
   );
 
   const stop = useCallback(() => {
