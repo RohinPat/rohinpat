@@ -10,7 +10,12 @@ const C = ENGINE_CAL;
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 
-/** A keyboard's steering: `dir` is -1, 0 or 1 (the keys held). It ramps up, comes back faster, and crosses centre faster still. */
+/**
+ * A keyboard's steering: `dir` is -1, 0 or 1 (the keys held). A key that has just gone down starts at a quarter of
+ * lock (KEY_SNAP) and ramps from there, it comes back faster, and crosses centre faster still. Without the start a
+ * quick tap at 120 mph took 0.37 s to turn the nose a degree, long enough to feel like the key had done nothing;
+ * with it, 0.22 s, and a tap is still a nudge.
+ */
 export function stepKeySteer(v: number, dir: number, dt: number, upS = C.keySteerS, returnS = C.keyReturnS): number {
   if (dir === 0) {
     const d = dt / returnS;
@@ -18,7 +23,9 @@ export function stepKeySteer(v: number, dir: number, dt: number, upS = C.keyStee
   }
   const crossing = v !== 0 && Math.sign(v) !== dir;
   const d = dt / (crossing ? returnS * 0.7 : upS);
-  return clamp(v + dir * d, -1, 1);
+  const next = v + dir * d;
+  if (!crossing && next * dir < C.keySnap) return dir * C.keySnap;
+  return clamp(next, -1, 1);
 }
 
 /** The phone's last word on each axis, and what is held: the smoothed values live here. */

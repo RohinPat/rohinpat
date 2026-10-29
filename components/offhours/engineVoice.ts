@@ -10,13 +10,15 @@ import { LIMIT } from "./engineModel";
 // load-dependent low-pass shape it. Synthesized: no audio files, no requests.
 
 function v8Wave(ctx: BaseAudioContext) {
-  const N = 48;
+  // the oscillator runs at the cycle rate (7.5 Hz at idle), so a wave of 48 partials stopped at 360 Hz: an idle with nothing above
+  // a hum. 160 partials reach 1.2 kHz at idle (the filter decides how much of it gets out), and the browser band-limits them per note.
+  const N = 160;
   const re = new Float32Array(N), im = new Float32Array(N);
   for (let h = 1; h < N; h++) {
     const w = h % 8 === 0 ? 1 : h % 4 === 0 ? 0.75 : h % 2 === 0 ? 0.45 : 0.32;
     // fixed, uneven phases: the cross-plane lope
     const ph = (Math.sin(h * 12.9898) * 43758.5453) % (Math.PI * 2);
-    const a = w / Math.pow(h, 0.62);
+    const a = w / Math.pow(h, 0.72);
     re[h] = a * Math.cos(ph);
     im[h] = a * Math.sin(ph);
   }
@@ -52,7 +54,7 @@ export class EngineVoice {
     const low = ctx.createOscillator();
     low.setPeriodicWave(wave);
     const lowG = ctx.createGain();
-    lowG.gain.value = 0.55;
+    lowG.gain.value = 0.4;
     const shaper = ctx.createWaveShaper();
     const curve = new Float32Array(1024);
     for (let i = 0; i < 1024; i++) curve[i] = Math.tanh(((i / 1023) * 2 - 1) * 1.8);
@@ -72,6 +74,14 @@ export class EngineVoice {
     osc.connect(mix);
     low.connect(lowG).connect(mix);
     mix.connect(shaper).connect(body).connect(lp).connect(amp).connect(out);
+    // the bark: the shaped note again, with the weight taken off, so the mid range is there when the filter lets it through
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 240;
+    hp.Q.value = 0.7;
+    const bark = ctx.createGain();
+    bark.gain.value = 1.1;
+    shaper.connect(hp).connect(bark).connect(lp);
     // intake roar
     const src = ctx.createBufferSource();
     src.buffer = noise(ctx);
@@ -102,11 +112,14 @@ export class EngineVoice {
     this.osc.frequency.setTargetAtTime(cycle, now, 0.02);
     this.low.frequency.setTargetAtTime(cycle / 2, now, 0.02);
     const load = 0.3 + 0.7 * s.pedal;
-    // off throttle it goes dull and boomy; on throttle it opens up, but stays low
-    this.lp.frequency.setTargetAtTime(180 + s.rpm * (0.09 + 0.1 * load), now, 0.04);
+    const rev = Math.min(1, s.rpm / LIMIT);
+    // Off throttle it goes duller and quieter; on throttle it opens up and gets louder with the revs. The filter
+    // starts high enough at idle (about 600 Hz) that a laptop's speakers, which give nothing under 150 Hz, still
+    // have a note to play: measured offline, the old idle put a third of its energy above 150 Hz and none above 400.
+    this.lp.frequency.setTargetAtTime(520 + s.rpm * (0.09 + 0.13 * load), now, 0.04);
     const limiterGate = s.rpm >= LIMIT - 40 && s.throttle ? (Math.random() < 0.5 ? 0.15 : 1) : 1;
-    this.amp.gain.setTargetAtTime((s.cut ? 0.1 : 0.22 + load * 0.28) * limiterGate * level, now, 0.02);
-    this.intake.gain.setTargetAtTime((s.throttle ? 0.02 + (s.rpm / LIMIT) * 0.05 : 0.008) * level, now, 0.05);
+    this.amp.gain.setTargetAtTime((s.cut ? 0.1 : 0.12 + load * 0.26 + rev * 0.1) * limiterGate * level, now, 0.02);
+    this.intake.gain.setTargetAtTime((s.throttle ? 0.02 + rev * 0.07 : 0.008) * level, now, 0.05);
   }
 
   /** the note goes quiet (a pause, a hidden tab, the end of a run) but the voice stays built */

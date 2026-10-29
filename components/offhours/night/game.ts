@@ -4,7 +4,8 @@ import { newCar, resetCar, shiftGear, speedOf, stepCar, type Car } from "./car";
 import { clearFx, stepFx } from "./fx";
 import { better, createRecorder, newPose, samplePose, timeAt, type Ghost } from "./ghost";
 import { bankNow, loseDrift, newDrift, pending, stepDrift, type Drift } from "./score";
-import { newScene, stepCamera, stepFxFromCar, type Scene } from "./scene";
+import { launchSmoke, newScene, stepCamera, stepFxFromCar, type Scene } from "./scene";
+import { MEDALS, medalsAt, nextMedal } from "./medals";
 import { getTarget, poseOf, type Target } from "./target";
 import { planSpeed } from "./ai";
 import { getRoad, pointAt } from "./road";
@@ -28,18 +29,22 @@ const START_S = 12;
 
 export type Phase = "ready" | "count" | "run" | "done";
 export type Tone = "good" | "bad" | "info" | "drift";
-export type Toast = { text: string; sub: string; tone: Tone; age: number; life: number };
+/** where a toast is drawn: the middle of the road (what just happened), or by the drift panel (what a slide paid) */
+export type Slot = "main" | "bank";
+export type Toast = { text: string; sub: string; tone: Tone; age: number; life: number; slot: Slot };
 
 export type GameEvent =
   | { kind: "count"; n: number }
-  | { kind: "go" }
+  | { kind: "go"; rpm: number }
   | { kind: "checkpoint"; n: number; of: number; bonusS: number; timeLeft: number }
   | { kind: "hit"; speed: number }
   | { kind: "spin" }
   | { kind: "chain"; combo: number }
   | { kind: "bank"; points: number; combo: number }
   | { kind: "lost"; points: number }
-  | { kind: "shift"; up: boolean }
+  | { kind: "shift"; up: boolean; hard: boolean }
+  | { kind: "backfire" }
+  | { kind: "medal"; n: number }
   | { kind: "end"; result: Result };
 
 export type Result = {
@@ -59,6 +64,10 @@ export type Result = {
   prevBestScore: number;
   /** seconds behind (+) or ahead (-) of the target driver at the finish, or null if the run did not finish */
   vsTargetS: number | null;
+  /** medals this run earned (0 to 3), the most any run of this visit has, and the next one to go for from the visit's best (null at the top) */
+  medals: number;
+  bestMedals: number;
+  next: { name: string; score: number } | null;
 };
 
 /** The corner coming up faster than the car can take it: which way it turns (-1 left, 1 right) and how far off, m. */
@@ -72,11 +81,23 @@ export const getBestScore = () => bestScore;
 export const forgetBestRun = () => {
   bestRun = null;
   bestScore = 0;
+  coached.clear();
 };
 
-/** The corner warning looks this many seconds of road ahead, and lights when the car is over the plan's speed there by this much. */
-const CUE_LEAD_S = 1.5;
-const CUE_MARGIN = 1.03;
+/**
+ * The corner warning looks this many seconds of road ahead (and a little more), and
+ * lights when the car is over the plan's speed there by this much. The plan's speed
+ * already allows for braking at 8.2 m/s^2, so the look-ahead has to be long: a driver
+ * who floors it on the opening straight gets the first warning 0.4 s sooner than at
+ * 1.5 s / 10 m (13.8 s into the run, not 14.2), and one at 80% of the plan's pace
+ * still sees it under 2% of the run.
+ */
+const CUE_LEAD_S = 2.3;
+const CUE_LEAD_M = 25;
+const CUE_MARGIN = 1.05;
+
+/** a first run is coached: the lines it is told, once each per visit, are kept here (memory only) */
+const coached = new Set<string>();
 
 const MPH = 2.2369;
 export const mph = (ms: number) => ms * MPH;
@@ -104,8 +125,10 @@ export class NightGame {
   bonusPoints = 0;
   result: Result | null = null;
   toasts: Toast[] = [];
-  /** the clock's last second flashes; the gate just passed lights up */
+  /** the clock's last second flashes; the gate just passed lights up (and the seconds it added are shown for a moment) */
   cpFlash = 0;
+  bonusShown = 0;
+  bonusS = 0;
   hitFlash = 0;
   bankFlash = 0;
   goFlash = 0;
@@ -118,6 +141,14 @@ export class NightGame {
   deltaOn = false;
   /** the corner warning: lit while the road ahead needs more braking than the car has room for */
   readonly cue: CornerCue = { on: false, dir: 1, dist: 0 };
+  /** a line of help for a first run (a key the dash turns into words), and how long it has left on screen */
+  coach = "";
+  coachT = 0;
+  /** this run has no best score before it: it is coached */
+  firstRun = true;
+  /** medals earned so far this run */
+  medals = 0;
+  private slideT = 0;
   onEvent: (e: GameEvent) => void = () => {};
 
   private acc = 0;
@@ -156,6 +187,7 @@ export class NightGame {
   start() {
     if (this.phase === "ready" || (this.phase === "done" && this.phaseT > 0.7)) {
       this.reset();
+      this.firstRun = bestScore === 0;
       this.phase = "count";
       this.phaseT = 0;
       this.lastCount = 4;
@@ -172,6 +204,11 @@ export class NightGame {
     this.result = null;
     this.toasts.length = 0;
     this.cpFlash = this.hitFlash = this.bankFlash = this.goFlash = 0;
+    this.bonusShown = 0;
+    this.coach = "";
+    this.coachT = 0;
+    this.medals = 0;
+    this.slideT = 0;
     this.endT = 0;
     this.endWhy = null;
     this.spinT = 0;
@@ -192,12 +229,29 @@ export class NightGame {
 
   shift(dir: 1 | -1) {
     if (this.phase !== "run" || this.car.auto) return;
-    if (shiftGear(this.car, dir)) this.onEvent({ kind: "shift", up: dir > 0 });
+    // the car says it shifted (car.shifted), whoever asked: the page hears it with the automatic box's changes
+    shiftGear(this.car, dir);
   }
 
-  toast(text: string, sub: string, tone: Tone, life = 1.6) {
-    if (this.toasts.length >= 4) this.toasts.shift();
-    this.toasts.push({ text, sub, tone, age: 0, life });
+  toast(text: string, sub: string, tone: Tone, life = 1.6, slot: Slot = "main") {
+    // a few at a time in the middle of the road, one by the drift panel: a new one makes room by dropping the oldest of its place
+    const cap = slot === "main" ? 2 : 1;
+    let same = this.toasts.filter((t) => t.slot === slot).length;
+    for (let i = 0; i < this.toasts.length && same >= cap; ) {
+      if (this.toasts[i].slot === slot) {
+        this.toasts.splice(i, 1);
+        same--;
+      } else i++;
+    }
+    this.toasts.push({ text, sub, tone, age: 0, life, slot });
+  }
+
+  /** a line of help for a first run, once per visit */
+  private help(key: string, life = 4.2) {
+    if (!this.firstRun || coached.has(key)) return;
+    coached.add(key);
+    this.coach = key;
+    this.coachT = life;
   }
 
   /** advance by a frame's time with these inputs */
@@ -219,18 +273,22 @@ export class NightGame {
       const e = stepDrift(this.drift, c.slip, speedOf(c), dt);
       if (e.kind === "bank") {
         this.bankFlash = 1;
-        this.toast(`+${e.points.toLocaleString("en-US")}`, e.combo > 1 ? `drift ×${e.combo}` : "drift", "drift", 1.5);
+        this.toast(`+${e.points.toLocaleString("en-US")}`, e.combo > 1 ? `drift ×${e.combo}` : "drift", "drift", 1.6, "bank");
+        this.scene.cam.kick = Math.max(this.scene.cam.kick, Math.min(0.5, 0.15 + e.combo * 0.06));
         this.onEvent({ kind: "bank", points: e.points, combo: e.combo });
       } else if (e.kind === "chain") {
         this.onEvent({ kind: "chain", combo: e.combo });
       }
     }
+    if (this.phase === "run" && this.endWhy === null) this.stepHelp(dt);
     if (this.phase === "run" && this.endWhy === null && this.recoverT <= 0) this.stepCue(dt);
     else {
       this.cue.on = false;
       this.cueOn = this.cueOff = 0;
     }
     this.cpFlash = Math.max(0, this.cpFlash - dt);
+    this.bonusShown = Math.max(0, this.bonusShown - dt);
+    this.coachT = Math.max(0, this.coachT - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
     this.bankFlash = Math.max(0, this.bankFlash - dt * 1.8);
     this.goFlash = Math.max(0, this.goFlash - dt);
@@ -280,6 +338,7 @@ export class NightGame {
     if (this.recoverT > 0) this.recover(c);
     stepCar(c, drive, this.road, STEP);
     this.rec.push(this.clock, poseOf(c, this.pose));
+    this.carEvents();
 
     if (!ending) {
       if (this.clock > RUN.graceS) this.timeLeft -= STEP;
@@ -307,13 +366,32 @@ export class NightGame {
     }
   }
 
+  /** what the car did this step that the page shows and plays: a gear change, a crackle off the throttle */
+  private carEvents() {
+    const c = this.car;
+    if (c.shifted !== 0) {
+      const up = c.shifted > 0;
+      this.onEvent({ kind: "shift", up, hard: up && c.pedal > 0.5 });
+      if (up && c.pedal > 0.5) this.scene.cam.kick = Math.max(this.scene.cam.kick, 0.22);
+      c.shifted = 0;
+    }
+    if (c.lift) {
+      c.lift = false;
+      this.onEvent({ kind: "backfire" });
+    }
+  }
+
   private go() {
     this.phase = "run";
     this.phaseT = 0;
     this.clock = 0;
     this.goFlash = 1.1;
     this.rec.reset();
-    this.onEvent({ kind: "go" });
+    // the launch: the revs that were held against the brakes go to the tyres (smoke, a punch of the lens)
+    const held = Math.max(0, Math.min(1, (this.car.rpm - 2000) / 3500));
+    launchSmoke(this.scene, held);
+    this.scene.cam.kick = Math.max(this.scene.cam.kick, 0.35 + 0.65 * held);
+    this.onEvent({ kind: "go", rpm: this.car.rpm });
   }
 
   private gate() {
@@ -325,7 +403,10 @@ export class NightGame {
     const add = last ? 0 : this.target.bonusS[this.cp - 1];
     this.timeLeft += add;
     this.cpFlash = 1.6;
-    this.toast(last ? "FINISH" : `CHECKPOINT ${this.cp}/${road.checks.length}`, add ? `+${add.toFixed(1).replace(/\.0$/, "")} s` : `${Math.round(this.timeLeft)} s left`, "good", 2);
+    this.bonusS = add;
+    this.bonusShown = add > 0 ? 2.4 : 0;
+    this.scene.cam.kick = Math.max(this.scene.cam.kick, 0.5);
+    this.toast(last ? "FINISH" : `CHECKPOINT ${this.cp} OF ${road.checks.length}`, add ? `+${add.toFixed(1).replace(/\.0$/, "")} SECONDS` : `${Math.round(this.timeLeft)} s left`, "good", 2);
     this.onEvent({ kind: "checkpoint", n: this.cp, of: road.checks.length, bonusS: add, timeLeft: this.timeLeft });
     if (last) {
       this.finishAt = this.clock;
@@ -340,9 +421,10 @@ export class NightGame {
     this.scene.cam.shake = ENGINE_CAL.cam.shakeHitPx;
     const e = loseDrift(this.drift);
     if (e.kind === "lost") {
-      this.toast("COMBO LOST", `−${e.points.toLocaleString("en-US")}`, "bad", 1.6);
+      if (e.points >= 100) this.toast("COMBO LOST", `−${e.points.toLocaleString("en-US")}`, "bad", 1.6);
       this.onEvent({ kind: "lost", points: e.points });
-    }
+      this.help("wall-points");
+    } else this.help("wall");
     this.onEvent({ kind: "hit", speed });
   }
 
@@ -368,6 +450,24 @@ export class NightGame {
     c.u *= k;
   }
 
+  /** the medals as the score crosses them, and the lines of help a first run gets */
+  private stepHelp(dt: number) {
+    const m = medalsAt(this.score);
+    if (m > this.medals) {
+      this.medals = m;
+      const medal = MEDALS[m - 1];
+      this.toast(medal.name, `${medal.score.toLocaleString("en-US")} POINTS`, "good", 2.2);
+      this.onEvent({ kind: "medal", n: m });
+    }
+    if (this.firstRun) {
+      if (this.clock > 0.8 && this.clock < 1.2) this.help("steer", 5);
+      if (this.drift.sliding) {
+        this.slideT += dt;
+        if (this.slideT > 0.3) this.help("slide");
+      } else this.slideT = 0;
+    }
+  }
+
   /**
    * The corner warning. The target driver's plan knows the fastest speed the tyres
    * allow at every point of the road, braked back from each corner. If the car is
@@ -379,7 +479,7 @@ export class NightGame {
   private stepCue(dt: number) {
     const c = this.car;
     const v = speedOf(c);
-    const lead = CUE_LEAD_S * v + 10;
+    const lead = CUE_LEAD_S * v + CUE_LEAD_M;
     const over = !this.drift.sliding && v > 14 && v > planSpeed(this.target.plan, this.road, c.s + lead) * CUE_MARGIN;
     const cue = this.cue;
     if (over) {
@@ -436,6 +536,9 @@ export class NightGame {
       bestScore,
       prevBestScore,
       vsTargetS: finished ? run.time - this.target.ghost.time : null,
+      medals: medalsAt(score),
+      bestMedals: medalsAt(bestScore),
+      next: nextMedal(bestScore),
     };
     this.phase = "done";
     this.phaseT = 0;
@@ -453,9 +556,11 @@ export class NightGame {
     r.speed = speedOf(c);
     r.slip = c.slip;
     r.skid = this.phase === "run" || this.phase === "done" ? c.skid : 0;
-    r.brake = this.phase === "ready" || this.phase === "count" ? 0.5 : c.brake;
+    // the handbrake lights the tail lamps, as a real one does
+    r.brake = this.phase === "ready" || this.phase === "count" ? 0.5 : Math.max(c.brake, c.hand > 0.5 ? 0.75 : 0);
     r.pedal = c.pedal;
     r.ay = c.ay;
+    r.ax = c.ax;
     r.pop = c.pop;
     r.scrape = c.scrape && (this.phase === "run" || this.phase === "done");
     r.wallSide = c.wallSide;

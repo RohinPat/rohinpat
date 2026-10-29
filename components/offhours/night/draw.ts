@@ -1,7 +1,8 @@
 import { ENGINE_CAL } from "../engineRemote";
 import { BUCKETS, bucketOf, type Assets, type Pano } from "./assets";
 import { carPoint, drawCar, EXHAUST, TAIL_LAMPS, type CarLook, type CarPose } from "./carMesh";
-import { SMOKE_N, SPARK_N } from "./fx";
+import { fontFamilies } from "../font";
+import { MARK_N, SMOKE_N, SPARK_N } from "./fx";
 import { BRIDGE, ROCK_L, ROCK_R, TUNNEL, heightAt, pointAt, type Point } from "./road";
 import type { Scene } from "./scene";
 import { P, newView, project, type View } from "./view";
@@ -22,6 +23,8 @@ import { P, newView, project, type View } from "./view";
 const CAM = ENGINE_CAL.cam;
 
 const MAXN = 210;
+/** the road's tone changes every this many segments */
+const BAND = 3;
 // the stations across the road each node is projected at
 const S_ROADL = 0, S_ROADR = 1, S_EDGE_L0 = 2, S_EDGE_L1 = 3, S_EDGE_R0 = 4, S_EDGE_R1 = 5, S_DASH_L = 6, S_DASH_R = 7, S_RAIL0_L = 8, S_RAIL0_R = 9, S_RAIL1_L = 10, S_RAIL1_R = 11, S_RAIL2_L = 12, S_RAIL2_R = 13;
 const S_ROCK_L = 14, S_ROCK_R = 15, S_TUN_LB = 16, S_TUN_RB = 17, S_TUN_LT = 18, S_TUN_RT = 19;
@@ -52,15 +55,24 @@ function station(si: number, k: number, lat: number, yo: number, f: number, w2: 
   SY[si * MAXN + k] = hy - (f * (NCY[k] + yo)) / z;
 }
 
-function pano(ctx: CanvasRenderingContext2D, p: Pano, heading: number, pxPerRad: number, factor: number, bottomY: number, w: number) {
-  const off = (((heading * pxPerRad * factor) % p.W) + p.W) % p.W;
-  const y = bottomY - p.H;
+function pano(ctx: CanvasRenderingContext2D, p: Pano, heading: number, pxPerRad: number, factor: number, bottomY: number, w: number, whole: boolean) {
+  let off = (((heading * pxPerRad * factor) % p.W) + p.W) % p.W;
+  let y = bottomY - p.H;
+  // at a 1:1 blit a whole-pixel offset is a copy; a fractional one is a resample of the whole strip
+  if (whole) {
+    off = Math.round(off);
+    y = Math.round(y);
+  }
   ctx.drawImage(p.c, -off, y);
   if (p.W - off < w) ctx.drawImage(p.c, p.W - off, y);
 }
 
-/** one frame of the world */
-export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, quality: number) {
+/**
+ * One frame of the world. `quality` (0 best to 2) is how far down the road is drawn; `decor` (the same scale, by default the same
+ * number) is how much of the picture beside it is: step 1 drops the vignette and the speed lines, step 2 the two middle ranges and the
+ * city. The tile draws a short road at decor 0, since its picture is the whole point.
+ */
+export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, quality: number, decor = quality) {
   const { w, h } = a;
   const cam = sc.cam;
   const road = sc.road;
@@ -93,13 +105,19 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
   ctx.save();
   if (shx) ctx.translate(shx, 0);
 
-  // ---- the sky and the far country
-  ctx.drawImage(a.backdrop, -4, hy - a.hy0 - a.backdropTop, w + 8, a.backdrop.height);
-  pano(ctx, a.stars, cam.heading, a.px, 0.96, hy, w);
-  pano(ctx, a.far, cam.heading, a.px, 1.0, hy + 3, w);
-  pano(ctx, a.city, cam.heading, a.px, 1.04, hy + h * 0.115, w);
-  pano(ctx, a.mid, cam.heading, a.px, 1.1, hy + h * 0.125, w);
-  pano(ctx, a.near, cam.heading, a.px, 1.22, hy + h * 0.15, w);
+  // ---- the sky and the far country (at 1x the strips are copied with whole-pixel offsets, no resampling; the quality steps drop the layers the eye misses least)
+  const whole = a.dpr <= 1.01;
+  if (whole) ctx.imageSmoothingEnabled = false;
+  const bdPx = 1 / a.dpr;
+  ctx.drawImage(a.backdrop, -a.backdropPad, Math.round((hy - a.hy0 - a.backdropTop) * a.dpr) * bdPx, a.backdrop.width * bdPx, a.backdrop.height * bdPx);
+  pano(ctx, a.stars, cam.heading, a.px, 0.96, hy, w, whole);
+  pano(ctx, a.far, cam.heading, a.px, 1.0, hy + 3, w, whole);
+  if (decor < 2) {
+    pano(ctx, a.city, cam.heading, a.px, 1.04, hy + h * 0.115, w, whole);
+    pano(ctx, a.mid, cam.heading, a.px, 1.1, hy + h * 0.125, w, whole);
+  }
+  pano(ctx, a.near, cam.heading, a.px, 1.22, hy + h * 0.15, w, whole);
+  ctx.imageSmoothingEnabled = true;
 
   // ---- the nodes in front of the camera
   const seg = road.segM;
@@ -189,16 +207,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
     if (cur >= 0) ctx.fill();
   }
 
-  // ---- the road itself
+  // ---- the road itself, laid in bands of two tones (BAND segments each): they stream under the car, which is most of what a road at night says about speed
   cur = -1;
   for (let t = nVis - 1; t >= 0; t--) {
     const k = VIS[t];
     const b = NB[k];
-    if (b !== cur) {
+    const key = b * 2 + (Math.floor((i0 + k) / BAND) & 1);
+    if (key !== cur) {
       if (cur >= 0) ctx.fill();
-      ctx.fillStyle = pal.road[b];
+      ctx.fillStyle = key & 1 ? pal.roadAlt[b] : pal.road[b];
       ctx.beginPath();
-      cur = b;
+      cur = key;
     }
     ctx.moveTo(get(S_ROADL, k), gety(S_ROADL, k));
     ctx.lineTo(get(S_ROADR, k), gety(S_ROADR, k));
@@ -237,6 +256,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
     }
   }
   if (cur >= 0) ctx.fill();
+
+  // ---- the rubber the car has laid
+  if (!sc.reduce) drawMarks(ctx, sc, v, carS - 10, carS + 140);
 
   // ---- the guardrail (a solid parapet on the bridge, walls in the tunnel)
   cur = -1;
@@ -466,14 +488,76 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
       if ((pass === 0) !== d > dCar) continue;
       if (d < 3 || d > 330) continue;
       drawCar(ctx, v, gp, g.kind === 0 ? GHOST_TARGET : GHOST_BEST);
+      if (d > 7 && d < 140) tag(ctx, v, gp, g.kind === 0 ? "TARGET" : "YOUR BEST", g.kind === 0 ? "#8ad9a8" : "#f2ead7", d);
     }
   }
   drawSparks(ctx, sc, v);
 
   // ---- a soft shade around the edges, and speed lines
   ctx.restore();
-  ctx.drawImage(a.vignette, 0, 0, w, h);
-  if (!sc.reduce) speedLines(ctx, a, sc, hy, shx);
+  if (decor < 1) ctx.drawImage(a.vignette, 0, 0, a.vignette.width / a.dpr, a.vignette.height / a.dpr);
+  if (!sc.reduce && decor < 2) speedLines(ctx, a, sc, hy, shx);
+}
+
+/** a name over a ghost car, small and fading with distance */
+function tag(ctx: CanvasRenderingContext2D, v: View, p: CarPose, text: string, color: string, dist: number) {
+  if (!project(v, p.x, p.y + 1.9, p.z)) return;
+  const size = Math.max(9, Math.min(13, (v.f * 0.34) / P.z));
+  ctx.font = `700 ${size.toFixed(1)}px ${fontFamilies().mono}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.globalAlpha = Math.max(0.25, Math.min(0.9, (140 - dist) / 90));
+  ctx.fillStyle = "rgba(6,9,8,0.7)";
+  const tw = ctx.measureText(text).width;
+  ctx.fillRect(P.x - tw / 2 - 5, P.y - size - 3, tw + 10, size + 7);
+  ctx.fillStyle = color;
+  ctx.fillText(text, P.x, P.y);
+  ctx.globalAlpha = 1;
+}
+
+/** Skid marks: two dark ribbons of quads, one path and one fill per darkness. Points are in road coordinates, newest first in the ring. */
+function drawMarks(ctx: CanvasRenderingContext2D, sc: Scene, v: View, sLo: number, sHi: number) {
+  const fx = sc.fx;
+  if (fx.markN === 0) return;
+  const road = sc.road;
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.fillStyle = pass ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    for (let wh = 0; wh < 2; wh++) {
+      const ms = fx.ms[wh];
+      const ml = fx.ml[wh];
+      const ma = fx.ma[wh];
+      let have = false;
+      let px = 0, py = 0, pw = 0;
+      for (let n = 0; n < fx.markN; n++) {
+        const i = (fx.markI[wh] - 1 - n + MARK_N * 2) % MARK_N;
+        const dk = ma[i];
+        const s = ms[i];
+        if (dk <= 0 || s < sLo || s > sHi) {
+          have = false;
+          continue;
+        }
+        pointAt(road, s, ml[i], tmp);
+        if (!project(v, tmp.x, tmp.y, tmp.z)) {
+          have = false;
+          continue;
+        }
+        const x = P.x, y = P.y, hw = Math.max(0.5, (0.12 * v.f) / P.z);
+        if (have && (dk > 0.72) === (pass === 1) && Math.abs(y - py) < 90) {
+          ctx.moveTo(px - pw, py);
+          ctx.lineTo(px + pw, py);
+          ctx.lineTo(x + hw, y);
+          ctx.lineTo(x - hw, y);
+          ctx.closePath();
+        }
+        have = true;
+        px = x;
+        py = y;
+        pw = hw;
+      }
+    }
+    ctx.fill();
+  }
 }
 
 const GHOST_TARGET: CarLook = { brake: 0, ghost: true, alpha: 1, tint: "#8ad9a8" };
@@ -553,23 +637,19 @@ function drawMainCar(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: Vie
   ctx.globalCompositeOperation = "source-over";
 }
 
+/** the beams: a wide pool well down the road and a hotter one just ahead of the bonnet, from the one sprite (no gradient built in a frame) */
 function headlights(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View) {
   const car = sc.car;
-  pointAt(sc.road, car.s + 22, car.lat * 0.7, tmp);
-  if (!project(v, tmp.x, tmp.y, tmp.z)) return;
-  const x = P.x, y = P.y, z = P.z;
-  const rw = (v.f * 9) / z;
-  ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.translate(x, y);
-  ctx.scale(1, 0.3);
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw * 1.5);
-  g.addColorStop(0, "rgba(255,240,205,0.30)");
-  g.addColorStop(0.35, "rgba(255,230,190,0.13)");
-  g.addColorStop(1, "rgba(255,225,180,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(-rw * 1.6, -rw * 1.6, rw * 3.2, rw * 3.2);
-  ctx.restore();
+  for (let i = 0; i < 2; i++) {
+    pointAt(sc.road, car.s + (i ? 11 : 24), car.lat * (i ? 0.85 : 0.7), tmp);
+    if (!project(v, tmp.x, tmp.y, tmp.z)) continue;
+    const rw = (v.f * (i ? 6.5 : 11)) / P.z;
+    ctx.globalAlpha = i ? 0.5 : 0.62;
+    ctx.drawImage(a.sprites.white, P.x - rw, P.y - rw * 0.2, rw * 2, rw * 0.4);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawGate(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, s: number, finish: boolean, passed: boolean) {
