@@ -55,7 +55,7 @@ describe("cars: the roadside", () => {
       }
     }
     // a road with a roadside: pines, a few houses, boulders, lamps
-    expect(trees).toBeGreaterThan(200);
+    expect(trees).toBeGreaterThan(120);
     expect(houses).toBeGreaterThan(5);
     expect(boulders).toBeGreaterThan(20);
     expect(lamps).toBeGreaterThan(40);

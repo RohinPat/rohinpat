@@ -112,7 +112,10 @@ export const ENGINE_CAL = {
     /** in a slide the lock opens up to this (rad), so there is room to counter-steer */
     steerSlideRad: 0.3,
     /** grinding along the guardrail slows the car this much, m/s^2 (and a hit costs speed on top) */
-    scrapeDecel: 6,
+    scrapeDecel: 9,
+    /** a hit takes this share of the speed along the rail for each m/s it came in at the wall, at most wallLossMax */
+    wallLossPerMs: 0.03,
+    wallLossMax: 0.45,
     /** body size for the guardrail, m */
     halfWidthM: 0.92,
     halfLenM: 2.2,
@@ -129,11 +132,14 @@ export const ENGINE_CAL = {
     /** the guardrail stands this far outside the paved edge, m */
     railOffsetM: 0.9,
     /** a checkpoint every this many metres, how many there are (the last is the finish), and a run-out after it, m */
-    checkEveryM: 720,
+    checkEveryM: 460,
     checkpoints: 8,
-    runOutM: 520,
+    runOutM: 420,
+    /** between corners: this much straight at least, and up to this much more (m, less as the road goes on) */
+    straightMinM: 36,
+    straightVarM: 100,
     /** the first straight, m */
-    startStraightM: 220,
+    startStraightM: 200,
   },
 
   // ------------------------------------------------------ night run: the run itself
@@ -141,17 +147,22 @@ export const ENGINE_CAL = {
     /** the countdown before GO, s */
     countS: 2.7,
     /** time on the clock at the start and added at each checkpoint, as a share of what the target driver needs for the leg, plus a flat amount, s */
-    startShare: 1.45,
-    startFlatS: 7,
-    legShare: 1.4,
-    legFlatS: 5,
+    startShare: 1.35,
+    startFlatS: 3.5,
+    legShare: 1.2,
+    legFlatS: 1.5,
     /** the clock does not run in the first moments after GO (the launch), s */
     graceS: 0.6,
     /** after the clock hits zero (or the finish) the car coasts this long before the end screen, s */
     coastS: 2.2,
-    /** points: a checkpoint, a second left over at the finish */
+    /** points: a checkpoint, a leg driven without touching the rail or spinning, a second left over at the finish */
     checkpointPoints: 500,
-    finishSecondPoints: 120,
+    cleanLegPoints: 400,
+    finishSecondPoints: 250,
+    /** a touch of the rail (one contact: grinding along it is one) takes this off the clock, s */
+    railPenaltyS: 1.5,
+    /** the corner warning looks this many seconds (and metres) of road ahead and lights when the car is over the plan's speed there by this share */
+    cue: { leadS: 2.6, leadM: 30, margin: 1.0 },
     /** the target driver's pace as a share of the grip limit (under 1: it can be beaten) */
     targetPace: 0.9,
   },
@@ -161,8 +172,12 @@ export const ENGINE_CAL = {
     /** sliding counts above this body angle (deg) and speed (m/s) */
     minAngleDeg: 10,
     minSpeedMs: 11,
-    /** points a second = this x angle (deg) x speed (m/s), up to maxAngleDeg of angle counted */
-    pointsPerDegMs: 0.3,
+    /** points a second = this x angle (deg) x speed (m/s) x speed / refSpeedMs, up to maxAngleDeg of angle counted */
+    pointsPerDegMs: 0.48,
+    refSpeedMs: 30,
+    /** a slide on straight road earns this share of what it would in a corner; the share climbs to all of it by a corner of this radius (m) */
+    straightPay: 0.4,
+    refRadiusM: 300,
     maxAngleDeg: 55,
     /** a combo step every this many seconds of sliding, up to comboMax; a slide that starts before the points are banked chains (+1) */
     comboEveryS: 1.15,
@@ -225,6 +240,18 @@ export const ENGINE_CAL = {
   /** a key that has just gone down starts at this share of lock, not at nothing (0..1) */
   keySnap: 0.25,
   keyReturnS: 0.14,
+  /** and at speed (from keyFastFromMs to keyFastAtMs, m/s) the first nudge grows to keySnapFast and the ramp to lock speeds up to keySteerFastS: the wheel's lock has closed by then (a few hundredths of a radian at 120 mph), and quarter-lock taps were too little to hold a line (scripted keyboard drivers hit the rail 2x as often as with these) */
+  keyFastFromMs: 18,
+  keyFastAtMs: 52,
+  keySnapFast: 0.35,
+  keySteerFastS: 0.18,
+  /** the gas and the brake on a keyboard ramp too: the first touch is this share of the pedal, full after this long, off after this long (s) */
+  keyGasSnap: 0.3,
+  keyGasS: 0.32,
+  keyGasOffS: 0.12,
+  keyBrakeSnap: 0.28,
+  keyBrakeS: 0.26,
+  keyBrakeOffS: 0.09,
   /** the phone is told the run this often at most, ms */
   nightStateEveryMs: 100,
 };

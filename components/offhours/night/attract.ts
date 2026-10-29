@@ -7,11 +7,16 @@ import { getTarget, type Target } from "./target";
 // The tile's attract mode: the target driver, replayed from its recording,
 // cruising the canyon with the same camera, the same smoke and the same
 // picture as the game, and none of the cost of driving: no physics, no input,
-// no sound. It starts a few seconds in (already rolling) and loops. Under
-// reduced motion it is one still frame, caught at the biggest slide.
+// no sound. It loops a stretch of the road with the biggest slide in it (the
+// opening straight and the tunnel say little to someone scrolling past), and
+// starts already rolling. Under reduced motion it is one still frame, caught at
+// the biggest slide.
 
 const START_T = 6;
 const LOOP_PAD = 1.5;
+/** the loop starts this long before the biggest slide, and runs this long, s */
+const LEAD_S = 11;
+const LOOP_S = 34;
 
 /** the moment of the widest slide in the first minute and a half, for a still frame */
 export function widestSlide(g: Ghost): number {
@@ -28,10 +33,17 @@ export function widestSlide(g: Ghost): number {
   return best;
 }
 
+/** where the tile's loop starts and ends in the target's recording, s */
+export function attractWindow(g: Ghost): { from: number; to: number } {
+  const from = Math.max(START_T, widestSlide(g) - LEAD_S);
+  return { from, to: Math.min(g.time + LOOP_PAD, from + LOOP_S) };
+}
+
 export class Attract {
   readonly target: Target = getTarget();
   readonly scene: Scene;
-  t = START_T;
+  private win = attractWindow(this.target.ghost);
+  t = this.win.from;
   private pose = newPose();
 
   constructor(reduce: boolean) {
@@ -70,8 +82,8 @@ export class Attract {
   update(dt: number) {
     if (dt > 0) {
       this.t += dt;
-      if (this.t > this.target.ghost.time + LOOP_PAD) {
-        this.t = START_T;
+      if (this.t > this.win.to) {
+        this.t = this.win.from;
         this.scene.cam.fresh = true;
         clearFx(this.scene.fx);
       }

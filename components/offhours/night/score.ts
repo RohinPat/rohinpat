@@ -6,7 +6,10 @@ import { ENGINE_CAL } from "../engineRemote";
 // they bank when the car has been straight for a moment. A new slide that
 // starts before they bank chains onto the same combo (+1), which is how an
 // S-bend becomes one long score. Hit the wall, or spin, and what was unbanked
-// is lost. Pure, so it is unit-tested; the numbers are ENGINE_CAL.drift.
+// is lost. A slide pays more the faster it is (a slow one at the minimum speed
+// pays a third of one at full tilt) and more in a corner than on a straight
+// (a wiggle on straight road pays 40%: otherwise a slalom down the straights
+// out-scores the canyon). Pure, so it is unit-tested; the numbers are ENGINE_CAL.drift.
 
 const C = ENGINE_CAL.drift;
 
@@ -46,14 +49,20 @@ export const pending = (d: Drift) => Math.round(d.base * Math.max(1, d.combo));
 /** Is a car at this body angle (rad) and speed (m/s) sliding? */
 export const isSliding = (slip: number, speed: number) => Math.abs(slip) * (180 / Math.PI) >= C.minAngleDeg && speed >= C.minSpeedMs;
 
-/** Points a second for a slide at this angle (rad) and speed, before the multiplier. */
+/** Points a second for a slide at this angle (rad) and speed, before the multiplier: the speed counts twice (once as the distance covered, once as the nerve it takes). */
 export function driftRate(slip: number, speed: number): number {
   const deg = Math.min(C.maxAngleDeg, Math.abs(slip) * (180 / Math.PI));
-  return C.pointsPerDegMs * deg * speed;
+  return C.pointsPerDegMs * deg * speed * (speed / C.refSpeedMs);
 }
 
-/** Advance the scoring `dt` seconds. The returned event is reused: read it before the next call. */
-export function stepDrift(d: Drift, slip: number, speed: number, dt: number): DriftEvent {
+/** How much of a slide's pay it earns on road with this curvature (rad/m): all of it in a corner of radius refRadiusM or tighter, straightPay on the straight, and in between a share. */
+export function cornerPay(kappa: number): number {
+  const k = Math.min(1, Math.abs(kappa) * C.refRadiusM);
+  return C.straightPay + (1 - C.straightPay) * k;
+}
+
+/** Advance the scoring `dt` seconds on road of curvature `kappa` (omitted: a corner). The returned event is reused: read it before the next call. */
+export function stepDrift(d: Drift, slip: number, speed: number, dt: number, kappa?: number): DriftEvent {
   if (isSliding(slip, speed)) {
     let kind: DriftEvent["kind"] = "none";
     if (!d.sliding) {
@@ -74,7 +83,7 @@ export function stepDrift(d: Drift, slip: number, speed: number, dt: number): Dr
       d.combo = Math.min(C.comboMax, d.combo + 1);
       kind = "chain";
     }
-    d.base += driftRate(slip, speed) * dt;
+    d.base += driftRate(slip, speed) * (kappa === undefined ? 1 : cornerPay(kappa)) * dt;
     return kind === "chain" ? out("chain", pending(d), d.combo) : NONE;
   }
   d.sliding = false;

@@ -62,10 +62,12 @@ const KINDS: Record<Kind, { r: [number, number]; a: [number, number] }> = {
 };
 
 /** which corner comes next, given how far along (0..1) the road is: it gets harder */
-function pickKind(rng: () => number, progress: number): Kind {
+function pickKind(rng: () => number, progress: number, first: boolean): Kind {
   const r = rng();
   const hard = Math.min(1, progress * 1.25);
-  if (progress < 0.1) return r < 0.55 ? "gentle" : "medium";
+  // the first corner is one that has to be braked for: the run's opening teaches the brake, the warning and the steering
+  if (first) return "medium";
+  if (progress < 0.1) return r < 0.4 ? "gentle" : "medium";
   if (r < 0.34 - 0.2 * hard) return "gentle";
   if (r < 0.7 - 0.18 * hard) return "medium";
   if (r < 0.94 - 0.1 * hard) return "tight";
@@ -101,10 +103,12 @@ export function buildRoad(seed = C.seed): Road {
   // the corners
   let i = Math.round(C.startStraightM / seg);
   let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
+  let count = 0;
   while (i < n) {
-    const straight = Math.round((50 + rng() * 150 * (1 - 0.5 * Math.min(1, (i * seg) / finish))) / seg);
+    // a short straight, shorter as the road goes on: there is always a corner within a few seconds
+    const straight = Math.round((C.straightMinM + rng() * C.straightVarM * (1 - 0.4 * Math.min(1, (i * seg) / finish))) / seg);
     i += straight;
-    const kind = pickKind(rng, (i * seg) / finish);
+    const kind = pickKind(rng, (i * seg) / finish, count++ === 0);
     const k = KINDS[kind];
     const radius = k.r[0] + rng() * (k.r[1] - k.r[0]);
     const angle = ((k.a[0] + rng() * (k.a[1] - k.a[0])) * Math.PI) / 180;

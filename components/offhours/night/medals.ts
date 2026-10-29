@@ -1,19 +1,21 @@
 // Medals: three score marks to chase on any run, so a second run has a next
 // thing to go for (not only "beat your best"). Scores only: nothing is stored,
 // the visit's best lives in game.ts. The marks come from driving the canyon
-// with scripted drivers of different care (tests/unit/cars-polish.test.ts keeps
-// them honest): a driver who floors it and never steers scores about 17,800
-// and gets nothing; one who follows the racing line at the target driver's pace
-// is a little over bronze; a careful one on the keys clears silver; and one that
-// flicks the handbrake into the corners reaches gold. A person will do better
-// or worse than any of them: the marks are a guess at what feels earned.
+// with scripted keyboard drivers of different care (tests/unit/cars-polish.test.ts
+// keeps them honest): a driver who floors it and never steers is out of time
+// before the end and scores about 3,500; one who steers but never brakes, or
+// brakes only for the warning, is a little under bronze; a careful one, or one
+// at the target driver's pace, is around it; one that kicks the handbrake into
+// the corners is past silver; gold is what a clean, committed drifter reaches on
+// a good run. A person will do better or worse than any of them: the marks are a
+// guess at what feels earned.
 
 export type Medal = { name: string; score: number };
 
 export const MEDALS: Medal[] = [
-  { name: "BRONZE", score: 20_000 },
-  { name: "SILVER", score: 40_000 },
-  { name: "GOLD", score: 60_000 },
+  { name: "BRONZE", score: 15_000 },
+  { name: "SILVER", score: 25_000 },
+  { name: "GOLD", score: 34_000 },
 ];
 
 /** How many medals this score has earned (0 to 3). */

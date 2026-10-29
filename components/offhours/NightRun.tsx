@@ -10,7 +10,8 @@ import { Attract } from "./night/attract";
 import { drawScene } from "./night/draw";
 import { NightGame, type GameEvent } from "./night/game";
 import { drawAttractHud, drawHud, grouped, resultBottom, type HudOptions } from "./night/hud";
-import { newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeySteer, type Sources } from "./night/nightInput";
+import { keySteerFeel, newKeyAxes, newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeyPedal, stepKeys, stepKeySteer, type Sources } from "./night/nightInput";
+import { adviceFor } from "./night/advice";
 import { MEDALS } from "./night/medals";
 import { NightSound } from "./night/sound";
 
@@ -48,7 +49,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const soundRef = useRef<NightSound | null>(null);
   const held = useRef<Held>({ left: false, right: false, gas: false, space: false, brake: false, hand: false });
   const pads = useRef<Pads>({ left: false, right: false, gas: false, brake: false, hand: false, steer: 0 });
-  const keySteer = useRef(0);
+  const keyAxes = useRef(newKeyAxes());
+  const padAxes = useRef({ gas: 0, brake: 0 });
   const phone = useRef(newPhone());
   const phoneSm = useRef({ steer: 0, gas: 0, brake: 0 });
   const src = useRef<Sources>(noSources());
@@ -153,7 +155,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       case "end": {
         const r = e.result;
         setStatus(
-          `${r.finished ? "You made it out of the canyon." : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${MEDALS[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
+          `${r.finished ? "You made it out of the canyon." : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${Math.round(r.railS)} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${MEDALS[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
         );
         s?.silence();
         tellPhone(true);
@@ -268,11 +270,16 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       const k = held.current;
       const p = pads.current;
       const s = src.current;
-      keySteer.current = stepKeySteer(keySteer.current, (k.right ? 1 : 0) - (k.left ? 1 : 0), dt);
-      p.steer = stepKeySteer(p.steer, (p.right ? 1 : 0) - (p.left ? 1 : 0), dt, C.touchRampS, 0.1);
-      s.keySteer = keySteer.current;
-      s.keyGas = k.gas || k.space;
-      s.keyBrake = k.brake;
+      // the keys are not on or off: the steering is finer at speed, and the gas and the brake ramp (night/nightInput.ts)
+      const ka = stepKeys(keyAxes.current, { dir: (k.right ? 1 : 0) - (k.left ? 1 : 0), gas: k.gas || k.space, brake: k.brake }, g.speed, dt);
+      const pf = keySteerFeel(g.speed);
+      p.steer = stepKeySteer(p.steer, (p.right ? 1 : 0) - (p.left ? 1 : 0), dt, Math.min(C.touchRampS, pf.upS), 0.1, pf.snap);
+      const pa = padAxes.current;
+      pa.gas = stepKeyPedal(pa.gas, p.gas, dt, C.keyGasS, C.keyGasOffS, C.keyGasSnap);
+      pa.brake = stepKeyPedal(pa.brake, p.brake, dt, C.keyBrakeS, C.keyBrakeOffS, C.keyBrakeSnap);
+      s.keySteer = ka.steer;
+      s.keyGas = ka.gas;
+      s.keyBrake = ka.brake;
       s.keyHand = k.hand;
       const ph = smoothPhone(phone.current, phoneSm.current, dt, performance.now());
       s.phoneSteer = ph.phoneSteer;
@@ -280,8 +287,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       s.phoneBrake = ph.phoneBrake;
       s.phoneHand = ph.phoneHand;
       s.padSteer = p.steer;
-      s.padGas = p.gas;
-      s.padBrake = p.brake;
+      s.padGas = pa.gas;
+      s.padBrake = pa.brake;
       s.padHand = p.hand;
       const input = resolveInput(s, inp.current);
       if (g.phase === "ready" && input.throttle > 0.5) startOrAgain();
@@ -325,6 +332,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           el.dataset.cp = String(g.cp);
           el.dataset.time = g.timeLeft.toFixed(1);
           el.dataset.hits = String(g.hitN);
+          el.dataset.rails = String(g.rails);
+          el.dataset.clean = String(g.cleanLegs);
           el.dataset.combo = String(g.drift.combo);
           el.dataset.dist = String(Math.round(g.car.s));
           el.dataset.quality = String(q.level);

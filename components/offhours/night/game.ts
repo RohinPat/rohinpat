@@ -8,7 +8,7 @@ import { launchSmoke, newScene, stepCamera, stepFxFromCar, type Scene } from "./
 import { MEDALS, medalsAt, nextMedal } from "./medals";
 import { getTarget, poseOf, type Target } from "./target";
 import { planSpeed } from "./ai";
-import { getRoad, pointAt } from "./road";
+import { curvatureAt, getRoad, pointAt } from "./road";
 
 // The run. The phases: ready (the car on the line, waiting for the gas), count
 // (3, 2, 1), run (the clock is going), done (the end screen). The run ends when
@@ -24,7 +24,9 @@ import { getRoad, pointAt } from "./road";
 const RUN = ENGINE_CAL.run;
 const DRIFT = ENGINE_CAL.drift;
 const STEP = 1 / 120;
+/** the countdown: a second apiece on a first run (it is also the time to read the screen), and half that on the runs after it, so a second try is under two seconds from the key to the road */
 const COUNT_STEP = 0.9;
+const COUNT_FAST = 0.5;
 const START_S = 12;
 
 export type Phase = "ready" | "count" | "run" | "done";
@@ -36,6 +38,8 @@ export type Toast = { text: string; sub: string; tone: Tone; age: number; life: 
 
 /** a message is on screen at least this long before the next one takes its place, s */
 const TOAST_MIN_S = 0.8;
+/** a rail touch this long after the last one is a new incident, s */
+const RAIL_GAP_S = 0.9;
 
 export type GameEvent =
   | { kind: "count"; n: number }
@@ -60,6 +64,11 @@ export type Result = {
   bestDrift: number;
   driftTotal: number;
   checkpoints: number;
+  /** rail incidents (one contact: grinding along it is one), the seconds they took, spins, and the legs driven clean */
+  rails: number;
+  railS: number;
+  spins: number;
+  cleanLegs: number;
   score: number;
   /** a new best run of this visit */
   newBest: boolean;
@@ -99,9 +108,7 @@ export const forgetBestRun = () => {
  * 1.5 s / 10 m (13.8 s into the run, not 14.2), and one at 80% of the plan's pace
  * still sees it under 2% of the run.
  */
-const CUE_LEAD_S = 2.3;
-const CUE_LEAD_M = 25;
-const CUE_MARGIN = 1.05;
+const CUE = ENGINE_CAL.run.cue;
 
 /** a first run is coached: the lines it is told, once each per visit, are kept here (memory only) */
 const coached = new Set<string>();
@@ -121,6 +128,8 @@ export class NightGame {
   drift: Drift = newDrift();
   phase: Phase = "ready";
   phaseT = 0;
+  /** seconds a number of the countdown stays up */
+  countStep = COUNT_STEP;
   /** seconds since GO */
   clock = 0;
   timeLeft = 0;
@@ -136,6 +145,14 @@ export class NightGame {
   cpFlash = 0;
   bonusShown = 0;
   bonusS = 0;
+  /** rail incidents this run, the seconds they cost, spins, legs driven clean */
+  rails = 0;
+  railS = 0;
+  spins = 0;
+  cleanLegs = 0;
+  /** the seconds the last rail incident took, and how long the clock shows it for */
+  penaltyS = 0;
+  penaltyShown = 0;
   hitFlash = 0;
   bankFlash = 0;
   goFlash = 0;
@@ -162,6 +179,12 @@ export class NightGame {
   private spinT = 0;
   private recoverT = 0;
   private lastHitAt = -9;
+  /** the rail was last touched at this time: a touch more than RAIL_GAP_S after that is a new incident (and costs time) */
+  private lastContactAt = -9;
+  /** the leg since the last gate has had no rail and no spin (a clean leg pays at the gate) */
+  private legClean = true;
+  /** the handbrake has been used this run (the first run is told what it is for until it has been) */
+  private handUsed = false;
   private lastCount = 4;
   private anim = 0;
   private pose = newPose();
@@ -187,7 +210,7 @@ export class NightGame {
   }
 
   get count(): number {
-    return this.phase === "count" ? Math.max(1, 3 - Math.floor(this.phaseT / COUNT_STEP)) : 0;
+    return this.phase === "count" ? Math.max(1, 3 - Math.floor(this.phaseT / this.countStep)) : 0;
   }
 
   /** gas pressed on the ready or end screen: stage a fresh run */
@@ -195,6 +218,7 @@ export class NightGame {
     if (this.phase === "ready" || (this.phase === "done" && this.phaseT > 0.7)) {
       this.reset();
       this.firstRun = runsDone === 0;
+      this.countStep = this.firstRun ? COUNT_STEP : COUNT_FAST;
       this.phase = "count";
       this.phaseT = 0;
       this.lastCount = 4;
@@ -212,6 +236,11 @@ export class NightGame {
     this.toasts.length = 0;
     this.cpFlash = this.hitFlash = this.bankFlash = this.goFlash = 0;
     this.bonusShown = 0;
+    this.penaltyShown = 0;
+    this.rails = this.railS = this.spins = this.cleanLegs = 0;
+    this.legClean = true;
+    this.handUsed = false;
+    this.lastContactAt = -9;
     this.coach = "";
     this.coachT = 0;
     this.medals = 0;
@@ -268,11 +297,20 @@ export class NightGame {
   }
 
   /** a line of help for a first run, once per visit */
-  private help(key: string, life = 4.2) {
-    if (!this.firstRun || coached.has(key)) return;
+  private help(key: string, life = 4.2): boolean {
+    if (!this.firstRun || coached.has(key)) return false;
     coached.add(key);
     this.coach = key;
     this.coachT = life;
+    return true;
+  }
+
+  /** why the car hit the rail, for the line of help a first run gets: too fast for the bend, a slide that went wide, or steering off the line */
+  private crashWhy(): string {
+    const c = this.car;
+    if (speedOf(c) > planSpeed(this.target.plan, this.road, c.s) * 1.08) return "wall-fast";
+    if (Math.abs(c.slip) > 0.3) return "wall-slide";
+    return "wall-line";
   }
 
   /** advance by a frame's time with these inputs */
@@ -291,7 +329,7 @@ export class NightGame {
 
     // frame level: scoring, flashes, toasts
     if (this.phase === "run" && this.endWhy === null && this.recoverT <= 0) {
-      const e = stepDrift(this.drift, c.slip, speedOf(c), dt);
+      const e = stepDrift(this.drift, c.slip, speedOf(c), dt, curvatureAt(this.road, c.s));
       if (e.kind === "bank") {
         this.bankFlash = 1;
         this.toast(`+${e.points.toLocaleString("en-US")}`, e.combo > 1 ? `drift ×${e.combo}` : "drift", "drift", 1.6, "bank");
@@ -309,6 +347,7 @@ export class NightGame {
     }
     this.cpFlash = Math.max(0, this.cpFlash - dt);
     this.bonusShown = Math.max(0, this.bonusShown - dt);
+    this.penaltyShown = Math.max(0, this.penaltyShown - dt);
     this.coachT = Math.max(0, this.coachT - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
     this.bankFlash = Math.max(0, this.bankFlash - dt * 1.8);
@@ -347,7 +386,7 @@ export class NightGame {
       c.skid = 0;
       c.slip = 0;
       c.pop = Math.max(0, c.pop - STEP * 5);
-      if (this.phase === "count" && this.phaseT >= COUNT_STEP * 3) this.go();
+      if (this.phase === "count" && this.phaseT >= this.countStep * 3) this.go();
       return;
     }
     if (this.phase === "done") {
@@ -361,6 +400,7 @@ export class NightGame {
     const ending = this.endWhy !== null;
     let drive = inp;
     if (ending) drive = { steer: 0, throttle: 0, brake: 0.18, hand: 0 };
+    else if (drive.hand > 0.5) this.handUsed = true;
     if (this.recoverT > 0) this.recover(c);
     stepCar(c, drive, this.road, STEP);
     this.rec.push(this.clock, poseOf(c, this.pose));
@@ -379,6 +419,7 @@ export class NightGame {
         if (this.anim - this.lastHitAt > 0.3) this.wall(c.hit);
         this.lastHitAt = this.anim;
       }
+      if (c.scrape || c.hit > 0) this.lastContactAt = this.anim;
       c.hit = 0;
       // a spin
       if (this.recoverT <= 0 && Math.abs(c.slip) > (DRIFT.spinAngleDeg * Math.PI) / 180 && c.u > 5) {
@@ -425,6 +466,13 @@ export class NightGame {
     this.cp++;
     this.cpN++;
     this.bonusPoints += RUN.checkpointPoints;
+    // a leg with no rail and no spin pays more
+    const clean = this.legClean;
+    this.legClean = true;
+    if (clean) {
+      this.bonusPoints += RUN.cleanLegPoints;
+      this.cleanLegs++;
+    }
     const last = this.cp >= road.checks.length;
     const add = last ? 0 : this.target.bonusS[this.cp - 1];
     this.timeLeft += add;
@@ -432,7 +480,8 @@ export class NightGame {
     this.bonusS = add;
     this.bonusShown = add > 0 ? 2.4 : 0;
     this.scene.cam.kick = Math.max(this.scene.cam.kick, 0.5);
-    this.toast(last ? "FINISH" : `CHECKPOINT ${this.cp} OF ${road.checks.length}`, add ? `+${add.toFixed(1).replace(/\.0$/, "")} SECONDS` : `${Math.round(this.timeLeft)} s left`, "good", 2);
+    const cleanTxt = clean ? ` · CLEAN +${RUN.cleanLegPoints}` : "";
+    this.toast(last ? "FINISH" : `CHECKPOINT ${this.cp} OF ${road.checks.length}`, (add ? `+${add.toFixed(1).replace(/\.0$/, "")} SECONDS` : `${Math.round(this.timeLeft)} s left`) + cleanTxt, "good", 2);
     this.onEvent({ kind: "checkpoint", n: this.cp, of: road.checks.length, bonusS: add, timeLeft: this.timeLeft });
     if (last) {
       this.finishAt = this.clock;
@@ -445,18 +494,29 @@ export class NightGame {
     this.hitN++;
     this.hitFlash = 1;
     this.scene.cam.shake = ENGINE_CAL.cam.shakeHitPx;
+    // the first touch after a clear spell is an incident: it takes time off the clock and the leg is no longer clean. Grinding along the rail is the one incident
+    const fresh = this.anim - this.lastContactAt > RAIL_GAP_S;
     const e = loseDrift(this.drift);
-    if (e.kind === "lost") {
-      if (e.points >= 100) this.toast("COMBO LOST", `−${e.points.toLocaleString("en-US")}`, "bad", 1.6);
-      this.onEvent({ kind: "lost", points: e.points });
-      this.help("wall-points");
-    } else this.help("wall");
+    if (fresh) {
+      this.rails++;
+      this.railS += RUN.railPenaltyS;
+      this.legClean = false;
+      this.timeLeft = Math.max(0, this.timeLeft - RUN.railPenaltyS);
+      this.penaltyS = RUN.railPenaltyS;
+      this.penaltyShown = 1.4;
+      const lost = e.kind === "lost" && e.points >= 100 ? ` · COMBO −${e.points.toLocaleString("en-US")}` : "";
+      this.toast("RAIL", `−${RUN.railPenaltyS.toFixed(1).replace(/\.0$/, "")} S${lost}`, "bad", 1.6);
+    }
+    if (e.kind === "lost") this.onEvent({ kind: "lost", points: e.points });
+    if (!this.help(this.crashWhy())) this.help(e.kind === "lost" ? "wall-points" : "wall");
     this.onEvent({ kind: "hit", speed });
   }
 
   private spin() {
     this.spinT = 0;
     this.recoverT = DRIFT.recoverS;
+    this.spins++;
+    this.legClean = false;
     this.hitN++;
     this.hitFlash = 1;
     this.scene.cam.shake = ENGINE_CAL.cam.shakeHitPx * 0.8;
@@ -487,6 +547,8 @@ export class NightGame {
     }
     if (this.firstRun) {
       if (this.clock > 0.8 && this.clock < 1.2) this.help("steer", 5);
+      // a corner is coming, the car is quick and has not slid: this is what the handbrake is for
+      if (!this.handUsed && !this.drift.sliding && this.clock > 10 && speedOf(this.car) > 22 && Math.abs(curvatureAt(this.road, this.car.s + 40)) > 1 / 200) this.help("hand", 5);
       if (this.drift.sliding) {
         this.slideT += dt;
         if (this.slideT > 0.3) this.help("slide");
@@ -505,8 +567,8 @@ export class NightGame {
   private stepCue(dt: number) {
     const c = this.car;
     const v = speedOf(c);
-    const lead = CUE_LEAD_S * v + CUE_LEAD_M;
-    const over = !this.drift.sliding && v > 14 && v > planSpeed(this.target.plan, this.road, c.s + lead) * CUE_MARGIN;
+    const lead = CUE.leadS * v + CUE.leadM;
+    const over = !this.drift.sliding && v > 14 && v > planSpeed(this.target.plan, this.road, c.s + lead) * CUE.margin;
     const cue = this.cue;
     if (over) {
       this.cueOff = 0;
@@ -558,6 +620,10 @@ export class NightGame {
       bestDrift: this.drift.best,
       driftTotal: this.drift.total,
       checkpoints: this.cp,
+      rails: this.rails,
+      railS: this.railS,
+      spins: this.spins,
+      cleanLegs: this.cleanLegs,
       score,
       newBest,
       bestScore,
