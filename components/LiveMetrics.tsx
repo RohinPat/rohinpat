@@ -164,9 +164,8 @@ export default function LiveMetrics() {
         </tbody>
       </table>
       <p className="mt-4 text-[0.8125rem] leading-relaxed text-[#a3a69c] !mb-0">
-        Counted since this tab first loaded the site, so pages you&apos;ve visited before
-        this one share their files. &ldquo;Over the network&rdquo; is zero for anything your
-        browser already had cached. Nothing on this panel leaves your machine.
+        Counted since this tab first loaded the site. &ldquo;Over the network&rdquo; is zero
+        for anything your browser had cached.
       </p>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { formatCode } from "@/lib/link/code";
 import { makeQr, qrBox, qrPath } from "@/lib/link/qr";
 import type { LinkState } from "@/lib/link/session";
@@ -9,8 +9,9 @@ import type { LinkState } from "@/lib/link/session";
 // The card on the laptop phone's lock screen (and the Duo's cover). Cream on
 // the dark wallpaper. It opens out of the padlock (PairLock), which also
 // announces its status, and out of the Pair chip on Off hours (PairChip).
-// Loaded on demand with the link code. The home screen's widget (PairWidget)
-// shows the same code with PairQr and pairHost.
+// Loaded on demand with the link code. The QR is all it shows at first; the
+// address and code wait behind "Can't scan?". The home screen's widget
+// (PairWidget) uses the same PairQr and CantScan.
 
 export type PairInfo = {
   state: LinkState | "idle";
@@ -59,6 +60,37 @@ export function PairQr({ pairUrl, size, testId = "pair-qr" }: { pairUrl: string 
   );
 }
 
+/**
+ * "Can't scan?": the address and the code to type, kept out of sight until
+ * asked for (a disclosure: the text is in the page, `hidden` until opened).
+ * The card and the home-screen widget both use it.
+ */
+export function CantScan({ pairUrl, code, testId = "pair-code" }: { pairUrl: string | null; code: string | null; testId?: string }) {
+  const [open, setOpen] = useState(false);
+  const short = useMemo(() => pairHost(pairUrl), [pairUrl]);
+  const id = useId();
+  return (
+    <div className="min-w-0">
+      <p id={id} hidden={!open} className="mb-1 text-[12px] leading-snug text-[var(--paper-muted)]">
+        Open <span className="font-mono text-[11.5px] text-[var(--ink)] break-all">{short}</span> and type
+        <span className="block font-mono text-[19px] font-medium tracking-[0.08em] tabular-nums text-[var(--ink)]" data-testid={testId}>
+          {code ? formatCode(code) : "…"}
+        </span>
+      </p>
+      <button
+        type="button"
+        data-venom
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((v) => !v)}
+        className="-ml-1 px-1 py-0.5 text-[12px] font-semibold underline underline-offset-2 decoration-[var(--signal)] text-[var(--signal)] rounded"
+      >
+        {open ? "Hide the code" : "Can't scan?"}
+      </button>
+    </div>
+  );
+}
+
 export default function PairCard({
   info,
   announce = true,
@@ -69,13 +101,9 @@ export default function PairCard({
   /** what to do once a phone is on (after "Linked.") */
   linked?: string;
 }) {
-  const [how, setHow] = useState(false);
   const { state, paired, code, pairUrl, stale, renew } = info;
-  const short = useMemo(() => pairHost(pairUrl), [pairUrl]);
-
-  const live = paired;
   const dead = state === "closed" && stale;
-  const status = live ? `Phone linked. ${linked}` : dead ? "That code expired." : "";
+  const status = paired ? `Phone linked. ${linked}` : dead ? "That code expired." : "";
 
   return (
     <section
@@ -95,25 +123,8 @@ export default function PairCard({
         </p>
       )}
 
-      {how ? (
-        <div className="mt-2.5 min-h-[112px] text-[12.5px] leading-snug">
-          <ul className="space-y-1.5 list-disc pl-4 marker:text-[var(--signal)]">
-            <li>Scan the code with your phone&apos;s camera. It opens a page that streams your phone&apos;s tilt to this tab.</li>
-            <li>Tilt to tilt this phone, swipe up to unlock it, tap an app to open it here.</li>
-            <li>Devices talk directly when they can, through this site&apos;s relay when not. Nothing is stored; no accounts.</li>
-          </ul>
-          {/* a press on a link would start the lock layer's swipe and capture the pointer; stop it here */}
-          <Link
-            href="/projects/phone-link"
-            data-venom
-            onPointerDown={(e) => e.stopPropagation()}
-            className="mt-1.5 inline-block py-0.5 font-semibold underline underline-offset-2 decoration-[var(--signal)] text-[var(--signal)]"
-          >
-            Read how it works
-          </Link>
-        </div>
-      ) : live ? (
-        <div className="mt-2.5 min-h-[112px] flex items-center gap-3" data-testid="pair-linked">
+      {paired ? (
+        <div className="mt-2.5 flex items-center gap-3" data-testid="pair-linked">
           <span aria-hidden="true" className="grid place-items-center w-12 h-12 shrink-0 rounded-full bg-[var(--ink)] text-[var(--mint)]">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5 12.5 4.5 4.5L19 7.5" />
@@ -124,40 +135,29 @@ export default function PairCard({
           </p>
         </div>
       ) : dead ? (
-        <div className="mt-2.5 min-h-[112px] flex flex-col items-start justify-center gap-2">
-          <p className="text-[13px] leading-snug">The code timed out waiting for a phone.</p>
-          <button
-            type="button"
-            data-venom
-            onClick={renew}
-            className="rounded-full bg-[var(--ink)] text-[var(--paper)] px-4 py-2 text-[13px] font-semibold"
-          >
+        <div className="mt-2.5 flex flex-col items-start gap-2">
+          <p className="text-[13px] leading-snug">The code timed out.</p>
+          <button type="button" data-venom onClick={renew} className="rounded-full bg-[var(--ink)] text-[var(--paper)] px-4 py-2 text-[13px] font-semibold">
             Get a new code
           </button>
         </div>
       ) : (
-        <div className="mt-2.5 min-h-[112px] flex items-center gap-3">
+        <div className="mt-2.5 flex gap-3">
           <PairQr pairUrl={pairUrl} size={112} />
-          <div className="min-w-0">
-            <p className="text-[12px] leading-snug text-[var(--paper-muted)]">Scan with your phone&apos;s camera, or open</p>
-            <p className="font-mono text-[11.5px] break-all">{short}</p>
-            <p className="mt-1.5 text-[12px] leading-snug text-[var(--paper-muted)]">and type</p>
-            <p className="font-mono text-[19px] font-medium tracking-[0.08em] tabular-nums" data-testid="pair-code">
-              {code ? formatCode(code) : "…"}
-            </p>
+          <div className="min-w-0 flex flex-col justify-end items-start gap-0.5">
+            <CantScan pairUrl={pairUrl} code={code} />
+            {/* a press on a link would start the lock layer's swipe and capture the pointer; stop it here */}
+            <Link
+              href="/projects/phone-link"
+              data-venom
+              onPointerDown={(e) => e.stopPropagation()}
+              className="-ml-1 px-1 py-0.5 text-[12px] font-semibold text-[var(--paper-muted)] underline underline-offset-2 rounded"
+            >
+              How it works
+            </Link>
           </div>
         </div>
       )}
-
-      <button
-        type="button"
-        data-venom
-        aria-expanded={how}
-        onClick={() => setHow((v) => !v)}
-        className="mt-1.5 -mb-1 -ml-1 px-1 py-1 text-[12px] font-semibold underline underline-offset-2 decoration-[var(--signal)] text-[var(--signal)] rounded"
-      >
-        {how ? "Back to the code" : "How this works"}
-      </button>
     </section>
   );
 }

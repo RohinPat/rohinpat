@@ -36,7 +36,7 @@ export default function ColophonPage() {
         <header className="max-w-[56rem] mx-auto">
           <h1 className="!mb-6">Colophon</h1>
           <p className="text-xl md:text-2xl leading-snug max-w-[40ch] text-pretty">
-            How this site is built, with numbers you can check from your own browser.
+            How this site is built.
           </p>
         </header>
 
@@ -65,18 +65,15 @@ export default function ColophonPage() {
 
           <h2>Your phone, as a controller</h2>
           <p>
-            On a laptop, the home screen&apos;s lock screen shows a QR code. Scan it with your
-            phone and the real phone tilts the replica, unlocks it, then plays the nine pieces on
-            the Off hours page as a motion controller. The two devices talk through a WebSocket
-            relay on this site&apos;s own server, with Redis passing messages between server
-            instances and a direct WebRTC connection tried on top. Nothing is stored, no third
-            party is contacted, and every page works the same without a phone. Pages other than
-            the home screen only look for a paired phone; they never start a link themselves.
+            On a laptop, scan the QR code on the home screen and your phone tilts the replica,
+            unlocks it and plays the nine Off hours pieces as a motion controller. The two devices
+            talk through a WebSocket relay on this site&apos;s own server, with Redis between
+            server instances and a direct WebRTC connection tried on top. Every page works the
+            same without a phone. A link only starts on the home page, or when someone presses
+            Pair on Off hours.
           </p>
           <p>
-            The write-up covers pairing, why the relay is the base path, a bug that only
-            happened in production, and how motion becomes a golf swing:{" "}
-            <Link href="/projects/phone-link">A website your phone can drive</Link>.
+            The write-up: <Link href="/projects/phone-link">A website your phone can drive</Link>.
           </p>
 
           <h2>Nine pieces, written from scratch</h2>
@@ -100,8 +97,8 @@ export default function ColophonPage() {
             <li>
               <strong>Sound:</strong> every noise is synthesized with the Web Audio API — the
               V8&apos;s firing note, the ratchet in the watch, the drum machine, which renders one
-              bar offline and plays it through an AudioWorklet at whatever speed the record is
-              turning, so scratching it really scratches your beat.
+              bar offline and plays it through an AudioWorklet at the speed the record is
+              turning.
             </li>
             <li>
               <strong>Watch and keyboard:</strong> physically based 3D in a virtual photo studio
@@ -128,8 +125,7 @@ export default function ColophonPage() {
             on every pull request and every push to main; one violation fails the run. The same suite checks that the skip
             link moves focus, and that every Off hours piece opens from the keyboard, takes focus,
             and gives it back when Escape closes it. Text and background pairs are chosen to clear
-            4.5:1. Automated checks catch a fraction of real problems, so they&apos;re a floor,
-            not a certificate.
+            4.5:1. Automated checks only catch some problems.
           </p>
 
           <h2>Privacy</h2>
@@ -137,17 +133,15 @@ export default function ColophonPage() {
             No cookies, no local storage, no analytics, and no third-party scripts, embeds or
             font requests. The phone link talks only to this site&apos;s own relay. A test plays with
             the Off hours pieces and fails if the page contacts any other host or writes a cookie or
-            a local-storage key. Response headers switch off
-            microphone and location access everywhere, and the camera everywhere but the home
-            screen, where its camera names colours only when you ask; frames are read in your
-            browser and go nowhere. Pages refuse to be framed. The{" "}
-            <Link href="/privacy">privacy page</Link> says the same thing in fewer words.
+            a local-storage key. Response headers switch off the microphone and location
+            everywhere, and the camera everywhere but the home screen (its camera names colours
+            when you ask, in your browser) and the hidden lab pages. Pages refuse to be framed.
+            More on the <Link href="/privacy">privacy page</Link>.
           </p>
 
           <h2>Measured in your browser</h2>
           <p>
-            These numbers come from your browser&apos;s Performance API, on this page, right
-            now. They&apos;re computed here and go nowhere.
+            From your browser&apos;s Performance API, on this page, right now.
           </p>
           <div className="wide">
             <LiveMetrics />

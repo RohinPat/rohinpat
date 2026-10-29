@@ -220,7 +220,7 @@ export default function ClosetOrganizerCaseStudy() {
               web app share the same backend and the same accounts.
             </li>
             <li>
-              <strong>Real accounts, real obligations.</strong> Password reset, a privacy policy,
+              <strong>Real accounts.</strong> Password reset, a privacy policy,
               and in-app account deletion, which the App Store and Google Play require.
             </li>
           </ul>
@@ -294,10 +294,10 @@ export default function ClosetOrganizerCaseStudy() {
             other request.
           </p>
           <p>
-            The fix was almost boring: plain <code>def</code> handlers, so FastAPI runs them in
+            The fix: plain <code>def</code> handlers, so FastAPI runs them in
             its threadpool; thread-safe lazy loading, so two first uploads don&apos;t load CLIP
             twice; and one lock around inference, so peak memory stays flat on a small machine.
-            The more interesting part is keeping it fixed. This test parses every route file and
+            To keep it fixed, this test parses every route file and
             fails on any <code>async def</code> that never awaits:
           </p>
           <CodeBlock
@@ -325,7 +325,7 @@ export default function ClosetOrganizerCaseStudy() {
             href={src("backend/database/sessions.py", "L61-L85")}
           />
           <p>
-            Two details carry it. <code>BEGIN IMMEDIATE</code> takes SQLite&apos;s write lock
+            <code>BEGIN IMMEDIATE</code> takes SQLite&apos;s write lock
             before reading, so two simultaneous refreshes can&apos;t both win. And a 30-second
             grace window answers a second refresh right after the first with a conflict rather
             than a revocation, because two tabs racing each other isn&apos;t theft.
@@ -340,7 +340,7 @@ export default function ClosetOrganizerCaseStudy() {
             short message and one line of reasoning per outfit, constrained to a JSON schema.
           </p>
           <p>
-            That split is the point. The model can&apos;t suggest a jacket you don&apos;t own,
+            So the model can&apos;t suggest a jacket you don&apos;t own,
             because it never chooses items. With no API key, an API error, or a reply that
             isn&apos;t valid JSON, the locally written copy ships instead and you still get your
             outfits.

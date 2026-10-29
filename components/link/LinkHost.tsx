@@ -243,15 +243,11 @@ export default function LinkHost(props: Props) {
         <div
           id="link-how"
           role="group"
-          aria-label="How this works"
+          aria-label="Link details"
           data-testid="link-how"
           className="pointer-events-auto w-[min(92vw,340px)] rounded-[18px] bg-[var(--ink)] text-[var(--paper)] p-3.5 text-[13px] shadow-[0_18px_50px_-12px_rgba(13,16,14,0.7)] border border-white/10"
         >
-          <p className="font-semibold">How this works</p>
-          <p className="mt-1 text-[12.5px] leading-snug text-[#c9c6b6]">
-            Your phone sends its tilt, swipes and taps to this tab; nothing goes anywhere else and nothing is stored.
-          </p>
-          <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-[12px]">
+          <dl className=" grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-[12px]">
             <dt className="text-[#a3a69c]">path</dt>
             <dd data-testid="link-path">{pathExplainer(stats?.path ?? path)}</dd>
             <dt className="text-[#a3a69c]">round trip</dt>
@@ -261,7 +257,7 @@ export default function LinkHost(props: Props) {
           </dl>
           {(reduced || phoneMotion === "denied" || phoneMotion === "unavailable") && (
             <p className="mt-2 text-[12px] text-[#c9c6b6]">
-              {reduced ? "Live tilt is off (reduced motion). Unlocking and tapping still work." : "Your phone's motion is off, so tilt won't follow. Unlocking and tapping still work."}
+              {reduced ? "Tilt is off (reduced motion). Swipes and taps still work." : "Your phone's motion is off. Swipes and taps still work."}
             </p>
           )}
           <div className="mt-3 flex items-center gap-4">

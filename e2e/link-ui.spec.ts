@@ -98,27 +98,27 @@ test.describe("link UI: laptop", () => {
     await expect(qr).toBeVisible();
     // it really is a QR of the pair URL: a real, non-trivial path of modules
     expect((await qr.locator("path").getAttribute("d"))?.length ?? 0).toBeGreaterThan(400);
-    await expect(card.getByText(/\/p$/)).toBeVisible();
     expect(code).toHaveLength(6);
 
-    // how it works toggles in place, keyboard first
-    const how = card.getByRole("button", { name: "How this works" });
-    await how.focus();
+    // only the QR at first: the address and code wait behind "Can't scan?", keyboard first
+    await expect(card.getByTestId("pair-code")).toBeHidden();
+    const cant = card.getByRole("button", { name: "Can't scan?" });
+    await cant.focus();
     await host.keyboard.press("Enter");
-    await expect(card.getByText(/streams your phone's tilt/i)).toBeVisible();
-    await expect(card.getByRole("button", { name: "Back to the code" })).toHaveAttribute("aria-expanded", "true");
-    await host.keyboard.press("Enter");
+    await expect(card.getByText(/\/p$/)).toBeVisible();
     await expect(card.getByTestId("pair-code")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Hide the code" })).toHaveAttribute("aria-expanded", "true");
+    await host.keyboard.press("Enter");
+    await expect(card.getByTestId("pair-code")).toBeHidden();
     await context.close();
   });
 
-  test("the card's how-it-works opens the write-up, and a click on that link does not unlock the phone", async ({ browser, baseURL }) => {
+  test("the card's How it works opens the write-up, and a click on that link does not unlock the phone", async ({ browser, baseURL }) => {
     const context = await newContext(browser, baseURL);
     const { host } = await openHost(context);
     const card = host.getByTestId("pair-card");
     await padlock(host).click();
-    await card.getByRole("button", { name: "How this works" }).click();
-    const read = card.getByRole("link", { name: "Read how it works" });
+    const read = card.getByRole("link", { name: "How it works" });
     await expect(read).toHaveAttribute("href", "/projects/phone-link");
     await expect(host.getByRole("button", { name: /swipe up to unlock/i })).toBeVisible();
     await read.click();
@@ -137,7 +137,7 @@ test.describe("link UI: laptop", () => {
     await expect(card).toBeVisible();
     // Tab goes into the card
     await host.keyboard.press("Tab");
-    await expect(card.getByRole("button", { name: "How this works" })).toBeFocused();
+    await expect(card.getByRole("button", { name: "Can't scan?" })).toBeFocused();
     // Escape closes it and focus goes back to the padlock
     await host.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
@@ -178,6 +178,7 @@ test.describe("link UI: laptop", () => {
     await expect(host.locator("[data-lock-layer]")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
 
     // so can text be selected (the code, for typing)
+    await card.getByRole("button", { name: "Can't scan?" }).click();
     await card.getByTestId("pair-code").click({ clickCount: 3 });
     expect(await host.evaluate(() => window.getSelection()?.toString().trim() ?? "")).not.toBe("");
 
@@ -534,7 +535,7 @@ test.describe("link UI: the phone page", () => {
     const page = await context.newPage();
     await page.goto("/p");
     await expect(page.getByRole("heading", { name: /pick up your phone/i })).toBeVisible();
-    await expect(page.getByText(/no code on this page/i)).toBeVisible();
+    await expect(page.getByText(/scan the qr code on the laptop/i)).toBeVisible();
     await expect(page.getByTestId("connect")).toBeDisabled();
     await page.getByLabel("Code on the laptop").fill("ab");
     await expect(page.getByTestId("connect")).toBeDisabled();
@@ -547,7 +548,7 @@ test.describe("link UI: the phone page", () => {
     const context = await newContext(browser, baseURL, PHONE);
     const page = await context.newPage();
     await page.goto("/p#c=QQQQQQ");
-    await expect(page.getByText(/linking to the laptop that's showing QQQ QQQ/i)).toBeVisible();
+    await expect(page.getByText(/linking to the laptop showing QQQ QQQ/i)).toBeVisible();
     await page.getByTestId("connect").click();
     await expect(page.getByRole("heading", { name: /isn't open any more/i })).toBeVisible({ timeout: 8000 });
     await expect(page.getByLabel("Code on the laptop")).toBeVisible();

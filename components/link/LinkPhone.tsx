@@ -350,10 +350,10 @@ function Setup({
     left: "The laptop left.",
   }[kind];
   const body = {
-    "no-code": "There's no code on this page. Scan the QR code on the laptop's lock screen, or type the code it shows.",
-    ready: `Linking to the laptop that's showing ${code ? formatCode(code) : ""}. Your phone will ask for motion access: that's only used to tilt the replica.`,
-    expired: "It may have timed out, or the laptop closed it. Look at the laptop for a fresh code, then scan it again or type it here.",
-    left: "The other side closed the link. If it's still on the lock screen it will have a fresh code: scan it again or type it here.",
+    "no-code": "Scan the QR code on the laptop, or type the code under Can't scan?",
+    ready: `Linking to the laptop showing ${code ? formatCode(code) : ""}. Your phone will ask for motion access, to tilt the replica.`,
+    expired: "It timed out, or the laptop closed it. Scan the laptop's new code, or type it here.",
+    left: "The laptop closed the link. Scan its new code, or type it here.",
   }[kind];
   const typing = kind !== "ready";
 
@@ -403,7 +403,6 @@ function Setup({
             Use a different code
           </button>
         )}
-        <p className="mt-6 text-sm leading-snug text-[#a3a69c]">Nothing is stored on this phone. The link ends when you close this page.</p>
       </div>
     </main>
   );

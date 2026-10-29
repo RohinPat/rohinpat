@@ -103,8 +103,7 @@ export default function Interests() {
         </div>
         <h1>Off hours</h1>
         <p className="-mt-6 mb-10 md:mb-14 text-lg md:text-xl muted max-w-xl text-pretty">
-          Nine things I like outside work, each built into something you can play. Open one to play it
-          full screen. Every sound is made in your browser, and nothing is saved.{" "}
+          Nine things I like outside work, each one playable.{" "}
           <Link href="/colophon" className="underline underline-offset-4 decoration-1 hover:text-[var(--fg)]">
             How they&apos;re built
           </Link>
