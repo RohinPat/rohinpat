@@ -8,7 +8,9 @@ import type { LinkState } from "@/lib/link/session";
 
 // The card on the laptop phone's lock screen (and the Duo's cover). Cream on
 // the dark wallpaper. It opens out of the padlock (PairLock), which also
-// announces its status. Loaded on demand with the link code.
+// announces its status, and out of the Pair chip on Off hours (PairChip).
+// Loaded on demand with the link code. The home screen's widget (PairWidget)
+// shows the same code with PairQr and pairHost.
 
 export type PairInfo = {
   state: LinkState | "idle";
@@ -21,24 +23,59 @@ export type PairInfo = {
   renew: () => void;
 };
 
-export default function PairCard({ info, announce = true }: { info: PairInfo; announce?: boolean }) {
+/** The pairing page's address without the code, to type by hand. */
+export function pairHost(pairUrl: string | null): string {
+  if (!pairUrl) return "";
+  try {
+    const u = new URL(pairUrl);
+    return `${u.host}${u.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+/** The QR of `pairUrl`, black on white, or a placeholder while the code is being made. */
+export function PairQr({ pairUrl, size, testId = "pair-qr" }: { pairUrl: string | null; size: number; testId?: string }) {
+  const qr = useMemo(() => (pairUrl ? makeQr(pairUrl) : null), [pairUrl]);
+  return (
+    <div className="shrink-0 rounded-[10px] bg-white overflow-hidden grid place-items-center" style={{ width: size, height: size }}>
+      {qr ? (
+        <svg
+          viewBox={`0 0 ${qrBox(qr)} ${qrBox(qr)}`}
+          role="img"
+          aria-label="QR code. Scan it with your phone's camera to link your phone to this page."
+          data-testid={testId}
+          width={size}
+          height={size}
+          shapeRendering="crispEdges"
+        >
+          <rect width="100%" height="100%" fill="#fff" />
+          <path d={qrPath(qr)} fill="#0d100e" />
+        </svg>
+      ) : (
+        <span className="text-[11px] text-[var(--paper-muted)]">Making a code…</span>
+      )}
+    </div>
+  );
+}
+
+export default function PairCard({
+  info,
+  announce = true,
+  linked = "Tilt your phone, then swipe up on it to unlock this one.",
+}: {
+  info: PairInfo;
+  announce?: boolean;
+  /** what to do once a phone is on (after "Linked.") */
+  linked?: string;
+}) {
   const [how, setHow] = useState(false);
   const { state, paired, code, pairUrl, stale, renew } = info;
-
-  const qr = useMemo(() => (pairUrl ? makeQr(pairUrl) : null), [pairUrl]);
-  const short = useMemo(() => {
-    if (!pairUrl) return "";
-    try {
-      const u = new URL(pairUrl);
-      return `${u.host}${u.pathname}`;
-    } catch {
-      return "";
-    }
-  }, [pairUrl]);
+  const short = useMemo(() => pairHost(pairUrl), [pairUrl]);
 
   const live = paired;
   const dead = state === "closed" && stale;
-  const status = live ? "Phone linked. Tilt it, then swipe up on it to unlock." : dead ? "That code expired." : "";
+  const status = live ? `Phone linked. ${linked}` : dead ? "That code expired." : "";
 
   return (
     <section
@@ -83,7 +120,7 @@ export default function PairCard({ info, announce = true }: { info: PairInfo; an
             </svg>
           </span>
           <p className="text-[13px] leading-snug">
-            <strong className="font-semibold">Linked.</strong> Tilt your phone, then swipe up on it to unlock this one.
+            <strong className="font-semibold">Linked.</strong> {linked}
           </p>
         </div>
       ) : dead ? (
@@ -100,24 +137,7 @@ export default function PairCard({ info, announce = true }: { info: PairInfo; an
         </div>
       ) : (
         <div className="mt-2.5 min-h-[112px] flex items-center gap-3">
-          <div className="w-[112px] h-[112px] shrink-0 rounded-[10px] bg-white overflow-hidden grid place-items-center">
-            {qr ? (
-              <svg
-                viewBox={`0 0 ${qrBox(qr)} ${qrBox(qr)}`}
-                role="img"
-                aria-label="QR code. Scan it with your phone's camera to link your phone to this page."
-                data-testid="pair-qr"
-                width="112"
-                height="112"
-                shapeRendering="crispEdges"
-              >
-                <rect width="100%" height="100%" fill="#fff" />
-                <path d={qrPath(qr)} fill="#0d100e" />
-              </svg>
-            ) : (
-              <span className="text-[11px] text-[var(--paper-muted)]">Making a code…</span>
-            )}
-          </div>
+          <PairQr pairUrl={pairUrl} size={112} />
           <div className="min-w-0">
             <p className="text-[12px] leading-snug text-[var(--paper-muted)]">Scan with your phone&apos;s camera, or open</p>
             <p className="font-mono text-[11.5px] break-all">{short}</p>
