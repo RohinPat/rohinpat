@@ -69,10 +69,13 @@ test.describe("pairing away from the lock screen", () => {
   });
 
   test("in a game, Escape closes the pairing card first and the game second", async ({ context }) => {
+    test.setTimeout(60_000);
     const host = await laptop(context, "/interests");
-    await host.getByRole("button", { name: /play/i }).first().click();
+    // the maze: no 3D model to load, which is slow in CI's software renderer
+    await host.getByRole("button", { name: /^Play Gaming/ }).click();
     const stage = host.getByRole("dialog");
     await expect(stage).toBeVisible();
+    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement)), SLOW).toBe(true);
 
     await stage.getByTestId("pair-chip").click();
     await expect(stage.getByTestId("pair-card")).toBeVisible(SLOW);
@@ -81,7 +84,7 @@ test.describe("pairing away from the lock screen", () => {
     await expect(stage).toBeVisible();
 
     await host.keyboard.press("Escape");
-    await expect(stage).toHaveCount(0);
+    await expect(stage).toHaveCount(0, SLOW);
   });
 });
 
