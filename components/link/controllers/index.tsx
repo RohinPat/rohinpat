@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import { PIECE_META, isPieceId, pieceApp, type PieceId } from "@/components/offhours/pieces";
 import type { LinkMsg } from "@/lib/link/session";
 import type { Motion } from "@/lib/link/permission";
+import { POINTER_SCREEN } from "@/lib/link/pointer";
 import Decks from "./Decks";
 import Engine from "./Engine";
 import Golf from "./Golf";
@@ -11,6 +12,7 @@ import Hoops from "./Hoops";
 import Keyboard from "./Keyboard";
 import Maze from "./Maze";
 import Penalty from "./Penalty";
+import PointerPad from "./PointerPad";
 import Powder from "./Powder";
 import { Shell, bigButton } from "./Shell";
 import SoundNote from "./SoundNote";
@@ -62,6 +64,8 @@ export function resolvePiece(piece: string | undefined): PieceId | "list" | null
 }
 
 export function PieceControls({ piece, send, subscribe, motion, onLeave, onList }: PieceControlsProps) {
+  // the air pointer lab (/lab/pointer), not a game
+  if (piece === POINTER_SCREEN) return <PointerPad send={send} onBack={onLeave} />;
   const which = resolvePiece(piece);
   if (which === null) return <OtherPage onBack={onLeave} />;
   if (which === "list") return <PieceList onOpen={(id) => send({ type: "open", app: pieceApp(id) })} onBack={onLeave} />;
