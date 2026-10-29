@@ -279,11 +279,11 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   function drawResult(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number, t: number) {
     const k = Math.min(1, c.doneT / 0.25);
     ctx.globalAlpha = k;
-    ctx.fillStyle = "rgba(8,10,9,0.72)";
+    ctx.fillStyle = "rgba(8,10,9,0.8)";
     ctx.fillRect(0, 0, w, area);
     const narrow = w < 560;
     const pw = Math.min(440, w - 24);
-    const ph = narrow ? 322 : 336;
+    const ph = narrow ? 252 : 264;
     const x = w / 2 - pw / 2;
     const y = Math.max(10, area / 2 - ph / 2);
     ctx.fillStyle = "rgba(10,13,12,0.94)";
@@ -316,11 +316,9 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     const shifts = sh.perfect + sh.good + sh.early + sh.late;
     const rows: [string, string, string?][] = [
       ["REACTION", `${(c.reaction ?? 0).toFixed(2)} S`, (c.reaction ?? 0) > 0.15 ? "#ffd23f" : undefined],
-      ["60 FT", c.sixtyFt ? `${c.sixtyFt.toFixed(2)} S` : "—"],
       ["LAUNCH", c.launch ? `${c.launch.replace(" LAUNCH", "")} · ${(c.launchRpm / 1000).toFixed(1)}K` : "—", c.launch === "PERFECT LAUNCH" || c.launch === "GREAT LAUNCH" ? "#8ad9a8" : "#ffd23f"],
       ["SHIFTS", `${sh.perfect} OF ${shifts} PERFECT`, sh.perfect === shifts ? "#8ad9a8" : undefined],
-      ["0–60", c.split60 ? `${c.split60.toFixed(2)} S` : "—"],
-      ["TRAP SPEED", `${Math.round(c.trap)} MPH`],
+      ["TRAP", `${Math.round(c.trap)} MPH`],
     ];
     mono(ctx, 11);
     rows.forEach(([name, val, col], i) => {
@@ -332,20 +330,15 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillStyle = col ?? "#f2ead7";
       ctx.fillText(val, cxp, cyp + 15);
     });
-    // the best of this visit, in one line: first run, or how far off it this one was
+    // one thing to do better, then (after the first run) how this one compares with the best of the visit
     mono(ctx, 11);
     const vs = c.vsBest;
-    ctx.fillStyle = vs === null || vs < 0 ? "#8ad9a8" : "#ffd23f";
-    ctx.fillText(
-      vs === null ? "● FIRST RUN: THIS IS YOUR BEST" : vs < 0 ? `● NEW BEST: ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · THIS RUN ${vs.toFixed(2)} S OFF`,
-      px,
-      y + ph - 68,
-    );
-    // one thing to do better
     ctx.fillStyle = "#f2ead7";
-    ctx.fillText(dragAdvice(c, p), px, y + ph - 44);
-    ctx.fillStyle = "#b5b6ab";
-    if (c.doneT > AGAIN_AFTER_S) ctx.fillText(narrow ? "TAP TO RUN AGAIN" : "SPACE, ENTER OR TAP TO RUN AGAIN", px, y + ph - 20);
+    ctx.fillText(dragAdvice(c, p), px, y + ph - (vs === null ? 24 : 46));
+    if (vs !== null) {
+      ctx.fillStyle = vs < 0 ? "#8ad9a8" : "#ffd23f";
+      ctx.fillText(vs < 0 ? `NEW BEST, ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · ${vs.toFixed(2)} S OFF`, px, y + ph - 24);
+    }
     ctx.globalAlpha = 1;
     void t;
   }
@@ -710,6 +703,9 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.textBaseline = "alphabetic";
     const lineMono = play ? 13 : 9;
     let rx: number;
+    // the end card carries the numbers once the run is over: the column is still laid out (the tree uses rx) but not drawn
+    ctx.save();
+    if (play && c.phase === "done") ctx.globalAlpha = 0;
     if (stacked) {
       const top = area - foot + 4;
       const big = 46;
@@ -740,6 +736,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         ctx.fillText(l, rx + 4, area * 0.42 + 42 + i * (play ? 20 : 13));
       });
     }
+    ctx.restore();
 
     // the tree again in the corner where there is no room for one on the wall (a phone) or no wall (the tile)
     if ((c.phase === "tree" || c.phase === "idle") && (stacked || !play)) {

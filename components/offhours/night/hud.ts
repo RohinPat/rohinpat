@@ -589,7 +589,7 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
 }
 
 /** how tall the end card is, in the dash's own units, and where its bottom edge is on the canvas (the button goes under it) */
-const RESULT_H = 484;
+const RESULT_H = 372;
 export function resultBottom(w: number, h: number, opt: { touch: boolean }) {
   void opt;
   const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
@@ -638,9 +638,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     r.finished ? ["FINISH TIME", clock(r.time)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
     vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
-    ["DRIFT BANKED", grouped(r.driftTotal)],
-    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} HIT${r.rails > 1 ? "S" : ""} · −${Math.round(r.railS)} S`],
-    ["CLEAN LEGS", `${r.cleanLegs} / ${g.road.checks.length}`],
+    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · −${Math.round(r.railS)} S`],
   ];
   rows.forEach(([k, v], i) => {
     const ry = y + 160 * u + i * 31 * u;
@@ -655,30 +653,18 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   });
   ctx.textAlign = "left";
   font(ctx, "m", 11 * u, 700);
-  // the lines under the rows: the next medal to go for, a new best score (there was one before it to beat), and the ghost
-  const lineY = y + ph - 60 * u;
-  let n = 0;
-  // one thing to do better, picked from how the run went (the topmost of these lines)
-  const tip = adviceFor(r, opt.touch);
-  if (r.next) {
-    ctx.fillStyle = MEDAL_COLOR[r.bestMedals];
-    ctx.fillText(`NEXT: ${r.next.name} AT ${grouped(r.next.score)}, ${grouped(r.next.score - r.bestScore)} MORE`, x + 28 * u, lineY - n * 20 * u);
-    n++;
-  }
-  if (r.prevBestScore > 0 && r.score > r.prevBestScore) {
-    ctx.fillStyle = MINT;
-    ctx.fillText(`● NEW BEST SCORE, UP FROM ${grouped(r.prevBestScore)}`, x + 28 * u, lineY - n * 20 * u);
-    n++;
-  }
-  if (r.newBest) {
-    ctx.fillStyle = MINT;
-    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, lineY - n * 20 * u);
-    n++;
+  // under the rows, two things at most: one thing to do better, and one line on where this run stands (a new best score, else the next medal)
+  const lineY = y + ph - 30 * u;
+  let status: [string, string] | null = null;
+  if (r.prevBestScore > 0 && r.score > r.prevBestScore) status = [`NEW BEST, UP FROM ${grouped(r.prevBestScore)}`, MINT];
+  else if (r.next) status = [`${r.next.name} AT ${grouped(r.next.score)}`, MEDAL_COLOR[r.bestMedals]];
+  if (status) {
+    ctx.fillStyle = status[1];
+    ctx.fillText(status[0], x + 28 * u, lineY);
   }
   ctx.fillStyle = CREAM;
-  const tipLines = wrap(ctx, tip, pw - 56 * u);
-  tipLines.forEach((l, i) => ctx.fillText(l, x + 28 * u, lineY - (n + tipLines.length - 1 - i) * 20 * u - 4 * u));
-  ctx.fillStyle = CREAM;
-  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 26 * u);
+  const tipLines = wrap(ctx, adviceFor(r, opt.touch), pw - 56 * u);
+  const above = status ? 1 : 0;
+  tipLines.forEach((l, i) => ctx.fillText(l, x + 28 * u, lineY - (above + tipLines.length - 1 - i) * 20 * u - (status ? 6 * u : 0)));
   void LIMIT;
 }
