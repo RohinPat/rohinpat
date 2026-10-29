@@ -8,7 +8,7 @@ import { getRoad } from "@/components/offhours/night/road";
 import { getTarget } from "@/components/offhours/night/target";
 import { drive } from "@/components/offhours/night/ai";
 import { stepKeySteer } from "@/components/offhours/night/nightInput";
-import { deltaText } from "@/components/offhours/night/hud";
+import { GATE_HINT_M, MEDAL_HINT_FROM, deltaText, gateHint, grouped, medalHint } from "@/components/offhours/night/hud";
 import { DRAG_GHOST_DT, gapToGhost, ghostAt, ghostTimeAt } from "@/components/offhours/dragGhost";
 
 // Cars, second polish pass: the pieces that can be pinned without a browser.
@@ -117,16 +117,62 @@ describe("cars: what the screen says", () => {
     expect(deltaText(Math.round(-0.04 * 10))).toBe("0.0s");
   });
 
-  it("shows one slide's payout at a time by the drift panel, and two words at most over the road", () => {
+  it("shows one slide's payout at a time by the drift panel, and one message at a time over the road", () => {
     const g = new NightGame(true);
     g.toast("+10", "drift", "drift", 2, "bank");
     g.toast("+20", "drift", "drift", 2, "bank");
     expect(g.toasts.filter((t) => t.slot === "bank").map((t) => t.text)).toEqual(["+20"]);
+    const main = () => g.toasts.filter((t) => t.slot === "main");
+    const showing = () => main().filter((t) => t.age >= 0).map((t) => t.text);
     g.toast("A", "", "good");
+    expect(showing()).toEqual(["A"]);
+    // a second and a third: they wait behind the first, and only the newest of them is kept
     g.toast("B", "", "good");
     g.toast("C", "", "bad");
-    expect(g.toasts.filter((t) => t.slot === "main").map((t) => t.text)).toEqual(["B", "C"]);
+    expect(showing()).toEqual(["A"]);
+    expect(main().map((t) => t.text)).toEqual(["A", "C"]);
     expect(g.toasts.filter((t) => t.slot === "bank")).toHaveLength(1);
+    // the one showing keeps the screen a moment at least, then the waiting one takes it
+    g.update(0.5, inp(0, 0));
+    expect(showing()).toEqual(["A"]);
+    g.update(0.5, inp(0, 0));
+    expect(showing()).toEqual(["C"]);
+  });
+
+  it("hands the middle of the screen to the corner warning, and keeps a waiting message for it", () => {
+    const g = new NightGame(true);
+    g.phase = "run";
+    g.toast("CHECKPOINT 1 OF 8", "", "good", 2);
+    g.cue.on = true;
+    g.update(0.1, inp(0, 0));
+    expect(g.toasts[0].age).toBe(0);
+    expect(g.toasts[0].held).toBeGreaterThan(0);
+    // the warning goes out by itself (nothing here is over the plan's speed); the message then runs its course
+    for (let i = 0; i < 30; i++) g.update(0.2, inp(0, 0));
+    expect(g.toasts.filter((x) => x.slot === "main")).toHaveLength(0);
+  });
+
+  it("names the next medal only once it is close, from the same marks the game awards", () => {
+    const bronze = MEDALS[0].score;
+    expect(medalHint(0)).toBeNull();
+    expect(medalHint(bronze * MEDAL_HINT_FROM - 1)).toBeNull();
+    expect(medalHint(bronze * MEDAL_HINT_FROM)).toBe(`BRONZE ${grouped(bronze)}`);
+    // past bronze the next one is silver, far off again until it is near
+    expect(medalHint(bronze + 1)).toBeNull();
+    expect(medalHint(MEDALS[1].score - 1)).toBe(`SILVER ${grouped(MEDALS[1].score)}`);
+    expect(medalHint(MEDALS[2].score)).toBeNull();
+    // what the dash prints is what awards one
+    for (const m of MEDALS) {
+      expect(medalsAt(m.score)).toBeGreaterThan(medalsAt(m.score - 1));
+      expect(medalHint(m.score - 1)).toBe(`${m.name} ${grouped(m.score)}`);
+    }
+  });
+
+  it("names the next gate only inside a stretch of road, and not after the last", () => {
+    expect(gateHint(0, 8, GATE_HINT_M + 1)).toBeNull();
+    expect(gateHint(0, 8, 240)).toBe("CHECKPOINT 1 / 8 · 240 M");
+    expect(gateHint(3, 8, 96)).toBe("CHECKPOINT 4 / 8 · 100 M");
+    expect(gateHint(8, 8, 10)).toBeNull();
   });
 
   it("does not toast a rail that cost almost nothing", () => {

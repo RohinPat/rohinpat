@@ -228,7 +228,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
     ({ ctx, w, h, t, dt, reduce }) => {
       let a = assetsRef.current;
       if (!a || a.w !== w || a.h !== h || a.dpr !== Math.max(1, ctx.getTransform().a)) a = assetsRef.current = buildAssets(ctx, w, h);
-      // the quality governor: a slow second and a half drops the draw distance a step; a long smooth spell climbs back
+      // the quality governor: a slow second and a half drops a step (0: everything; 1: no beams, wear or ledges; 2: a shorter road and no far ranges; 3: the bare road with its lamps); a long smooth spell climbs back
       const q = gov.current;
       if (dt > 0) {
         q.ema += (dt * 1000 - q.ema) * 0.06;
@@ -242,7 +242,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           q.slowFor = 0;
           q.fastFor = 0;
         }
-        if (q.slowFor > 1.5 && q.level < 2) {
+        if (q.slowFor > 1.5 && q.level < 3) {
           q.level++;
           q.slowFor = 0;
           q.ema = 16.7;
@@ -330,7 +330,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           el.dataset.quality = String(q.level);
         }
       }
-      drawScene(ctx, a, g.scene, q.level);
+      drawScene(ctx, a, g.scene, Math.min(q.level, 2), q.level);
       const opt: HudOptions = { touch: touchRef.current, linked: linkRef.current.linked, lift: touchRef.current ? PAD_LIFT : 0 };
       drawHud(ctx, w, h, g, opt, now, reduce);
       // the end card is drawn on the canvas, the button is under it wherever its bottom edge falls

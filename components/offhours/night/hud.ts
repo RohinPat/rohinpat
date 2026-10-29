@@ -56,6 +56,24 @@ function fmt(key: string, v: number, make: (v: number) => string): string {
 }
 export const grouped = (n: number) => Math.round(n).toLocaleString("en-US");
 
+/** the dash names the next medal only once the score is this close to it (a share of the mark) */
+export const MEDAL_HINT_FROM = 0.65;
+/** and the next gate only inside this many metres */
+export const GATE_HINT_M = 300;
+
+/** The next medal as the dash shows it, or null while it is too far off to be worth a line: the marks come from MEDALS, so the dash and the code cannot disagree. */
+export function medalHint(score: number): string | null {
+  const nm = nextMedal(score);
+  if (!nm || score < nm.score * MEDAL_HINT_FROM) return null;
+  return `${nm.name} ${grouped(nm.score)}`;
+}
+
+/** The checkpoint line: the gate's number and how far, only when it is near; null otherwise. Distances are to the nearest ten metres. */
+export function gateHint(cp: number, of: number, toGateM: number): string | null {
+  if (cp >= of || toGateM > GATE_HINT_M) return null;
+  return `CHECKPOINT ${cp + 1} / ${of} · ${Math.max(0, Math.round(toGateM / 10) * 10)} M`;
+}
+
 /** The gap to the target driver as printed, from tenths of a second (negative is ahead): the sign and the colour both come from the printed number, so a gap that rounds to nothing is "0.0s", not "−0.0s" in the colour of being behind. */
 export function deltaText(tenths: number): string {
   return tenths === 0 ? "0.0s" : `${tenths < 0 ? "−" : "+"}${(Math.abs(tenths) / 10).toFixed(1)}s`;
@@ -248,19 +266,16 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     ctx.globalAlpha = 1;
     ctx.textAlign = align;
   }
-  if (g.cpFlash > 0) {
-    const a = Math.min(1, g.cpFlash);
-    ctx.fillStyle = `rgba(138,217,168,${(a * 0.9).toFixed(2)})`;
-    font(ctx, "m", Math.max(9.5, 11 * u), 700);
-  } else {
-    ctx.fillStyle = MUTED;
-    font(ctx, "m", Math.max(9, 10 * u), 500);
-  }
-  // which checkpoint is next, and how far (to the nearest ten metres)
+  // which checkpoint is next and how far, only once it is near; the strip below says the rest
   const nextAt = g.road.checks[Math.min(g.cp, g.road.checks.length - 1)];
-  const toGate = Math.max(0, Math.round((nextAt - car.s) / 10) * 10);
-  const cpTxt = fmt("cp", g.cp * 100000 + toGate, () => `NEXT: CHECKPOINT ${Math.min(g.cp + 1, g.road.checks.length)} / ${g.road.checks.length}${g.cp < g.road.checks.length ? ` · ${toGate} M` : ""}`);
-  ctx.fillText(cpTxt, ax, top + 22 * u + 70 * u);
+  const toGate = Math.max(0, nextAt - car.s);
+  const cpTxt = gateHint(g.cp, g.road.checks.length, toGate);
+  if (cpTxt) {
+    ctx.fillStyle = toGate < 120 ? MINT : MUTED;
+    font(ctx, "m", Math.max(9, 10 * u), 700);
+    const tenM = Math.round(toGate / 10);
+    ctx.fillText(fmt("cp", g.cp * 1000 + tenM, () => cpTxt), ax, top + 22 * u + 70 * u);
+  }
   // the strip: the road in eight legs, filled to where the car is
   const sw = narrow ? Math.min(150, w * 0.42) : Math.min(260 * u, w * 0.4);
   const sx = narrow ? ax : w / 2 - sw / 2;
@@ -302,11 +317,11 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     below += 16 * u;
   }
   // the next medal to go for, with the colour it will be
-  const nm = nextMedal(g.score);
-  if (nm) {
+  const hint = medalHint(g.score);
+  if (hint) {
     font(ctx, "m", Math.max(9, 10 * u), 700);
     ctx.fillStyle = MEDAL_COLOR[medalsAt(g.score)];
-    ctx.fillText(fmt("medal", medalsAt(g.score), () => `NEXT: ${nm.name} ${grouped(nm.score)}`), lx, ly + below);
+    ctx.fillText(fmt("medal", medalsAt(g.score), () => hint), lx, ly + below);
     below += 16 * u;
   }
   // and the best of this visit, to beat (a phone's left column is the clock's: no room there)
@@ -444,16 +459,14 @@ function drawToast(ctx: CanvasRenderingContext2D, t: Toast, x: number, y: number
   ctx.globalAlpha = 1;
 }
 
-/** what just happened, over the road (two at most, the newest on top), and what a slide paid, over the drift panel it came from */
+/** what just happened, over the road (one at a time: the game queues them, and the corner warning has the place while it is lit), and what a slide paid, over the drift panel it came from */
 function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean, lift: number) {
   ctx.textAlign = "center";
-  // a corner warning (drawCue) sits just above: give it room
-  let y = h * 0.4 + (g.cue.on ? 40 * u : 0);
-  for (let i = g.toasts.length - 1; i >= 0; i--) {
-    const t = g.toasts[i];
-    if (t.slot !== "main") continue;
-    drawToast(ctx, t, w / 2, y, u, 44 * u, reduce);
-    y += 72 * u;
+  if (!g.cue.on) {
+    for (const t of g.toasts) {
+      if (t.slot !== "main" || t.age < 0) continue;
+      drawToast(ctx, t, w / 2, h * 0.4, u, 44 * u, reduce);
+    }
   }
   for (const t of g.toasts) {
     if (t.slot !== "bank") continue;
@@ -474,7 +487,8 @@ const COACH: Record<string, [string, string]> = {
 };
 function drawCoach(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, touch: boolean) {
   // the corner warning has the same part of the screen and the more urgent word
-  if (g.coachT <= 0 || !COACH[g.coach] || g.cue.on) return;
+  if (g.coachT <= 0 || !COACH[g.coach] || g.cue.on || g.goFlash > 0.4) return;
+  for (const t of g.toasts) if (t.slot === "main" && t.age >= 0) return;
   const text = COACH[g.coach][touch ? 1 : 0];
   const a = Math.min(1, g.coachT / 0.4);
   const narrow = isNarrow(w);

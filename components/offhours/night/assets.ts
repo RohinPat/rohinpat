@@ -1,13 +1,16 @@
 import { seeded } from "../useCanvas";
 
 // The pictures that never change while the page is open, made once per canvas
-// size and then only drawn: the sky with its stars and moon, three ridges of
-// mountains, a city glowing in the valley, a few soft glow sprites, and the
-// colour tables the road is painted from (the colours step with the distance,
-// so the headlights fade out along the road without a string being built in a
-// frame). The panoramas wrap all the way round, and slide with the camera's
-// heading, each a little differently, so the far ranges swing slower than the
-// near ridge.
+// size and then only drawn: the sky with its stars, wisps and moon, four ridges
+// of mountains (jagged far ones, pines on the near one, a radio mast and a line
+// of pylons on the way), a town glowing in the valley, the sprites the roadside
+// is made of (pines, houses, a petrol canopy, a grandstand, boulders, glows,
+// shadows) and the colour tables the road is painted from (the colours step with
+// the distance, so the headlights fade out along the road without a string being
+// built in a frame). The panoramas wrap all the way round, and slide with the
+// camera's heading, each a little differently, so the far ranges swing slower
+// than the near ridge. The palette is the site's: ink-green blacks, a mint glow
+// on the horizon, cream paint, the warm of sodium lamps for contrast.
 
 export type Pano = { c: HTMLCanvasElement; W: number; H: number };
 
@@ -30,8 +33,13 @@ export type Palette = {
   post: string[];
   reflL: string[];
   reflR: string[];
+  /** the cliff's lower face: four shades for each distance step (index step * 4 + shade) */
   rock: string[];
-  rockAlt: string[];
+  /** the cliff's upper face (darker) and its ledges (lit) */
+  rockLo: string[];
+  rockHi: string[];
+  /** the polished lanes the wheels run in */
+  wear: string[];
   tunnel: string[];
   ceiling: string[];
   lamp: string[];
@@ -39,7 +47,26 @@ export type Palette = {
   board: string[];
 };
 
-export type Sprites = { red: HTMLCanvasElement; white: HTMLCanvasElement; orange: HTMLCanvasElement; mint: HTMLCanvasElement; smoke: HTMLCanvasElement; sodium: HTMLCanvasElement };
+export type Sprites = {
+  red: HTMLCanvasElement;
+  white: HTMLCanvasElement;
+  orange: HTMLCanvasElement;
+  mint: HTMLCanvasElement;
+  smoke: HTMLCanvasElement;
+  sodium: HTMLCanvasElement;
+  /** a lamp's reflection in wet asphalt: a tall thin streak, bright at its top */
+  streak: HTMLCanvasElement;
+  /** a trapezoid of light, wide at the top and narrow at the bottom, for the beams in the air */
+  cone: HTMLCanvasElement;
+  /** a soft dark pool: the car's shadow */
+  shadow: HTMLCanvasElement;
+  /** the roadside: pines (three), houses (two), a petrol canopy, a grandstand and a boulder, each with its base at the bottom centre */
+  pine: HTMLCanvasElement[];
+  house: HTMLCanvasElement[];
+  canopy: HTMLCanvasElement;
+  stand: HTMLCanvasElement;
+  rock: HTMLCanvasElement;
+};
 
 export type Assets = {
   w: number;
@@ -75,33 +102,41 @@ const smooth = (t: number) => {
   return x * x * (3 - 2 * x);
 };
 
-const FOG: RGB = [10, 14, 20];
+/** the far end of the road melts into this: the colour of the haze on the horizon */
+const FOG: RGB = [16, 36, 31];
+/** the glow a ridge's edge catches from the moon */
+const RIM = "rgba(170,226,196,";
 
 function makePalette(): Palette {
-  const pal: Palette = { road: [], roadAlt: [], edge: [], rail: [], railHi: [], post: [], reflL: [], reflR: [], rock: [], rockAlt: [], tunnel: [], ceiling: [], lamp: [], parapet: [], board: [] };
+  const pal: Palette = { road: [], roadAlt: [], edge: [], rail: [], railHi: [], post: [], reflL: [], reflR: [], rock: [], rockHi: [], rockLo: [], tunnel: [], ceiling: [], lamp: [], parapet: [], board: [], wear: [] };
   for (let b = 0; b < BUCKETS; b++) {
     const z = bucketZ(b);
     const beam = Math.exp(-Math.max(0, z - 6) / 27);
     const refl = 0.1 + 0.9 * Math.exp(-Math.max(0, z - 6) / 190);
-    const fog = smooth((z - 120) / 700) * 0.7;
+    const fog = smooth((z - 90) / 620) * 0.78;
     const tone = (dark: RGB, lit: RGB, k: number): RGB => mix(mix(dark, lit, k), FOG, fog);
-    pal.road.push(css(tone([11, 14, 18], [64, 63, 56], beam)));
-    pal.roadAlt.push(css(tone([13, 16, 20], [75, 73, 64], beam)));
-    pal.edge.push(css(mix(mix([46, 44, 40], [238, 232, 214], refl), FOG, fog * 0.6)));
-    pal.rail.push(css(tone([18, 22, 27], [124, 132, 138], beam * 0.92)));
-    pal.railHi.push(css(tone([30, 36, 42], [214, 222, 228], Math.min(1, beam * 1.1))));
-    pal.post.push(css(tone([27, 31, 35], [150, 156, 160], beam)));
+    pal.road.push(css(tone([10, 14, 13], [66, 64, 54], beam)));
+    pal.roadAlt.push(css(tone([12, 16, 15], [77, 74, 62], beam)));
+    pal.wear.push(css(tone([6, 9, 8], [38, 37, 32], beam)));
+    pal.edge.push(css(mix(mix([46, 46, 40], [242, 234, 215], refl), FOG, fog * 0.6)));
+    pal.rail.push(css(tone([17, 23, 22], [122, 132, 132], beam * 0.92)));
+    pal.railHi.push(css(tone([30, 38, 37], [214, 224, 222], Math.min(1, beam * 1.1))));
+    pal.post.push(css(tone([26, 31, 30], [150, 156, 154], beam)));
     pal.reflR.push(css([236, 246, 255], Math.min(1, 0.22 + 0.78 * refl)));
     pal.reflL.push(css([255, 176, 66], Math.min(1, 0.22 + 0.78 * refl)));
     const rockBeam = Math.exp(-Math.max(0, z - 6) / 22);
-    pal.rock.push(css(tone([10, 13, 18], [46, 48, 52], rockBeam)));
-    pal.rockAlt.push(css(tone([11, 14, 19], [49, 51, 54], rockBeam)));
+    // four shades a distance, so neighbouring segments of the cliff are not the same grey
+    for (let q = 0; q < 4; q++) pal.rock.push(css(tone([7 + q * 1.3, 11 + q * 1.4, 10 + q * 1.3], [44 + q * 5, 48 + q * 5, 44 + q * 4], rockBeam)));
+    // the upper face of the cliff is further from the lamps and leans away: darker; a ledge catches more
+    pal.rockLo.push(css(tone([6, 9, 8], [30, 34, 31], rockBeam * 0.8)));
+    pal.rockHi.push(css(tone([14, 20, 18], [92, 98, 88], rockBeam * 0.9)));
     const lampLit = 0.3 + 0.7 * Math.exp(-z / 70);
-    pal.tunnel.push(css(tone([20, 22, 25], [158, 146, 118], lampLit)));
-    pal.ceiling.push(css(tone([12, 13, 16], [96, 90, 72], lampLit * 0.7)));
+    // cool concrete tile under warm lamps: the lamps' glow supplies the warmth
+    pal.tunnel.push(css(tone([14, 21, 20], [92, 106, 98], lampLit)));
+    pal.ceiling.push(css(tone([9, 14, 14], [56, 68, 64], lampLit * 0.7)));
     pal.lamp.push(css(mix([255, 232, 170], FOG, fog * 0.4)));
-    pal.parapet.push(css(tone([30, 33, 36], [172, 172, 162], beam)));
-    pal.board.push(css(tone([14, 19, 26], [52, 62, 76], beam)));
+    pal.parapet.push(css(tone([28, 34, 33], [172, 172, 160], beam)));
+    pal.board.push(css(tone([12, 20, 19], [48, 64, 62], beam)));
   }
   return pal;
 }
@@ -111,6 +146,16 @@ function canvas(w: number, h: number): HTMLCanvasElement {
   c.width = Math.max(1, Math.round(w));
   c.height = Math.max(1, Math.round(h));
   return c;
+}
+
+/** sprites are painted at this many times the size they are drawn at, so a tree beside the road does not turn to blocks as the car comes up to it */
+const K = 2;
+/** a canvas of w by h in the sprite's own units, painted at K times that */
+function sprite(w: number, h: number): { c: HTMLCanvasElement; x: CanvasRenderingContext2D } {
+  const c = canvas(w * K, h * K);
+  const x = c.getContext("2d")!;
+  x.scale(K, K);
+  return { c, x };
 }
 
 function glow(rgb: RGB, size = 64, hard = 0.0): HTMLCanvasElement {
@@ -126,7 +171,202 @@ function glow(rgb: RGB, size = 64, hard = 0.0): HTMLCanvasElement {
   return c;
 }
 
-function makeSprites(): Sprites {
+function treeSprite(rng: () => number, w: number, h: number, tiers: number, lean: number): HTMLCanvasElement {
+  // a pine seen from the side: stacked, ragged tiers, a trunk, dark at the top and a little lit low down (the headlights), with one edge catching the moon
+  const { c, x } = sprite(w, h);
+  const cx = w / 2;
+  const trunk = h * 0.1;
+  const g = x.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#050b0a");
+  g.addColorStop(0.55, "#0a1814");
+  g.addColorStop(1, "#16281f");
+  x.fillStyle = g;
+  x.fillRect(cx - w * 0.03, h - trunk, w * 0.06, trunk);
+  const left: number[] = [];
+  const right: number[] = [];
+  for (let t = 0; t < tiers; t++) {
+    const y0 = 1 + (h - trunk - 4) * (t / tiers) * 0.92;
+    const y1 = 1 + (h - trunk - 2) * ((t + 1.35) / tiers);
+    const hw = w * (0.2 + 0.3 * ((t + 1) / tiers)) * (0.9 + rng() * 0.2);
+    left.push(cx - hw - rng() * 2, Math.min(h - trunk, y1), cx - hw * 0.45, y0 + (y1 - y0) * 0.38);
+    right.push(cx + hw + rng() * 2, Math.min(h - trunk, y1), cx + hw * 0.45, y0 + (y1 - y0) * 0.38);
+  }
+  x.beginPath();
+  x.moveTo(cx, 1);
+  for (let t = 0; t < tiers; t++) {
+    x.lineTo(right[t * 4 + 2] + lean, right[t * 4 + 3]);
+    x.lineTo(right[t * 4] + lean * 0.5, right[t * 4 + 1]);
+    x.lineTo(cx + w * 0.04, right[t * 4 + 1] - 1);
+  }
+  x.lineTo(cx - w * 0.04, left[(tiers - 1) * 4 + 1] - 1);
+  for (let t = tiers - 1; t >= 0; t--) {
+    x.lineTo(left[t * 4], left[t * 4 + 1]);
+    x.lineTo(left[t * 4 + 2], left[t * 4 + 3]);
+    x.lineTo(cx - w * 0.04 * (t ? 0.4 : 0), left[t * 4 + 3] - (t ? 1 : 0));
+  }
+  x.closePath();
+  x.fillStyle = g;
+  x.fill();
+  // the moon-lit side
+  x.save();
+  x.clip();
+  x.fillStyle = "rgba(150,210,180,0.13)";
+  x.fillRect(0, 0, cx - w * 0.12, h);
+  x.restore();
+  return c;
+}
+
+function houseSprite(rng: () => number, w: number, h: number, kind: number): HTMLCanvasElement {
+  // a small house at night: dark walls, a roof with its edge in cream, a few lit windows with their glow
+  const { c, x } = sprite(w, h);
+  const bodyH = h * (kind ? 0.5 : 0.56);
+  const bx = w * 0.12;
+  const bw = w * 0.76;
+  x.fillStyle = "#0e1715";
+  x.fillRect(bx, h - bodyH, bw, bodyH);
+  x.fillStyle = "#16221f";
+  x.fillRect(bx, h - bodyH, bw * 0.16, bodyH);
+  const roof = () => {
+    x.beginPath();
+    if (kind) {
+      x.moveTo(bx - 3, h - bodyH + 1);
+      x.lineTo(bx + bw * 0.5, h * 0.06);
+      x.lineTo(bx + bw + 3, h - bodyH + 1);
+    } else {
+      x.moveTo(bx - 3, h - bodyH + 1);
+      x.lineTo(bx + 4, h * 0.2);
+      x.lineTo(bx + bw - 4, h * 0.2);
+      x.lineTo(bx + bw + 3, h - bodyH + 1);
+    }
+  };
+  x.fillStyle = "#070d0c";
+  roof();
+  x.closePath();
+  x.fill();
+  x.strokeStyle = "rgba(242,234,215,0.34)";
+  x.lineWidth = 1.2;
+  roof();
+  x.stroke();
+  // windows
+  const cols = kind ? 3 : 4;
+  x.globalCompositeOperation = "lighter";
+  for (let i = 0; i < cols; i++) {
+    if (rng() < 0.22) continue;
+    const wx = bx + bw * (0.12 + (0.76 * i) / cols);
+    const wy = h - bodyH * 0.78;
+    const ww = (bw * 0.5) / cols;
+    const wh = bodyH * 0.34;
+    const hg = x.createRadialGradient(wx + ww / 2, wy + wh / 2, 0, wx + ww / 2, wy + wh / 2, ww * 1.6);
+    hg.addColorStop(0, "rgba(255,196,110,0.45)");
+    hg.addColorStop(1, "rgba(255,196,110,0)");
+    x.fillStyle = hg;
+    x.fillRect(wx - ww * 1.6, wy - ww * 1.3, ww * 4.2, wh + ww * 2.6);
+    x.fillStyle = rng() < 0.2 ? "rgba(190,226,255,0.95)" : "rgba(255,214,140,0.95)";
+    x.fillRect(wx, wy, ww, wh);
+  }
+  x.globalCompositeOperation = "source-over";
+  return c;
+}
+
+function canopySprite(w: number, h: number): HTMLCanvasElement {
+  // a roadside fuel stop, unbranded: a flat roof on four posts, lit from underneath, a kiosk behind it
+  const { c, x } = sprite(w, h);
+  const gy = h - 3;
+  // light on the ground under the roof
+  const pool = x.createRadialGradient(w * 0.46, gy, 0, w * 0.46, gy, w * 0.5);
+  pool.addColorStop(0, "rgba(230,255,235,0.5)");
+  pool.addColorStop(1, "rgba(230,255,235,0)");
+  x.save();
+  x.translate(0, gy);
+  x.scale(1, 0.14);
+  x.translate(0, -gy);
+  x.fillStyle = pool;
+  x.fillRect(0, gy - w * 0.5, w, w);
+  x.restore();
+  // the kiosk
+  x.fillStyle = "#0f1a18";
+  x.fillRect(w * 0.64, h * 0.42, w * 0.3, h * 0.55);
+  x.globalCompositeOperation = "lighter";
+  x.fillStyle = "rgba(220,255,230,0.85)";
+  x.fillRect(w * 0.68, h * 0.52, w * 0.2, h * 0.17);
+  x.globalCompositeOperation = "source-over";
+  // posts and the roof
+  x.fillStyle = "#17211f";
+  for (const px of [0.12, 0.3, 0.46, 0.58]) x.fillRect(w * px, h * 0.3, w * 0.018, gy - h * 0.3);
+  x.fillStyle = "#0b1311";
+  x.fillRect(w * 0.04, h * 0.18, w * 0.64, h * 0.13);
+  x.globalCompositeOperation = "lighter";
+  const roof = x.createLinearGradient(0, h * 0.28, 0, h * 0.42);
+  roof.addColorStop(0, "rgba(220,255,236,0.95)");
+  roof.addColorStop(1, "rgba(220,255,236,0)");
+  x.fillStyle = roof;
+  x.fillRect(w * 0.05, h * 0.3, w * 0.62, h * 0.12);
+  // a stripe of mint along the roof edge
+  x.fillStyle = "rgba(138,217,168,0.9)";
+  x.fillRect(w * 0.04, h * 0.285, w * 0.64, h * 0.025);
+  x.globalCompositeOperation = "source-over";
+  return c;
+}
+
+function standSprite(rng: () => number, w: number, h: number): HTMLCanvasElement {
+  // a grandstand seen side-on at night: stepped rows with a crowd of dim dots, a roof whose underside is lit
+  const c = canvas(w, h);
+  const x = c.getContext("2d")!;
+  const rows = 5;
+  const baseY = h - 2;
+  const sh = h * 0.48;
+  for (let r = 0; r < rows; r++) {
+    const y1 = baseY - (sh * r) / rows;
+    const y0 = baseY - (sh * (r + 1)) / rows;
+    x.fillStyle = r % 2 ? "#0e1816" : "#121e1b";
+    x.fillRect(w * 0.06 + r * 3, y0, w * 0.88 - r * 6, y1 - y0);
+    // the people
+    const n = Math.round(w / 6);
+    for (let i = 0; i < n; i++) {
+      if (rng() < 0.2) continue;
+      const px = w * 0.07 + r * 3 + rng() * (w * 0.86 - r * 6);
+      const tone = rng();
+      x.fillStyle = tone < 0.15 ? "rgba(242,234,215,0.7)" : tone < 0.3 ? "rgba(138,217,168,0.65)" : tone < 0.5 ? "rgba(255,200,130,0.55)" : "rgba(70,86,84,0.9)";
+      x.fillRect(px, y0 + 1, 1.7, (y1 - y0) * 0.55);
+    }
+  }
+  // roof, on posts
+  x.fillStyle = "#0a1210";
+  x.fillRect(w * 0.04, h * 0.1, w * 0.92, h * 0.1);
+  x.fillStyle = "#1a2623";
+  for (let i = 0; i <= 8; i++) x.fillRect(w * (0.06 + i * 0.1), h * 0.2, 2, baseY - sh - h * 0.2 + 2);
+  x.globalCompositeOperation = "lighter";
+  const under = x.createLinearGradient(0, h * 0.18, 0, h * 0.4);
+  under.addColorStop(0, "rgba(255,236,190,0.55)");
+  under.addColorStop(1, "rgba(255,236,190,0)");
+  x.fillStyle = under;
+  x.fillRect(w * 0.05, h * 0.2, w * 0.9, h * 0.2);
+  x.fillStyle = "rgba(242,234,215,0.85)";
+  x.fillRect(w * 0.04, h * 0.095, w * 0.92, 1.4);
+  x.globalCompositeOperation = "source-over";
+  return c;
+}
+
+function rockSprite(rng: () => number, w: number, h: number): HTMLCanvasElement {
+  const { c, x } = sprite(w, h);
+  const g = x.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#1c2724");
+  g.addColorStop(1, "#0b1210");
+  x.fillStyle = g;
+  x.beginPath();
+  x.moveTo(1, h);
+  const pts = 7;
+  for (let i = 0; i < pts; i++) x.lineTo(1 + ((w - 2) * (i + 1)) / (pts + 1), h * (0.18 + rng() * 0.5));
+  x.lineTo(w - 1, h);
+  x.closePath();
+  x.fill();
+  x.strokeStyle = "rgba(150,210,180,0.18)";
+  x.lineWidth = 1;
+  x.stroke();
+  return c;
+}
+
+function makeSprites(rng: () => number): Sprites {
   const smoke = canvas(64, 64);
   const x = smoke.getContext("2d")!;
   const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -135,6 +375,50 @@ function makeSprites(): Sprites {
   g.addColorStop(1, "rgba(170,176,186,0)");
   x.fillStyle = g;
   x.fillRect(0, 0, 64, 64);
+  // a lamp's reflection: bright at the top, gone by the bottom
+  const streak = canvas(16, 128);
+  const sx = streak.getContext("2d")!;
+  const sg = sx.createLinearGradient(0, 0, 0, 128);
+  sg.addColorStop(0, "rgba(255,206,130,0.9)");
+  sg.addColorStop(0.25, "rgba(255,196,110,0.4)");
+  sg.addColorStop(1, "rgba(255,190,100,0)");
+  sx.fillStyle = sg;
+  sx.beginPath();
+  sx.ellipse(8, 40, 6, 120, 0, 0, Math.PI * 2);
+  sx.fill();
+  // the beams in the air: a wedge, strongest at the car
+  const cone = canvas(128, 128);
+  const cx = cone.getContext("2d")!;
+  const cg = cx.createLinearGradient(0, 0, 0, 128);
+  cg.addColorStop(0, "rgba(255,244,214,0)");
+  cg.addColorStop(1, "rgba(255,244,214,0.5)");
+  cx.fillStyle = cg;
+  cx.beginPath();
+  cx.moveTo(0, 0);
+  cx.lineTo(128, 0);
+  cx.lineTo(80, 128);
+  cx.lineTo(48, 128);
+  cx.closePath();
+  cx.fill();
+  cx.globalCompositeOperation = "destination-in";
+  const edge = cx.createLinearGradient(0, 0, 128, 0);
+  edge.addColorStop(0, "rgba(0,0,0,0)");
+  edge.addColorStop(0.28, "rgba(0,0,0,1)");
+  edge.addColorStop(0.72, "rgba(0,0,0,1)");
+  edge.addColorStop(1, "rgba(0,0,0,0)");
+  cx.fillStyle = edge;
+  cx.fillRect(0, 0, 128, 128);
+  // the car's shadow
+  const shadow = canvas(96, 48);
+  const dx = shadow.getContext("2d")!;
+  dx.translate(48, 24);
+  dx.scale(1, 0.5);
+  const dg = dx.createRadialGradient(0, 0, 0, 0, 0, 48);
+  dg.addColorStop(0, "rgba(0,0,0,0.95)");
+  dg.addColorStop(0.55, "rgba(0,0,0,0.7)");
+  dg.addColorStop(1, "rgba(0,0,0,0)");
+  dx.fillStyle = dg;
+  dx.fillRect(-48, -48, 96, 96);
   return {
     red: glow([255, 40, 30], 96, 0.08),
     white: glow([255, 246, 226], 96, 0.1),
@@ -142,69 +426,109 @@ function makeSprites(): Sprites {
     mint: glow([138, 217, 168], 96, 0.1),
     sodium: glow([255, 200, 110], 64, 0.12),
     smoke,
+    streak,
+    cone,
+    shadow,
+    pine: [treeSprite(rng, 56, 128, 5, 0), treeSprite(rng, 48, 112, 4, 1.5), treeSprite(rng, 64, 120, 6, -1)],
+    house: [houseSprite(rng, 96, 60, 0), houseSprite(rng, 80, 64, 1)],
+    canopy: canopySprite(176, 72),
+    stand: standSprite(rng, 400, 108),
+    rock: rockSprite(rng, 64, 40),
   };
 }
 
-/** a ridge line that wraps: a sum of sines whose periods divide the panorama */
-function ridge(rng: () => number, W: number, terms: number, rough: number): (x: number) => number {
-  const ph: number[] = [];
-  const am: number[] = [];
-  const ks: number[] = [];
-  for (let i = 0; i < terms; i++) {
-    const k = 2 + Math.floor(rng() * 5) + i * 3;
-    ks.push(k);
-    ph.push(rng() * Math.PI * 2);
-    am.push(1 / Math.pow(k, rough));
+/** a looped value noise: `n` lattice points around the panorama, smooth between them, in 0..1 */
+function loopNoise(rng: () => number, n: number): (u: number) => number {
+  const v: number[] = [];
+  for (let i = 0; i < n; i++) v.push(rng());
+  return (u) => {
+    const f = (((u % 1) + 1) % 1) * n;
+    const i = Math.floor(f);
+    const t = f - i;
+    const s = t * t * (3 - 2 * t);
+    return v[i % n] + (v[(i + 1) % n] - v[i % n]) * s;
+  };
+}
+
+/** a ridge that wraps: broad swells, then octaves of pointed noise; `peaky` is how sharp the summits are (0 is a rolling hill) */
+function ridge(rng: () => number, W: number, base: number, octaves: number, peaky: number): (x: number) => number {
+  const layers: { fn: (u: number) => number; amp: number }[] = [];
+  let amp = 1;
+  let total = 0;
+  for (let o = 0; o < octaves; o++) {
+    layers.push({ fn: loopNoise(rng, base * Math.pow(2, o)), amp });
+    total += amp;
+    amp *= 0.5;
   }
-  const norm = am.reduce((a, b) => a + b, 0);
-  return (x) => {
+  return (px) => {
+    const u = px / W;
     let s = 0;
-    for (let i = 0; i < terms; i++) s += am[i] * Math.sin((x / W) * Math.PI * 2 * ks[i] + ph[i]);
-    return (s / norm) * 0.5 + 0.5;
+    for (const l of layers) {
+      const n = l.fn(u);
+      // 1 - |2n - 1| makes a point where the noise turns over; mixed with the plain noise by `peaky`
+      s += l.amp * (n * (1 - peaky) + (1 - Math.abs(2 * n - 1)) * peaky);
+    }
+    return s / total;
   };
 }
 
-function mountains(rng: () => number, W: number, H: number, top: RGB, bottom: RGB, rim: number, floorFrac: number, rough: number): Pano {
+type Skyline = Pano & { heights: number[] };
+
+function mountains(rng: () => number, W: number, H: number, top: RGB, bottom: RGB, rim: number, floorFrac: number, o: { base: number; octaves: number; peaky: number; haze: number; teeth?: boolean }): Skyline {
   const c = canvas(W, H);
   const x = c.getContext("2d")!;
-  const r = ridge(rng, W, 9, rough);
+  const r = ridge(rng, W, o.base, o.octaves, o.peaky);
+  const heights: number[] = [];
+  const step = 2;
+  for (let px = 0; px <= W; px += step) {
+    let hgt = H * (floorFrac + (1 - floorFrac) * Math.pow(r(px), 1.25) * 0.98);
+    // a serrated edge of pines on the near ridge
+    if (o.teeth) hgt += (Math.sin(px * 0.9) * 0.5 + 0.5) * (px % 7 < 3 ? 5 : 2.2) * (H / 80) * (0.5 + 0.5 * Math.sin(px * 0.013));
+    heights.push(Math.min(H - 1, hgt));
+  }
   const g = x.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, css(top));
   g.addColorStop(1, css(bottom));
   x.fillStyle = g;
   x.beginPath();
   x.moveTo(0, H);
-  const heights: number[] = [];
-  for (let px = 0; px <= W; px += 3) {
-    const hgt = H * (floorFrac + (1 - floorFrac) * r(px) * 0.96);
-    heights.push(hgt);
-    x.lineTo(px, H - hgt);
-  }
+  heights.forEach((hgt, i) => x.lineTo(i * step, H - hgt));
   x.lineTo(W, H);
   x.closePath();
   x.fill();
+  // haze lies in the valleys: the foot of the range takes the colour of the horizon
+  if (o.haze > 0) {
+    x.globalCompositeOperation = "source-atop";
+    const hz = x.createLinearGradient(0, H * 0.35, 0, H);
+    hz.addColorStop(0, css(FOG, 0));
+    hz.addColorStop(1, css(FOG, o.haze));
+    x.fillStyle = hz;
+    x.fillRect(0, 0, W, H);
+    x.globalCompositeOperation = "source-over";
+  }
   if (rim > 0) {
-    x.strokeStyle = `rgba(150,176,220,${rim})`;
-    x.lineWidth = 1.4;
+    // the edge the moon catches
+    x.strokeStyle = `${RIM}${rim})`;
+    x.lineWidth = 1.3;
     x.beginPath();
-    heights.forEach((hgt, i) => (i ? x.lineTo(i * 3, H - hgt + 0.7) : x.moveTo(0, H - hgt + 0.7)));
+    heights.forEach((hgt, i) => (i ? x.lineTo(i * step, H - hgt + 0.7) : x.moveTo(0, H - hgt + 0.7)));
     x.stroke();
   }
-  return { c, W, H };
+  return { c, W, H, heights };
 }
 
 function stars(rng: () => number, W: number, H: number, moonAt: number, moonR: number): Pano {
   const c = canvas(W, H);
   const x = c.getContext("2d")!;
-  const n = Math.round((W * H) / 1900);
+  const n = Math.round((W * H) / 1700);
   for (let i = 0; i < n; i++) {
     const px = rng() * W;
     // thicker toward the top of the sky, thinner into the haze
     const py = Math.pow(rng(), 0.8) * H * 0.96;
     const mag = rng();
-    const a = 0.25 + 0.7 * Math.pow(rng(), 2) * (1 - (py / H) * 0.65);
+    const a = 0.25 + 0.7 * Math.pow(rng(), 2) * (1 - (py / H) * 0.7);
     const tint = rng();
-    x.fillStyle = tint < 0.12 ? `rgba(255,214,170,${a})` : tint < 0.3 ? `rgba(190,214,255,${a})` : `rgba(255,255,255,${a})`;
+    x.fillStyle = tint < 0.12 ? `rgba(255,214,170,${a})` : tint < 0.3 ? `rgba(190,226,255,${a})` : `rgba(255,255,255,${a})`;
     const s = mag > 0.985 ? 2.4 : mag > 0.9 ? 1.6 : 1.1;
     x.fillRect(px, py, s, s);
     if (mag > 0.985) {
@@ -213,24 +537,43 @@ function stars(rng: () => number, W: number, H: number, moonAt: number, moonR: n
       x.fillRect(px + s / 2 - 0.4, py - 2, 0.8, s + 4);
     }
   }
-  // the moon: a soft halo, then a disc with a little shading
-  const my = H * 0.4;
-  const halo = x.createRadialGradient(moonAt, my, moonR * 0.8, moonAt, my, moonR * 7);
-  halo.addColorStop(0, "rgba(190,210,245,0.28)");
-  halo.addColorStop(0.35, "rgba(150,180,235,0.08)");
-  halo.addColorStop(1, "rgba(120,150,220,0)");
+  const my = H * 0.6;
+  // thin cloud, lit from the moon's side: a few long soft wisps low in the sky, a little above the ridge
+  x.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 9; i++) {
+    const cx = moonAt + (rng() - 0.5) * moonR * 26;
+    const cy = my + moonR * (1.2 + rng() * 5);
+    const rx = moonR * (3 + rng() * 6);
+    const ry = moonR * (0.18 + rng() * 0.3);
+    const near = Math.max(0, 1 - Math.hypot(cx - moonAt, cy - my) / (moonR * 14));
+    x.save();
+    x.translate(cx, cy);
+    x.scale(1, ry / rx);
+    const cg = x.createRadialGradient(0, 0, 0, 0, 0, rx);
+    cg.addColorStop(0, `rgba(150,196,184,${(0.05 + 0.1 * near).toFixed(3)})`);
+    cg.addColorStop(1, "rgba(150,196,184,0)");
+    x.fillStyle = cg;
+    x.fillRect(-rx, -rx, rx * 2, rx * 2);
+    x.restore();
+  }
+  x.globalCompositeOperation = "source-over";
+  // the moon: a wide soft halo, then a disc with a little shading
+  const halo = x.createRadialGradient(moonAt, my, moonR * 0.8, moonAt, my, moonR * 9);
+  halo.addColorStop(0, "rgba(190,226,215,0.3)");
+  halo.addColorStop(0.3, "rgba(150,204,186,0.1)");
+  halo.addColorStop(1, "rgba(120,190,170,0)");
   x.fillStyle = halo;
-  x.fillRect(moonAt - moonR * 7, my - moonR * 7, moonR * 14, moonR * 14);
+  x.fillRect(moonAt - moonR * 9, my - moonR * 9, moonR * 18, moonR * 18);
   const disc = x.createRadialGradient(moonAt - moonR * 0.3, my - moonR * 0.25, moonR * 0.1, moonAt, my, moonR);
   disc.addColorStop(0, "#fbf6e6");
-  disc.addColorStop(0.8, "#e5e4dc");
-  disc.addColorStop(1, "#c9cccb");
+  disc.addColorStop(0.8, "#e7e6da");
+  disc.addColorStop(1, "#cdd2cb");
   x.fillStyle = disc;
   x.beginPath();
   x.arc(moonAt, my, moonR, 0, Math.PI * 2);
   x.fill();
-  x.fillStyle = "rgba(120,130,140,0.22)";
-  for (const [dx, dy, r] of [[-0.35, -0.2, 0.22], [0.25, 0.15, 0.3], [-0.05, 0.5, 0.16], [0.4, -0.4, 0.14]]) {
+  x.fillStyle = "rgba(120,134,138,0.22)";
+  for (const [dx, dy, r] of [[-0.35, -0.2, 0.22], [0.25, 0.15, 0.3], [-0.05, 0.5, 0.16], [0.4, -0.4, 0.14], [-0.5, 0.25, 0.1]]) {
     x.beginPath();
     x.arc(moonAt + dx * moonR, my + dy * moonR, r * moonR, 0, Math.PI * 2);
     x.fill();
@@ -292,6 +635,80 @@ function city(rng: () => number, W: number, H: number, scale: number): Pano {
   return { c, W, H };
 }
 
+/** landmarks drawn into a ridge's panorama: radio masts with their red lamps, and lines of pylons with their cables */
+function landmarks(rng: () => number, p: Skyline, s: number, o: { mast: number; pylons: number }) {
+  const x = p.c.getContext("2d")!;
+  const at = (px: number) => p.H - p.heights[Math.max(0, Math.min(p.heights.length - 1, Math.round(px / 2)))];
+  for (let m = 0; m < o.mast; m++) {
+    const px = rng() * p.W;
+    // the highest point near px
+    let bx = px;
+    let by = at(px);
+    for (let d = -60; d <= 60; d += 2) {
+      const y = at(px + d);
+      if (y < by) {
+        by = y;
+        bx = px + d;
+      }
+    }
+    const h = 34 * s;
+    x.strokeStyle = "rgba(6,12,10,0.95)";
+    x.lineWidth = 1.6;
+    x.beginPath();
+    x.moveTo(bx, by + 2);
+    x.lineTo(bx, by - h);
+    x.stroke();
+    x.lineWidth = 1;
+    x.beginPath();
+    x.moveTo(bx - 4 * s, by - h * 0.35);
+    x.lineTo(bx + 4 * s, by - h * 0.35);
+    x.moveTo(bx - 3 * s, by - h * 0.7);
+    x.lineTo(bx + 3 * s, by - h * 0.7);
+    x.stroke();
+    x.globalCompositeOperation = "lighter";
+    for (const hh of [1, 0.7, 0.35]) {
+      const gy = by - h * hh;
+      const g = x.createRadialGradient(bx, gy, 0, bx, gy, 7 * s);
+      g.addColorStop(0, "rgba(255,70,50,0.95)");
+      g.addColorStop(0.25, "rgba(255,60,40,0.4)");
+      g.addColorStop(1, "rgba(255,60,40,0)");
+      x.fillStyle = g;
+      x.fillRect(bx - 7 * s, gy - 7 * s, 14 * s, 14 * s);
+    }
+    x.globalCompositeOperation = "source-over";
+  }
+  for (let l = 0; l < o.pylons; l++) {
+    const start = rng() * p.W;
+    const gap = (50 + rng() * 30) * s;
+    let prev: [number, number] | null = null;
+    for (let i = 0; i < 6; i++) {
+      const px = (start + i * gap) % p.W;
+      const py = at(px) + 1;
+      const h = 17 * s;
+      x.strokeStyle = "rgba(5,10,9,0.96)";
+      x.lineWidth = 1.4;
+      x.beginPath();
+      x.moveTo(px - 3 * s, py);
+      x.lineTo(px, py - h);
+      x.lineTo(px + 3 * s, py);
+      x.moveTo(px - 4.5 * s, py - h * 0.78);
+      x.lineTo(px + 4.5 * s, py - h * 0.78);
+      x.moveTo(px - 3.5 * s, py - h * 0.52);
+      x.lineTo(px + 3.5 * s, py - h * 0.52);
+      x.stroke();
+      const top: [number, number] = [px, py - h * 0.78];
+      if (prev && Math.abs(top[0] - prev[0]) < gap * 1.4) {
+        x.lineWidth = 0.8;
+        x.beginPath();
+        x.moveTo(prev[0], prev[1]);
+        x.quadraticCurveTo((prev[0] + top[0]) / 2, Math.max(prev[1], top[1]) + 5 * s, top[0], top[1]);
+        x.stroke();
+      }
+      prev = top;
+    }
+  }
+}
+
 export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number): Assets {
   const rng = seeded(90210);
   const hy0 = Math.round(h * 0.4);
@@ -309,24 +726,32 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   bx.scale(dpr, dpr);
   const bw = w + pad * 2;
   const sky = bx.createLinearGradient(0, 0, 0, margin + hy0 + h * 0.1);
-  sky.addColorStop(0, "#02040a");
-  sky.addColorStop(0.5, "#07101c");
-  sky.addColorStop(0.82, "#0f1d2d");
-  sky.addColorStop(1, "#1d2a38");
+  sky.addColorStop(0, "#020504");
+  sky.addColorStop(0.42, "#06110e");
+  sky.addColorStop(0.74, "#0c241c");
+  sky.addColorStop(0.92, "#163a2f");
+  sky.addColorStop(1, "#1f4a3b");
   bx.fillStyle = sky;
   bx.fillRect(0, 0, bw, margin + hy0 + h * 0.14);
+  // the glow of a town below the horizon: warm at the foot, a mint wash above it
+  bx.globalCompositeOperation = "lighter";
+  const wash = bx.createLinearGradient(0, margin + hy0 - h * 0.22, 0, margin + hy0 + h * 0.1);
+  wash.addColorStop(0, "rgba(138,217,168,0)");
+  wash.addColorStop(0.7, "rgba(138,217,168,0.07)");
+  wash.addColorStop(1, "rgba(138,217,168,0)");
+  bx.fillStyle = wash;
+  bx.fillRect(0, margin + hy0 - h * 0.22, bw, h * 0.32);
   const haze = bx.createLinearGradient(0, margin + hy0 - h * 0.1, 0, margin + hy0 + h * 0.16);
   haze.addColorStop(0, "rgba(255,170,110,0)");
-  haze.addColorStop(0.55, "rgba(255,160,100,0.1)");
+  haze.addColorStop(0.55, "rgba(255,160,100,0.11)");
   haze.addColorStop(1, "rgba(255,150,90,0)");
-  bx.globalCompositeOperation = "lighter";
   bx.fillStyle = haze;
   bx.fillRect(0, margin + hy0 - h * 0.1, bw, h * 0.26);
   bx.globalCompositeOperation = "source-over";
   const ground = bx.createLinearGradient(0, margin + hy0 + h * 0.08, 0, margin * 2 + h);
-  ground.addColorStop(0, "#0a1016");
-  ground.addColorStop(0.35, "#070b0f");
-  ground.addColorStop(1, "#030507");
+  ground.addColorStop(0, "#0a1411");
+  ground.addColorStop(0.35, "#060d0b");
+  ground.addColorStop(1, "#030605");
   bx.fillStyle = ground;
   bx.fillRect(0, margin + hy0 + h * 0.1, bw, margin * 2 + h);
 
@@ -338,16 +763,19 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   vx.scale((w * dpr) / vw, (h * dpr) / vh);
   const vg = vx.createRadialGradient(vw / 2, vh * 0.56, Math.min(vw, vh) * 0.35, vw / 2, vh * 0.56, Math.hypot(vw, vh) * 0.62);
   vg.addColorStop(0, "rgba(0,0,0,0)");
-  vg.addColorStop(1, "rgba(0,0,0,0.62)");
+  vg.addColorStop(1, "rgba(0,4,3,0.62)");
   vx.fillStyle = vg;
   vx.fillRect(0, 0, vw, vh);
 
   const starsH = Math.round(hy0 + h * 0.25);
-  const starPano = stars(rng, W, starsH, W * 0.14, Math.max(14, 22 * s));
-  const far = mountains(rng, W, Math.round(h * 0.2), [28, 40, 60], [14, 21, 32], 0.2, 0.18, 0.95);
+  // the moon sits ahead and to the right of the start, where the opening picture has room for it
+  const starPano = stars(rng, W, starsH, w * 0.7, Math.max(14, 20 * s));
+  const far = mountains(rng, W, Math.round(h * 0.22), [26, 52, 48], [16, 34, 31], 0.34, 0.16, { base: 5, octaves: 6, peaky: 0.7, haze: 0.55 });
+  landmarks(rng, far, s, { mast: 3, pylons: 0 });
   const cityPano = city(rng, W, Math.round(h * 0.17), s);
-  const mid = mountains(rng, W, Math.round(h * 0.17), [15, 22, 33], [9, 14, 21], 0.1, 0.12, 0.8);
-  const near = mountains(rng, W, Math.round(h * 0.12), [9, 14, 21], [6, 10, 15], 0.05, 0.1, 0.7);
+  const mid = mountains(rng, W, Math.round(h * 0.18), [14, 28, 25], [9, 18, 16], 0.16, 0.12, { base: 6, octaves: 5, peaky: 0.5, haze: 0.3 });
+  landmarks(rng, mid, s, { mast: 0, pylons: 2 });
+  const near = mountains(rng, W, Math.round(h * 0.12), [8, 15, 13], [5, 10, 9], 0.07, 0.1, { base: 7, octaves: 4, peaky: 0.3, haze: 0, teeth: true });
 
-  return { w, h, dpr, backdropPad: pad, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(), pal: makePalette() };
+  return { w, h, dpr, backdropPad: pad, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(rng), pal: makePalette() };
 }
