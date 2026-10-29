@@ -55,6 +55,9 @@ export default function Golf({ mode, paused }: PieceProps) {
           setClub(R.club);
         }
         syncPhone();
+      } else if (name === "golf-pick") {
+        // the phone's Putt / Driving range switch
+        pickRef.current(data.range ? "range" : "putt");
       } else if (name === "golf-sync") {
         syncPhone();
       }
@@ -109,6 +112,8 @@ export default function Golf({ mode, paused }: PieceProps) {
       setReading(false);
     }
   };
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
   const chip = (on: boolean) =>
     `h-8 sm:h-9 px-3 sm:px-4 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border ${on ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"}`;
   const sub = (on: boolean) =>

@@ -18,6 +18,7 @@ import { buzz } from "@/lib/haptics";
 // Sends   gesture golf-swing {speedMph, tempo, faceDeg}   a finished swing
 //         gesture golf-club  {index}                       the club picker
 //         gesture golf-sync  {}                            "tell me the club and mode" (on mount)
+//         gesture golf-pick  {range: boolean}              the Putt / Driving range switch
 // Hears   gesture golf-club  {index}                       the laptop's club (keys or picker)
 //         gesture golf-mode  {range: boolean}              false while the laptop is putting
 
@@ -109,20 +110,39 @@ export default function GolfController({ send, subscribe, motionOk }: Controller
     send({ type: "gesture", name: "golf-club", data: { index: i } });
   };
 
+  const pickRange = (r: boolean) => {
+    setRange(r);
+    send({ type: "gesture", name: "golf-pick", data: { range: r } });
+  };
+
   const live = swingOn && receiving !== false;
   const go = live && ready;
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-4" data-testid="golf-controller" data-mode={mode} data-ready={go}>
+      <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Game">
+        {([false, true] as const).map((r) => (
+          <button
+            key={String(r)}
+            type="button"
+            aria-pressed={range === r}
+            data-golf-pick={r ? "range" : "putt"}
+            onClick={() => pickRange(r)}
+            className={`${ghostButton} !min-h-[48px] ${range === r ? "!bg-[var(--paper)] !text-[var(--ink)] !border-transparent" : ""}`}
+          >
+            {r ? "Driving range" : "Putt"}
+          </button>
+        ))}
+      </div>
       <h1 className="mt-4 text-[1.55rem] leading-tight font-extrabold text-balance">
-        {!range ? "Putting is on the laptop for now." : mode === "swing" ? "Hold it like a club. Swing." : "Hold, then let go to hit."}
+        {!range ? "Putting is on the laptop." : mode === "swing" ? "Hold it like a club. Swing." : "Hold, then let go to hit."}
       </h1>
-      <p className="mt-1.5 text-[1.05rem] leading-snug text-[#c9c6b6]">
-        {!range
-          ? "Choose Driving range on the laptop and this phone becomes your swing."
-          : mode === "swing"
+      {range && (
+        <p className="mt-1.5 text-[1.05rem] leading-snug text-[#c9c6b6]">
+          {mode === "swing"
             ? "Screen toward you, stay still a moment, then swing through like a drive."
             : "Press and hold to take it back. The longer you hold, the harder you hit."}
-      </p>
+        </p>
+      )}
 
       {range && mode === "swing" && (
         <div
