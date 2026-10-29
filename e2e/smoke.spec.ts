@@ -333,3 +333,14 @@ test("case study: 'On this page' tracks the section you're reading", async ({ pa
   );
   await expect(rail.locator("[aria-current]")).toHaveText("Trade-offs");
 });
+
+test("Save contact on /contact serves a vCard, and the sitemap lists /resume", async ({ page, request }) => {
+  await page.goto("/contact");
+  await expect(page.getByRole("link", { name: "Save contact" })).toHaveAttribute("href", "/rohin-patel.vcf");
+  const card = await request.get("/rohin-patel.vcf");
+  expect(card.ok()).toBe(true);
+  expect(card.headers()["content-type"]).toContain("text/vcard");
+  expect(await card.text()).toContain("FN:Rohin Patel");
+  const map = await (await request.get("/sitemap.xml")).text();
+  expect(map).toMatch(/\/resume<\/loc>/);
+});
