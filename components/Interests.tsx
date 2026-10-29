@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
+import PairChip from "@/components/link/PairChip";
 import { useRemoteList } from "@/lib/link/remote";
 import Stage from "@/components/offhours/Stage";
 import { PIECE_META, type PieceId, type PieceMeta } from "@/components/offhours/pieces";
@@ -96,7 +97,10 @@ export default function Interests() {
 
   return (
     <section className="px-4 md:px-10 pb-16 md:pb-24">
-      <div className="max-w-6xl mx-auto">
+      <div className="relative max-w-6xl mx-auto">
+        <div className="absolute right-0 top-2">
+          <PairChip tone="light" />
+        </div>
         <h1>Off hours</h1>
         <p className="-mt-6 mb-10 md:mb-14 text-lg md:text-xl muted max-w-xl text-pretty">
           Nine things I like outside work, each built into something you can play. Open one to play it

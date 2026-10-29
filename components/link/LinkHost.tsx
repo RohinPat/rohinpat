@@ -96,7 +96,8 @@ export default function LinkHost(props: Props) {
     };
   }, [start]);
 
-  // a session that ended: replace an expired code (a few times), or a finished link while the lock screen is still showing
+  // a session that ended: replace an expired code (a few times), or a finished
+  // link. The code shows on the lock screen and on the home screen's widget alike.
   useEffect(() => {
     if (paired) {
       wasLive.current = true;
@@ -109,11 +110,11 @@ export default function LinkHost(props: Props) {
     if (wasLive.current) {
       wasLive.current = false;
       renewals.current = 0;
-      if (latest.current.locked) start();
+      start();
       return;
     }
     renewals.current++;
-    if (latest.current.locked && renewals.current <= MAX_AUTO_RENEWALS) start();
+    if (renewals.current <= MAX_AUTO_RENEWALS) start();
     else setStale(true);
   }, [state, paired, start, stop]);
 

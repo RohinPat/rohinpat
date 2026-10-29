@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import PairLock from "@/components/link/PairLock";
+import PairWidget from "@/components/link/PairWidget";
 import QuickCard from "@/components/QuickCard";
 import { pov, site } from "@/lib/site";
 import { burst, getAudio } from "@/components/offhours/audio";
@@ -14,6 +15,7 @@ import Spotlight from "./Spotlight";
 import VenomCursor from "./VenomCursor";
 import { ALL_APPS, DOCK, GLYPHS, GRID, type App } from "./apps";
 import type { PairInfo } from "@/components/link/PairCard";
+import { useLinkOk } from "@/lib/link/useLinkOk";
 import { closeInto, isUnlocked, launch, markUnlocked } from "./launch";
 import { DuoSlab, LeafHull, PhoneHull } from "./hull3d";
 
@@ -31,7 +33,8 @@ const CameraApp = dynamic(() => import("./CameraApp"), { ssr: false });
 // the phone link (components/link): loaded only on a mouse-first wide screen,
 // after the page has settled, so the home page's first load doesn't carry it
 const LinkHost = dynamic(() => import("@/components/link/LinkHost"), { ssr: false });
-// what the padlock opens into (PairLock), offered to whichever lock screen is showing
+// the pairing state: what the padlock opens into (PairLock) on whichever lock
+// screen is showing, and the code's widget on the home screen (PairWidget)
 const PairSlot = createContext<PairInfo | null>(null);
 // the lock screen that's showing, so a linked phone's finger can move it
 let remoteDrag: ((p: number | null) => void) | null = null;
@@ -80,20 +83,11 @@ export default function Springboard() {
   const [lockGone, setLockGone] = useState(() => isUnlocked());
   const [justUnlocked, setJustUnlocked] = useState(false);
   const slot = useRef<HTMLDivElement>(null);
-  const [linkOk, setLinkOk] = useState(false);
+  const linkOk = useLinkOk();
   const [pair, setPair] = useState<PairInfo | null>(null);
   // the screen's mode lives here so the Duo's cover can show the same left half
   const [dark, setDark] = useState(true); // the phone starts in dark mode
   const [bright, setBright] = useState(100);
-
-  // the phone link is for mouse-first wide screens: never on a phone
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)");
-    const on = () => setLinkOk(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
 
   // fit the device to the window
   useEffect(() => {
@@ -436,6 +430,9 @@ function PhoneScreen({
     <AppIcon key={a.id} app={a} index={k} i={3 + k} dark={dark} jiggle={jiggle} onJiggle={() => setJiggle(true)} onOpen={openApp} />
   ));
   const grid = GRID_CLS;
+  // the code stays on the phone once it's unlocked (the padlock had it on the lock screen)
+  const pair = useContext(PairSlot);
+  const pairWidget = pair && <PairWidget info={pair} i={3 + GRID.length} />;
 
   return (
     <div className={`relative w-full h-full min-h-[inherit] ${fg}`} style={{ filter: bright < 100 ? `brightness(${bright / 100})` : undefined }}>
@@ -484,12 +481,16 @@ function PhoneScreen({
             <div className={grid}>{widgets}</div>
             {/* the right half is lit under the cover from the start (already
                 painted, so the swing doesn't wait on it); it's just uncovered */}
-            <div className={`${grid} pt-2`}>{icons}</div>
+            <div className={`${grid} pt-2`}>
+              {icons}
+              {pairWidget}
+            </div>
           </div>
         ) : (
           <div className={`${grid} ${anim}`}>
             {widgets}
             {icons}
+            {pairWidget}
           </div>
         )}
 

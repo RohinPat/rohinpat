@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { isMuted, onMuteChange, setMuted } from "./audio";
+import PairChip from "@/components/link/PairChip";
 import SoundPrompt from "./SoundPrompt";
 
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
@@ -103,6 +104,8 @@ export default function Stage({
     );
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // the pairing card is open: Escape closes that (PairChip), not the game
+        if (root.current?.querySelector("[data-pair-open]")) return;
         e.preventDefault();
         closeRef.current();
         return;
@@ -219,6 +222,7 @@ export default function Stage({
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <PairChip tone="dark" />
           <SoundPrompt returnFocus={() => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true })} />
           <button
             type="button"
