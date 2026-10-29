@@ -33,7 +33,7 @@ describe("recruiter card copy", () => {
 
   it("only links to pages that exist on this site", () => {
     for (const p of proofPoints.filter((p) => p.href)) {
-      expect(p.href).toMatch(/^\/(projects\/closet-organizer|colophon)$/);
+      expect(p.href).toMatch(/^\/projects\/(closet-organizer|phone-link)$/);
     }
   });
 });

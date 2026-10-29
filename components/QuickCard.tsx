@@ -141,10 +141,7 @@ function Card({
         <h2 id={titleId} className="display mt-3 text-[3.25rem] leading-[0.9]">
           {site.name}
         </h2>
-        <p className="mt-2 font-mono text-[12px] uppercase tracking-[0.14em] opacity-80">
-          {site.role} · {site.employer}
-        </p>
-        <p className="mt-4 text-[17px] leading-snug text-pretty">{cardSummary}</p>
+        <p className="mt-3 text-[17px] leading-snug text-pretty">{cardSummary}</p>
 
         <ul className="mt-5 border-t border-white/15">
           {proofPoints.map((p) => (

@@ -31,14 +31,14 @@ export const proofPoints: ProofPoint[] = [
   {
     // app/projects/closet-organizer/page.tsx, FACTS
     lead: "Closet Organizer",
-    text: "Photograph a garment: it is cut out, tagged by CLIP zero-shot and colour-named by per-pixel voting. One FastAPI backend behind an Expo app and a web app, with 136 pytest functions.",
+    text: "Photograph a piece of clothing and the backend cuts it out, tags it and names its colours. FastAPI, CLIP and an Expo app.",
     href: "/projects/closet-organizer",
   },
   {
-    // app/colophon/page.tsx, "Accessibility" and "Privacy"
-    lead: "This site",
-    text: "No cookies, no storage, no analytics and no third-party requests, and every page is axe-scanned against WCAG 2.2 AA on every pull request.",
-    href: "/colophon",
+    // app/projects/phone-link/page.tsx
+    lead: "The phone link",
+    text: "Scan the QR on this site and your phone tilts the replica, unlocks it and plays the Off hours games.",
+    href: "/projects/phone-link",
   },
 ];
 

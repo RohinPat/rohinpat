@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { formatCode } from "@/lib/link/code";
-import { PairQr, pairHost, type PairInfo } from "./PairCard";
+import { CantScan, PairQr, type PairInfo } from "./PairCard";
 
 // The pairing code as a home-screen widget, under the app icons, so the code
 // is still there once the lock screen (and its padlock) has gone. Full width,
@@ -14,7 +12,6 @@ import { PairQr, pairHost, type PairInfo } from "./PairCard";
 export default function PairWidget({ info, i }: { info: PairInfo; i: number }) {
   const { state, paired, code, pairUrl, stale, renew } = info;
   const dead = state === "closed" && stale;
-  const short = useMemo(() => pairHost(pairUrl), [pairUrl]);
 
   return (
     <section
@@ -33,7 +30,7 @@ export default function PairWidget({ info, i }: { info: PairInfo; i: number }) {
       ) : (
         !dead && <PairQr pairUrl={pairUrl} size={128} testId="pair-widget-qr" />
       )}
-      <div className="min-w-0 flex flex-col gap-1.5">
+      <div className="min-w-0 flex flex-col items-start gap-1">
         <h2 id="pair-widget-title" className="text-[14px] leading-tight font-semibold">
           This phone&apos;s a replica.{" "}
           <strong className="font-extrabold text-[var(--signal)]">Pick up yours.</strong>
@@ -44,27 +41,16 @@ export default function PairWidget({ info, i }: { info: PairInfo; i: number }) {
           </p>
         ) : dead ? (
           <div className="flex flex-col items-start gap-2">
-            <p className="text-[12.5px] leading-snug">The code timed out waiting for a phone.</p>
+            <p className="text-[12.5px] leading-snug">The code timed out.</p>
             <button type="button" data-venom onClick={renew} className="rounded-full bg-[var(--ink)] text-[var(--paper)] px-4 py-1.5 text-[13px] font-semibold">
               Get a new code
             </button>
           </div>
         ) : (
-          <div>
-            <p className="text-[12px] leading-snug text-[var(--paper-muted)]">
-              Scan with your phone&apos;s camera, or open <span className="font-mono text-[11.5px] text-[var(--ink)] break-all">{short}</span> and type
-            </p>
-            <p className="font-mono text-[18px] font-medium tracking-[0.08em] tabular-nums" data-testid="pair-widget-code">
-              {code ? formatCode(code) : "…"}
-            </p>
-          </div>
+          <CantScan pairUrl={pairUrl} code={code} testId="pair-widget-code" />
         )}
-        <Link
-          href="/projects/phone-link"
-          data-venom
-          className="self-start text-[12px] font-semibold underline underline-offset-2 decoration-[var(--signal)] text-[var(--signal)]"
-        >
-          How this works
+        <Link href="/projects/phone-link" data-venom className="-ml-1 self-start px-1 py-0.5 text-[12px] font-semibold text-[var(--paper-muted)] underline underline-offset-2 rounded">
+          How it works
         </Link>
       </div>
     </section>

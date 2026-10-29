@@ -150,8 +150,8 @@ export default function PhoneLinkCaseStudy() {
             wind a watch.
           </p>
           <p>
-            It is never a gate. Every page still works with a mouse and a keyboard, and with no
-            phone paired nothing about the site changes.
+            Every page still works with a mouse and a keyboard, and with no phone paired nothing
+            about the site changes.
           </p>
 
           <h2>What it had to live with</h2>
@@ -200,7 +200,7 @@ export default function PhoneLinkCaseStudy() {
             A socket that sends four bad joins is closed.
           </p>
 
-          <h2>The relay is the road; direct is the shortcut</h2>
+          <h2>Relay first, direct when it can</h2>
           <p>
             The obvious design is WebRTC alone: no server in the data path, a few milliseconds. I
             prototyped that first, in the hidden <code>/lab</code> pages. But before building it I
@@ -231,7 +231,7 @@ export default function PhoneLinkCaseStudy() {
             60 Hz instead of 30. If not, or if it dies later, everything stays on, or falls back
             to, the relay. A pill beside the laptop&apos;s phone shows which path is in use.
           </p>
-          <p>The UI never sees any of this. It talks to one contract:</p>
+          <p>The UI only sees one interface:</p>
           <CodeBlock
             code={SESSION_EXCERPT}
             lang="ts"
@@ -239,11 +239,10 @@ export default function PhoneLinkCaseStudy() {
             href={src("lib/link/session.ts", "L52-L66")}
           />
           <p>
-            Pages without a phone pay nothing. Only the home page, on a wide screen with a mouse,
-            creates a host session, once the page is idle, because the QR has to exist before
-            anyone can scan it. The games and every other page only look at an existing session
-            with <code>peekHost()</code>, which returns it or <code>null</code> and never creates
-            one.
+            A session only starts in two places, both on a wide screen with a mouse: the home
+            page, once it&apos;s idle, so the QR is ready before anyone scans it; and the Pair
+            button on Off hours, when pressed. The games and every other page only look for an
+            existing one with <code>peekHost()</code>, which returns it or <code>null</code>.
           </p>
 
           <h2>A bug that only existed in production</h2>
@@ -277,7 +276,6 @@ export default function PhoneLinkCaseStudy() {
             <code>require</code> to a stub instead of letting it throw. So the <code>try</code>{" "}
             succeeded, the wrapper was installed, and every frame of 32 bytes or more called a
             function that didn&apos;t exist. The orientation frame the phone streams is 33 bytes.
-            One byte too many.
           </p>
           <p>The fix is seven lines of config: stop bundling it and load it at runtime.</p>
           <CodeBlock
@@ -293,10 +291,9 @@ export default function PhoneLinkCaseStudy() {
             {/* TODO(Rohin): confirm how those two numbers were measured (a real phone, or two scripted clients?) and say so. */}
           </p>
           <p>
-            What I took from it: that <code>catch</code> is a promise that a missing optional
-            dependency is fine, and a bundler that can&apos;t tell &ldquo;missing&rdquo; from
-            &ldquo;present but empty&rdquo; breaks it only in production. My relay tests run the
-            same code under plain Node, so they could never have caught it.
+            A bundler that can&apos;t tell a missing optional dependency from an empty one breaks
+            that <code>catch</code>, and only in production. My relay tests run the same code under
+            plain Node, so they couldn&apos;t have caught it.
           </p>
 
           <h2>Turning motion into input</h2>
@@ -368,8 +365,7 @@ export default function PhoneLinkCaseStudy() {
             The flick that shoots a basketball is a different problem: one sharp upward pulse in
             the accelerometer. A pulse under 45 ms wide is a table bump, one over 450 ms is a slow
             pick-up, and a similar pulse within 0.7 seconds means walking or shaking. It then waits
-            0.25 seconds so a second stroke of a shake can still cancel the shot: a little latency
-            for fewer wrong shots.
+            0.25 seconds so a second stroke of a shake can still cancel the shot.
           </p>
 
           <h2>Testing two devices in one browser</h2>
@@ -403,7 +399,7 @@ export default function PhoneLinkCaseStudy() {
             </li>
             <li>
               <strong>iPhones can&apos;t vibrate from a web page.</strong> Controllers buzz on
-              Android and stay silent on an iPhone.
+              Android; on an iPhone the screen glows instead.
             </li>
             <li>
               <strong>The direct path is a bonus.</strong> The latency numbers above are the

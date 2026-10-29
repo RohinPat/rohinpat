@@ -28,7 +28,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Gaming",
     line: "1-bit, and the machines play too.",
     title: "Solve the maze, or watch them learn",
-    how: ["Pick a solver: you, BFS, DFS, A*, wall follower, Q-learning", "You: arrows, WASD, or drag to walk", "New maze any time"],
+    how: ["Walk it yourself (arrows, WASD or drag), or pick a solver", "New maze any time"],
   },
   {
     id: "hoops",
@@ -36,7 +36,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Basketball",
     line: "Hornets. Through whatever.",
     title: "30 seconds on the clock",
-    how: ["Swipe up on the ball to shoot", "Three in a row: on fire, double points", "10 points and the hoop starts moving", "Keyboard: arrows aim, hold Space"],
+    how: ["Swipe up on the ball to shoot (keyboard: arrows aim, hold Space)", "Three in a row doubles your points"],
   },
   {
     id: "penalty",
@@ -44,7 +44,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Barça",
     line: "Més que un club.",
     title: "Penalty shootout",
-    how: ["Pick a shot: placed, driven, curl, dipper, knuckle, Panenka (keys 1-7)", "Aim with the pointer, hold to power up, let go", "Beat a keeper who reads you. Best of five, then sudden death"],
+    how: ["Pick a shot (keys 1-7)", "Aim, hold to power up, let go", "Best of five, then sudden death"],
   },
   {
     id: "decks",
@@ -61,10 +61,9 @@ export const PIECE_META: PieceMeta[] = [
     line: "A canyon road, after midnight.",
     title: "Night run",
     how: [
-      "Keyboard: ←/→ (or A/D) steer, ↑ (or Space) gas, ↓ brake, Shift handbrake",
-      "Lift or brake into a corner, or flick the handbrake, to kick the tail out, then hold the drift",
-      "Slide to score, straighten out to bank it, hit a rail and it's gone",
-      "Chase the target ghost through the checkpoints. Drag strip is in the corner",
+      "←/→ steer, ↑ gas, ↓ brake, Shift handbrake",
+      "Brake into a corner to drift. Drifting scores; a rail hit loses it",
+      "Beat the ghost to the last checkpoint",
     ],
   },
   {
@@ -81,7 +80,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Golf",
     line: "Read the break, then rip one.",
     title: "Putt, drive, read",
-    how: ["Putt: pull back from the ball and let go", "Range: drag down, then swing up through the ball", "Read green: pour water to see the break"],
+    how: ["Putt: pull back and let go", "Range: drag down, then swing up", "Read green: pour water to see the break"],
   },
   {
     id: "powder",
@@ -89,7 +88,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Skiing",
     line: "Vermont weekends.",
     title: "Giant slalom",
-    how: ["Carve through every gate", "Tuck on the straights, don't skid", "Left/right in the air spins"],
+    how: ["Carve through every gate", "Tuck on the straights", "Left/right in the air spins"],
   },
 ];
 
