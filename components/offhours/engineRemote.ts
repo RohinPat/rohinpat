@@ -192,6 +192,10 @@ export const ENGINE_CAL = {
     /** shake on a hit and at speed (px), off with reduced motion */
     shakeHitPx: 14,
     shakeSpeedPx: 1.1,
+    /** the camera trails the car by this many metres per m/s^2 of acceleration (closing up on the brakes), at most leanMaxM; a launch, shift or gate punches the field of view by fovKickDeg */
+    leanPerMs2: 0.09,
+    leanMaxM: 0.9,
+    fovKickDeg: 5,
     /** the quality governor drops a step when the frames average over this many ms for a second and a half, and climbs back after ten seconds under the second number */
     slowFrameMs: 20.5,
     fastFrameMs: 17.2,

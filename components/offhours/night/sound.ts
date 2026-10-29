@@ -19,6 +19,9 @@ export type Mood = {
   skid: number;
   /** grinding along the rail */
   scrape: boolean;
+  /** the brake pedal, 0..1, and the handbrake is up */
+  brake: number;
+  hand: boolean;
   /** an overall level (0 mutes the loops: paused) */
   level: number;
 };
@@ -33,6 +36,8 @@ export class NightSound {
   private squeal: Loop;
   private squeal2: Loop;
   private scrape: Loop;
+  private brakeSq: Loop;
+  private handPrev = false;
   private dead = false;
 
   constructor(private au: Audio) {
@@ -56,6 +61,7 @@ export class NightSound {
     this.squeal = mk("bandpass", 2100, 10);
     this.squeal2 = mk("bandpass", 3300, 14);
     this.scrape = mk("bandpass", 2600, 1.6);
+    this.brakeSq = mk("bandpass", 3900, 16);
     this.src.start(0, Math.random());
   }
 
@@ -76,13 +82,25 @@ export class NightSound {
     set(this.squeal, 0.34 * s * Math.min(1, m.speed / 14), (1750 + 900 * s + m.speed * 8) * wob);
     set(this.squeal2, 0.2 * s * s * Math.min(1, m.speed / 14), (2900 + 1100 * s) * wob);
     set(this.scrape, m.scrape ? 0.5 * Math.min(1, m.speed / 25) : 0, 2300 + Math.random() * 900);
+    // hard braking at speed: the discs sing, higher as the car slows
+    const bk = Math.max(0, m.brake - 0.55) / 0.45;
+    set(this.brakeSq, 0.16 * bk * Math.min(1, Math.max(0, (m.speed - 8) / 22)), 3300 + 900 * Math.max(0, 1 - m.speed / 50));
+    // the handbrake: a ratchet as it comes up
+    if (m.hand && !this.handPrev) this.ratchet();
+    this.handPrev = m.hand;
+  }
+
+  /** the handbrake lever: three quick clicks */
+  private ratchet() {
+    for (let i = 0; i < 3; i++) burst(this.au, { freq: 2300 + i * 500, q: 3, dur: 0.018, gain: 0.3, at: i * 0.035 });
+    burst(this.au, { freq: 160, type: "lowpass", dur: 0.09, gain: 0.35, at: 0.1 });
   }
 
   silence() {
     if (this.dead) return;
     const now = this.au.ctx.currentTime;
     this.voice.silence();
-    for (const l of [this.wind, this.rumble, this.squeal, this.squeal2, this.scrape]) l.g.gain.setTargetAtTime(0, now, 0.03);
+    for (const l of [this.wind, this.rumble, this.squeal, this.squeal2, this.scrape, this.brakeSq]) l.g.gain.setTargetAtTime(0, now, 0.03);
   }
 
   /** the countdown: three short beeps and a long one on GO */
@@ -133,11 +151,41 @@ export class NightSound {
     tone(this.au, { freq: 420 * Math.pow(2, Math.min(7, combo) / 12), type: "square", dur: 0.07, gain: 0.04 });
   }
 
-  /** an upshift: the exhaust pops */
-  pop() {
+  /** an upshift on the throttle: the exhaust pops (hard), or a softer change of note */
+  pop(hard = true) {
     if (this.dead) return;
+    if (!hard) {
+      burst(this.au, { freq: 140, type: "lowpass", dur: 0.05, gain: 0.18 });
+      return;
+    }
     burst(this.au, { freq: 180, type: "lowpass", dur: 0.08, gain: 0.5 });
     burst(this.au, { freq: 120, type: "lowpass", dur: 0.06, gain: 0.4, at: 0.07 });
+    burst(this.au, { freq: 900, q: 1.5, dur: 0.03, gain: 0.16, at: 0.01 });
+  }
+
+  /** off the throttle at high revs: the exhaust crackles (a few uneven pops) */
+  crackle() {
+    if (this.dead) return;
+    let at = 0;
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      at += 0.035 + Math.random() * 0.09;
+      burst(this.au, { freq: 260 + Math.random() * 500, q: 1.2, type: "bandpass", dur: 0.025 + Math.random() * 0.03, gain: 0.2 + Math.random() * 0.25, at });
+    }
+  }
+
+  /** a medal: a short rising figure, brighter for a higher one */
+  medal(n: number) {
+    if (this.dead) return;
+    const base = 523 * Math.pow(2, (n - 1) / 6);
+    for (let i = 0; i < 3; i++) tone(this.au, { freq: base * [1, 1.25, 1.5][i], type: "triangle", dur: 0.28, gain: 0.14, at: i * 0.07 });
+  }
+
+  /** GO: the revs that were held against the brakes let go (a chirp of the tyres, a thump) */
+  launch(held: number) {
+    if (this.dead) return;
+    burst(this.au, { freq: 1700, q: 6, dur: 0.25, gain: 0.22 * held });
+    tone(this.au, { freq: 70, to: 40, type: "sine", dur: 0.22, gain: 0.3 * held });
   }
 
   dispose() {

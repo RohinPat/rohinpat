@@ -68,12 +68,15 @@ export type Car = {
   /** the rev limiter is cutting, and an upshift just popped the exhaust (1 -> 0) */
   limiter: boolean;
   pop: number;
+  /** a gear change (+1 up, -1 down) happened since the game last looked, and the pedal was just lifted off high revs (the exhaust crackles); the game reads and clears them */
+  shifted: 0 | 1 | -1;
+  lift: boolean;
 };
 
 export function newCar(s = 0, lat = 0): Car {
   return {
     s, lat, psi: 0, u: 0, w: 0, r: 0, delta: 0, gear: 0, rpm: IDLE, shiftT: 0, holdT: 0, auto: true,
-    pedal: 0, brake: 0, hand: 0, handT: 99, ax: 0, ay: 0, slip: 0, skid: 0, rearSat: 0, frontSat: 0, hit: 0, scrape: false, wallSide: 1, limiter: false, pop: 0,
+    pedal: 0, brake: 0, hand: 0, handT: 99, ax: 0, ay: 0, slip: 0, skid: 0, rearSat: 0, frontSat: 0, hit: 0, scrape: false, wallSide: 1, limiter: false, pop: 0, shifted: 0, lift: false,
   };
 }
 
@@ -116,6 +119,7 @@ function tyre(alpha: number, fmax: number): number {
 function shiftTo(c: Car, g: number) {
   if (g === c.gear) return;
   if (g > c.gear && c.pedal > 0.5) c.pop = 1;
+  c.shifted = g > c.gear ? 1 : -1;
   c.gear = g;
   c.shiftT = SHIFT_CUT_S;
   c.holdT = SHIFT_HOLD_S;
@@ -138,7 +142,13 @@ export function stepCar(c: Car, inp: NightInput, road: Road, dt: number) {
   const m = P.massKg;
   const u = Math.max(c.u, 0);
   const v = Math.hypot(c.u, c.w);
-  c.pedal = clamp(inp.throttle, 0, 1);
+  const pedalNow = clamp(inp.throttle, 0, 1);
+  // lifting off at high revs: the exhaust cracks (a flame and a pop for the game to show)
+  if (c.pedal > 0.75 && pedalNow < 0.2 && c.rpm > 5200 && c.u > 10) {
+    c.lift = true;
+    c.pop = Math.max(c.pop, 0.75);
+  }
+  c.pedal = pedalNow;
   c.brake = clamp(inp.brake, 0, 1);
   const handNow = clamp(inp.hand, 0, 1);
   if (handNow > 0.5 && c.hand <= 0.5) c.handT = 0;

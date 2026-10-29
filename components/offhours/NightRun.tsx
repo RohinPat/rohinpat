@@ -11,6 +11,7 @@ import { drawScene } from "./night/draw";
 import { NightGame, type GameEvent } from "./night/game";
 import { drawAttractHud, drawHud, grouped, resultBottom, type HudOptions } from "./night/hud";
 import { newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeySteer, type Sources } from "./night/nightInput";
+import { MEDALS } from "./night/medals";
 import { NightSound } from "./night/sound";
 
 // Night run: a canyon road at night that you drift through. A pseudo-3D road
@@ -113,6 +114,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         break;
       case "go":
         s?.count(true);
+        s?.launch(Math.max(0, Math.min(1, (e.rpm - 2000) / 3500)));
         setStatus("Go.");
         break;
       case "checkpoint":
@@ -139,12 +141,19 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         s?.chain(e.combo);
         break;
       case "shift":
-        s?.pop();
+        s?.pop(e.hard);
+        break;
+      case "backfire":
+        s?.crackle();
+        break;
+      case "medal":
+        s?.medal(e.n);
+        setStatus(`Medal: ${MEDALS[e.n - 1].name.toLowerCase()}.`);
         break;
       case "end": {
         const r = e.result;
         setStatus(
-          `${r.finished ? "You made it out of the canyon." : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. Total score ${grouped(r.score)}.${r.newBest ? " A new best run: it will race you next time." : ""}`,
+          `${r.finished ? "You made it out of the canyon." : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${MEDALS[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
         );
         s?.silence();
         tellPhone(true);
@@ -218,7 +227,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const ref = useCanvas(
     ({ ctx, w, h, t, dt, reduce }) => {
       let a = assetsRef.current;
-      if (!a || a.w !== w || a.h !== h) a = assetsRef.current = buildAssets(ctx, w, h);
+      if (!a || a.w !== w || a.h !== h || a.dpr !== Math.max(1, ctx.getTransform().a)) a = assetsRef.current = buildAssets(ctx, w, h);
       // the quality governor: a slow second and a half drops the draw distance a step; a long smooth spell climbs back
       const q = gov.current;
       if (dt > 0) {
@@ -248,7 +257,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         if (!at) at = attractRef.current = new Attract(reduce);
         // the tile is paced by useCanvas (30 fps at most, slower if a frame is costly)
         at.update(dt);
-        drawScene(ctx, a, at.scene, 2);
+        drawScene(ctx, a, at.scene, 2, 0);
         drawAttractHud(ctx, w, h, at.scene.car.speed);
         return;
       }
@@ -295,6 +304,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           speed: g.speed,
           skid: g.phase === "run" ? car.skid : 0,
           scrape: car.scrape && g.phase === "run",
+          brake: g.phase === "run" ? car.brake : 0,
+          hand: g.phase === "run" && car.hand > 0.5,
           level: g.phase === "done" ? 0.35 : 1,
         });
       } else if (!snd && performance.now() - lastAudioTry.current > 1000 && g.phase !== "ready") {
@@ -391,6 +402,12 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
     setAuto(next);
   }
 
+  // coming back from the Drag strip with its switch still focused: hand the keys to the road
+  useEffect(() => {
+    const a = document.activeElement;
+    if (play && (!a || a === document.body || a.closest('[aria-label="Mode"]'))) ref.current?.focus();
+  }, [play, ref]);
+
   // a touch screen gets the pads; a mouse does not
   useEffect(() => {
     if (!play) return;
@@ -458,6 +475,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
             onClick={() => {
               game().setAuto(on);
               setAuto(on);
+              // the keys listen on the canvas: a click on this switch must not leave them without a listener
+              ref.current?.focus();
             }}
             className={`h-8 px-3.5 ${auto === on ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
           >

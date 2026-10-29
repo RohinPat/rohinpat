@@ -8,6 +8,7 @@ import type { Remote, RemoteHandlers } from "@/lib/link/remote";
 import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, rpmRate, type EnginePhase } from "./engineRemote";
 import { IDLE, LIMIT, REDLINE, RATIOS, FINAL, SHIFT_AT, WHEEL, torque, wheelRpm } from "./engineModel";
 import { EngineVoice } from "./engineVoice";
+import { DRAG_GHOST_DT, gapToGhost, ghostAt, type DragPath } from "./dragGhost";
 
 // The drag strip: a race dash and a quarter mile (Cars' second mode; Night run
 // is the first). The engine is the shared model (engineModel.ts: torque curve,
@@ -15,7 +16,9 @@ import { EngineVoice } from "./engineVoice";
 // stage and launch, shift on the green light; perfect shifts pop and pull. A
 // linked phone is a throttle grip: it sends the `throttle` axis (0..1, a pedal
 // part way down), shifts with `engine-shift`, and is told the revs and gear
-// back. Engine.tsx owns the phone link and hands the messages down.
+// back. Engine.tsx owns the phone link and hands the messages down. The strip
+// shows two lanes, you in one and the best run of this visit (a ghost, in memory
+// only) in the other, with the gap to it as you go.
 
 const QUARTER = 402.3;
 
@@ -32,6 +35,30 @@ const LAUNCH = { lo: 3200, hi: 6500, sweet: 4900, perfect: 350, great: 900 };
 
 /** the quickest quarter of this visit: memory only, kept while the strip is closed and opened again, gone with the page */
 let bestVisit: number | null = null;
+/** that run as distance every DRAG_GHOST_DT seconds: the ghost the next run races */
+let bestPath: DragPath | null = null;
+
+/** tyre smoke off the line (screen space, a small fixed pool) */
+const PUFFS = 32;
+type Puffs = { x: Float32Array; y: Float32Array; vx: Float32Array; vy: Float32Array; age: Float32Array; life: Float32Array; size: Float32Array; i: number; acc: number };
+const newPuffs = (): Puffs => {
+  const f = () => new Float32Array(PUFFS);
+  return { x: f(), y: f(), vx: f(), vy: f(), age: new Float32Array(PUFFS).fill(9), life: f(), size: f(), i: 0, acc: 0 };
+};
+
+/** a layer drawn once per size and blitted after (the ground, the dial's face): a frame of fillRects and text is what this saves */
+type Layer = { key: string; c: HTMLCanvasElement };
+function layer(prev: Layer | undefined, key: string, w: number, h: number, dpr: number, paint: (x: CanvasRenderingContext2D) => void): Layer {
+  if (prev && prev.key === key) return prev;
+  const c = prev?.c ?? document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * dpr));
+  c.height = Math.max(1, Math.round(h * dpr));
+  const x = c.getContext("2d")!;
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  paint(x);
+  return { key, c };
+}
 
 type Car = {
   phase: "idle" | "tree" | "run" | "done";
@@ -109,10 +136,22 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const phone = useRef({ target: 0, smooth: 0 });
   const told = useRef({ at: -Infinity, key: "" });
   const mineRef = useRef<RemoteHandlers | null>(null);
+  /** this run's distance every DRAG_GHOST_DT seconds from the green (it becomes the ghost if it is the best), and the layers and smoke */
+  const rec = useRef<number[]>([]);
+  const layers = useRef<{ ground?: Layer; face?: Layer }>({});
+  const puffs = useRef<Puffs>(newPuffs());
+  const wasThrottle = useRef(false);
 
   useEffect(() => {
     // with the mock link (tests, local work) a page can read the dash
-    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: Car } }).__drag = { get car() { return car.current; } };
+    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: Car; ghost: DragPath | null } }).__drag = {
+        get car() {
+          return car.current;
+        },
+        get ghost() {
+          return bestPath;
+        },
+      };
     return () => {
       eng.current?.stop();
     };
@@ -212,7 +251,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   }
 
   const ref = useCanvas(
-    ({ ctx, w, h, t, dt }) => {
+    ({ ctx, w, h, t, dt, reduce }) => {
       clock.current = t;
       const c = car.current;
       if (!play) autopilot(c, dt);
@@ -227,7 +266,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       simulate(c, dt, t);
       tellPhone(c, t);
       voice(c);
-      draw(ctx, c, w, h, t);
+      draw(ctx, c, w, h, t, dt, reduce);
     },
     {
       interactive: play,
@@ -252,6 +291,12 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       onUp: () => throttle(false),
     },
   );
+
+  // arriving from the mode switch with it still focused: the keys listen on the dash, so hand them over
+  useEffect(() => {
+    const a = document.activeElement;
+    if (play && (!a || a === document.body || a.closest('[aria-label="Mode"]'))) ref.current?.focus();
+  }, [play, ref]);
 
   function autopilot(c: Car, dt: number) {
     if (c.phase === "idle") c.throttle = Math.sin(clock.current * 3) > 0.3 || c.stageHeld > 0;
@@ -286,9 +331,16 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         c.launch = c.call;
         c.launchRpm = c.rpm;
         c.callT = t;
+        rec.current = [0];
+        if (play) {
+          const au = getAudio();
+          if (au && c.slip > 0.3) burst(au, { freq: 1700, q: 6, dur: 0.25, gain: 0.2 * Math.min(1, c.slip) });
+        }
       }
     } else if (c.phase === "run") {
       c.t += dt;
+      // the run as a path, for the ghost
+      while (c.t >= rec.current.length * DRAG_GHOST_DT && rec.current.length < 1200) rec.current.push(c.x);
       const coupled = wheelRpm(c.v, c.gear);
       c.shiftT = Math.max(0, c.shiftT - dt);
       // engine speed: tied to the wheels, plus launch slip that decays
@@ -318,9 +370,14 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         c.doneT = 0;
         c.trap = c.v * 2.237;
         c.vsBest = c.best === null ? null : c.t - c.best;
+        const faster = c.best === null || c.t < c.best;
         c.best = c.best === null ? c.t : Math.min(c.best, c.t);
         if (play) {
           bestVisit = c.best;
+          if (faster) {
+            rec.current.push(QUARTER);
+            bestPath = Float32Array.from(rec.current);
+          }
           const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best.` : ` ${c.vsBest.toFixed(2)} seconds off your best.`;
           setDone(
             `Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. ${c.perfect} perfect shifts. Launch: ${c.launch.toLowerCase()}.${vs}`,
@@ -339,6 +396,13 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
 
   function voice(c: Car) {
     const e = eng.current;
+    // off the throttle at high revs in a run: the exhaust crackles
+    if (play && wasThrottle.current && !c.throttle && c.phase === "run" && c.rpm > 5200) {
+      const au = getAudio();
+      if (au) for (let i = 0, at = 0; i < 4; i++) burst(au, { freq: 260 + Math.random() * 500, q: 1.2, dur: 0.03, gain: 0.2 + Math.random() * 0.2, at: (at += 0.04 + Math.random() * 0.08) });
+      c.pop = Math.max(c.pop, 0.7);
+    }
+    wasThrottle.current = c.throttle;
     if (!e) return;
     e.update({ rpm: c.rpm, pedal: c.pedal, throttle: c.throttle, cut: c.phase === "run" && c.shiftT > 0 });
   }
@@ -405,31 +469,163 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     void t;
   }
 
-  function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number) {
-    ctx.fillStyle = "#0b0d0c";
-    ctx.fillRect(0, 0, w, h);
-    // carbon weave
-    ctx.fillStyle = "rgba(255,255,255,0.025)";
-    for (let y = 0; y < h; y += 6) for (let x = (y / 6) % 2 ? 0 : 3; x < w; x += 6) ctx.fillRect(x, y, 3, 3);
+  /** a car seen from above, nose to the right at `nose`: graphite with a mint line, tail lamps, a wing */
+  function topCar(ctx: CanvasRenderingContext2D, nose: number, yc: number, len: number, o: { ghost?: boolean; brake?: boolean; alpha?: number }) {
+    const hh = len * 0.19;
+    const x = nose - len;
+    ctx.globalAlpha = o.alpha ?? 1;
+    // wheels first, a little proud of the body
+    ctx.fillStyle = o.ghost ? "rgba(242,234,215,0.35)" : "#06080a";
+    for (const wx of [x + len * 0.12, x + len * 0.68]) {
+      ctx.fillRect(wx, yc - hh - 1.5, len * 0.2, 2.5);
+      ctx.fillRect(wx, yc + hh - 1, len * 0.2, 2.5);
+    }
+    ctx.beginPath();
+    ctx.roundRect(x, yc - hh, len, hh * 2, len * 0.12);
+    if (o.ghost) {
+      ctx.fillStyle = "rgba(242,234,215,0.14)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(242,234,215,0.75)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#3b4658";
+      ctx.fill();
+      ctx.fillStyle = "#8ad9a8";
+      ctx.fillRect(x + len * 0.1, yc - 0.8, len * 0.8, 1.6);
+      ctx.fillStyle = "#0a0e14";
+      ctx.beginPath();
+      ctx.roundRect(x + len * 0.38, yc - hh * 0.68, len * 0.26, hh * 1.36, 2);
+      ctx.fill();
+      ctx.fillStyle = "#1f2733";
+      ctx.fillRect(x - 1, yc - hh - 1, len * 0.07, hh * 2 + 2);
+      ctx.fillStyle = o.brake ? "#ff4a3a" : "#c2261b";
+      ctx.fillRect(x, yc - hh * 0.8, 2, hh * 0.5);
+      ctx.fillRect(x, yc + hh * 0.3, 2, hh * 0.5);
+      ctx.fillStyle = "#fff4d6";
+      ctx.fillRect(x + len - 2.5, yc - hh * 0.8, 2.5, hh * 0.4);
+      ctx.fillRect(x + len - 2.5, yc + hh * 0.4, 2.5, hh * 0.4);
+    }
+    ctx.globalAlpha = 1;
+  }
 
-    // road strip at the bottom, moving with speed
-    const roadH = Math.max(40, h * 0.18);
+  function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number, dt: number, reduce: boolean) {
+    const dpr = Math.max(1, ctx.getTransform().a);
+    // the lanes at the bottom: two when played (you, and the best run of this visit), one on the tile
+    const lanes = play ? 2 : 1;
+    const roadH = play ? Math.max(76, Math.min(150, h * 0.26)) : Math.max(40, h * 0.18);
     const ry = h - roadH;
+    const laneH = roadH / lanes;
+
+    // ground and carbon weave: drawn once per size
+    layers.current.ground = layer(layers.current.ground, `${w}x${h}@${dpr}`, w, h, dpr, (x) => {
+      x.fillStyle = "#0b0d0c";
+      x.fillRect(0, 0, w, h);
+      x.fillStyle = "rgba(255,255,255,0.025)";
+      for (let y = 0; y < h; y += 6) for (let px = (y / 6) % 2 ? 0 : 3; px < w; px += 6) x.fillRect(px, y, 3, 3);
+    });
+    ctx.drawImage(layers.current.ground.c, 0, 0, w, h);
+
+    // ---- the lanes: start line, eighth mile, thousand feet and the line, you and your best
     ctx.fillStyle = "#151816";
     ctx.fillRect(0, ry, w, roadH);
-    ctx.fillStyle = "#f2ead7";
-    const dash = 60;
-    const off = -((c.x * 30) % (dash * 2));
-    // the tile's PLAY pill sits in the bottom-right corner: the road's centre line stops short of it
-    const roadEnd = play ? w : Math.max(0, w - 124);
-    for (let x = off; x < roadEnd; x += dash * 2) ctx.fillRect(x, ry + roadH / 2 - 2, Math.min(dash, roadEnd - x), 4);
-    // quarter-mile progress
+    const carLen = Math.max(30, Math.min(88, laneH * 1.25));
+    const x0 = carLen + 14;
+    const x1 = play ? w - 22 : w - 132;
+    const at = (m: number) => x0 + (Math.min(m, QUARTER + 60) / QUARTER) * (x1 - x0);
+    // flowing streaks behind the cars at speed
+    if (!reduce && c.v > 14) {
+      ctx.fillStyle = `rgba(242,234,215,${Math.min(0.1, c.v / 900).toFixed(3)})`;
+      for (let i = 0; i < 9; i++) {
+        const yy = ry + ((i * 0.618) % 1) * (roadH - 4) + 2;
+        const len = 30 + (i % 3) * 22;
+        const xx = w - ((i * 977 + t * c.v * 9) % (w + len));
+        ctx.fillRect(xx, yy, len, 1.5);
+      }
+    }
     ctx.fillStyle = "rgba(138,217,168,0.25)";
-    ctx.fillRect(0, ry, w, 3);
+    ctx.fillRect(0, ry, w, 2);
     ctx.fillStyle = "#8ad9a8";
-    ctx.fillRect(0, ry, w * Math.min(1, c.x / QUARTER), 3);
+    ctx.fillRect(0, ry, w * Math.min(1, c.x / QUARTER), 2);
+    // lane divider
+    if (lanes > 1) {
+      ctx.fillStyle = "rgba(242,234,215,0.22)";
+      for (let xx = x0 - 20; xx < x1; xx += 28) ctx.fillRect(xx, ry + laneH - 1, 14, 2);
+    }
+    // marks on the road
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillRect(x0, ry, 3, roadH);
+    ctx.fillStyle = "rgba(242,234,215,0.28)";
+    ctx.fillRect(at(201.2), ry, 1.5, roadH);
+    ctx.fillRect(at(304.8), ry, 1.5, roadH);
+    const sq = Math.max(5, roadH / 8);
+    for (let k = 0; k * sq < roadH; k++) {
+      ctx.fillStyle = k % 2 ? "#f2ead7" : "#0b0d0c";
+      ctx.fillRect(x1, ry + k * sq, 5, Math.min(sq, roadH - k * sq));
+      ctx.fillStyle = k % 2 ? "#0b0d0c" : "#f2ead7";
+      ctx.fillRect(x1 + 5, ry + k * sq, 5, Math.min(sq, roadH - k * sq));
+    }
+    if (play) {
+      mono(ctx, 9);
+      ctx.fillStyle = "rgba(181,182,171,0.8)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("1/8 MILE", at(201.2), h - 5);
+      ctx.fillText("1000 FT", at(304.8), h - 5);
+      ctx.textAlign = "left";
+    }
+    // the ghost and the car
+    const yMe = ry + laneH * (lanes - 0.5);
+    const yGhost = ry + laneH * 0.5;
+    const ghost = play ? bestPath : null;
+    if (ghost && (c.phase === "run" || c.phase === "done" || c.phase === "tree" || c.phase === "idle")) {
+      const gx = c.phase === "run" ? ghostAt(ghost, c.t) : c.phase === "done" ? QUARTER : 0;
+      topCar(ctx, at(gx), yGhost, carLen, { ghost: true, alpha: 0.9 });
+      mono(ctx, 9);
+      ctx.fillStyle = "rgba(242,234,215,0.8)";
+      ctx.fillText("YOUR BEST", 8, yGhost + 3);
+    }
+    // tyre smoke (the launch: the tyres spin until they bite)
+    const P = puffs.current;
+    if (play && !reduce && c.phase === "run" && c.slip > 0.12) {
+      P.acc += dt * 90 * Math.min(1, c.slip);
+      while (P.acc >= 1) {
+        P.acc -= 1;
+        const i = P.i;
+        P.i = (i + 1) % PUFFS;
+        P.x[i] = at(c.x) - carLen * 0.9;
+        P.y[i] = yMe + (Math.random() - 0.5) * laneH * 0.4;
+        P.vx[i] = -10 - Math.random() * 30;
+        P.vy[i] = (Math.random() - 0.5) * 24;
+        P.age[i] = 0;
+        P.life[i] = 0.7 + Math.random() * 0.7;
+        P.size[i] = 5 + Math.random() * 5;
+      }
+    }
+    for (let i = 0; i < PUFFS; i++) {
+      if (P.age[i] >= P.life[i]) continue;
+      P.age[i] += dt;
+      const k = P.age[i] / P.life[i];
+      P.x[i] += P.vx[i] * dt;
+      P.y[i] += P.vy[i] * dt;
+      ctx.fillStyle = `rgba(205,210,215,${(0.42 * (1 - k)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(P.x[i], P.y[i], P.size[i] * (1 + 1.8 * k), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // the car's nose on the line it has reached; the exhaust flares on a shift
+    const meX = at(c.phase === "done" ? c.x : Math.min(c.x, QUARTER + 12));
+    if (c.pop > 0 && !reduce) {
+      ctx.fillStyle = `rgba(255,160,60,${(c.pop * 0.9).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(meX - carLen, yMe - 3);
+      ctx.lineTo(meX - carLen - (8 + 22 * c.pop), yMe);
+      ctx.lineTo(meX - carLen, yMe + 3);
+      ctx.fill();
+    }
+    topCar(ctx, meX, yMe, carLen, { brake: c.phase === "done" || !c.throttle });
 
-    // tach
+    // ---- the dial
     const area = ry;
     // narrow (a phone, played): the dial is centred and big, speed and the
     // stats sit in a row under it, the prompt under that. Nothing shares a line.
@@ -437,21 +633,42 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     // narrow, the mode switch sits across the top right of the stage: the shift lights go under it
     const ledY = stacked ? 62 : Math.max(16, area * 0.07);
     const dialTop = ledY + 24;
-    const foot = 100; // stats block (64) + prompt row + gaps
+    const foot = stacked ? 124 : 100; // stats block (64 to 80) + the call-out row + gaps
     const R = stacked ? Math.max(36, Math.min(w * 0.38, (area - dialTop - foot) / 1.8)) : Math.min(w * 0.3, area * 0.42);
     const cx = stacked ? w / 2 : Math.min(w * 0.36, w / 2 - R * 0.2);
     const cy = stacked ? dialTop + R * 1.06 : area * 0.55;
     const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
     const ang = (r: number) => a0 + (r / 9000) * (a1 - a0);
+    // the face (the track, the red zone, the numbers) once per size
+    const half = R * 1.3;
+    layers.current.face = layer(layers.current.face, `${w}x${h}@${dpr}|${R.toFixed(1)}`, half * 2, half * 2, dpr, (x) => {
+      x.translate(half, half);
+      x.lineWidth = R * 0.07;
+      x.lineCap = "round";
+      x.strokeStyle = "#1c211e";
+      x.beginPath();
+      x.arc(0, 0, R, a0, a1);
+      x.stroke();
+      x.strokeStyle = "#c2412d";
+      x.beginPath();
+      x.arc(0, 0, R, ang(REDLINE), a1);
+      x.stroke();
+      display(x, Math.round(R * 0.14), 700);
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      for (let k = 0; k <= 9; k++) {
+        const an = ang(k * 1000);
+        x.fillStyle = k * 1000 >= REDLINE ? "#e5604a" : "#f2ead7";
+        x.fillText(String(k), Math.cos(an) * R * 0.78, Math.sin(an) * R * 0.78);
+        x.fillRect(Math.cos(an) * R * 0.9 - 1, Math.sin(an) * R * 0.9 - 1, 2, 2);
+      }
+      mono(x, Math.round(R * 0.09));
+      x.fillStyle = "#b5b6ab";
+      x.fillText("RPM ×1000", 0, -R * 0.32);
+    });
+    ctx.drawImage(layers.current.face.c, cx - half, cy - half, half * 2, half * 2);
     ctx.lineWidth = R * 0.07;
-    ctx.strokeStyle = "#1c211e";
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, a0, a1);
-    ctx.stroke();
-    ctx.strokeStyle = "#c2412d";
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, ang(REDLINE), a1);
-    ctx.stroke();
+    ctx.lineCap = "round";
     ctx.strokeStyle = "#8ad9a8";
     ctx.beginPath();
     ctx.arc(cx, cy, R, a0, ang(Math.min(9000, c.rpm)));
@@ -475,18 +692,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.stroke();
       ctx.lineCap = "round";
     }
-    ctx.fillStyle = "#f2ead7";
-    display(ctx, Math.round(R * 0.14), 700);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (let k = 0; k <= 9; k++) {
-      const a = ang(k * 1000);
-      ctx.fillStyle = k * 1000 >= REDLINE ? "#e5604a" : "#f2ead7";
-      ctx.fillText(String(k), cx + Math.cos(a) * R * 0.78, cy + Math.sin(a) * R * 0.78);
-      ctx.fillRect(cx + Math.cos(a) * R * 0.9 - 1, cy + Math.sin(a) * R * 0.9 - 1, 2, 2);
-    }
-    // needle
-    const na = ang(c.rpm) + (c.rpm >= LIMIT - 40 ? (Math.random() - 0.5) * 0.04 : 0);
+    // needle (it shivers on the limiter unless motion is reduced)
+    const na = ang(c.rpm) + (!reduce && c.rpm >= LIMIT - 40 ? (Math.random() - 0.5) * 0.04 : 0);
     ctx.strokeStyle = "#f2ead7";
     ctx.lineWidth = Math.max(2, R * 0.025);
     ctx.lineCap = "round";
@@ -498,38 +705,40 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.08, 0, Math.PI * 2);
     ctx.fill();
-    // gear + speed inside the dial
+    // gear inside the dial
     ctx.fillStyle = "#f2ead7";
     display(ctx, Math.round(R * 0.5), 800);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillText(c.phase === "run" || c.phase === "done" ? String(c.gear + 1) : "N", cx, cy + R * 0.42);
-    mono(ctx, Math.round(R * 0.09));
-    ctx.fillStyle = "#b5b6ab";
-    ctx.fillText("RPM ×1000", cx, cy - R * 0.32);
 
-    // shift lights across the top
+    // shift lights across the top: they fill as the revs climb and go blue, steadily, at the shift point
     const leds = 12;
     const lw = Math.min(26, (w * 0.5) / leds);
     const lx = w / 2 - (leds * lw * 1.3) / 2;
-    const flashBlue = c.rpm >= SHIFT_AT && Math.floor(t * 14) % 2 === 0;
+    const shiftNow = c.rpm >= SHIFT_AT;
     for (let i = 0; i < leds; i++) {
       const on = c.rpm >= 4200 + i * ((SHIFT_AT - 4200) / leds);
       const col = i < 4 ? "#3ddc84" : i < 8 ? "#ffd23f" : "#ff4d4d";
-      ctx.fillStyle = on ? (flashBlue ? "#5ab0ff" : col) : "#1c211e";
+      ctx.fillStyle = on ? (shiftNow ? "#5ab0ff" : col) : "#1c211e";
       ctx.beginPath();
       ctx.arc(lx + i * lw * 1.3 + lw / 2, ledY, lw * 0.38, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // right column: speed, time, splits, tree
+    // right column: speed, time, splits, the gap to your best, tree
+    const gap = ghost && c.phase === "run" ? gapToGhost(ghost, c.t, c.x) : null;
     const lines = [
       `TIME   ${c.phase === "run" || c.phase === "done" ? c.t.toFixed(2) : "—"}`,
       `0–60   ${c.split60 ? c.split60.toFixed(2) : "—"}`,
       `DIST   ${Math.min(402, Math.round(c.x))} / 402 m`,
       `BEST   ${c.best ? c.best.toFixed(2) : "—"}`,
     ];
+    if (ghost) lines.push(`GAP    ${gap === null ? "—" : `${gap <= 0 ? "−" : "+"}${Math.abs(gap).toFixed(2)}`}`);
     const speed = String(Math.round(c.phase === "done" ? c.trap : c.v * 2.237)).padStart(3, " "); // after the line it holds the speed over it
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
+    const lineMono = play ? 13 : 9;
     let rx: number;
     if (stacked) {
       const top = area - foot + 4;
@@ -538,29 +747,33 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       const sw = ctx.measureText("888").width;
       mono(ctx, 12);
       const tw = Math.max(...lines.map((l) => ctx.measureText(l).width));
-      const gap = 22;
-      rx = Math.max(12, (w - (sw + gap + tw)) / 2);
+      const gapX = 22;
+      rx = Math.max(12, (w - (sw + gapX + tw)) / 2);
       ctx.fillStyle = "#f2ead7";
       display(ctx, big, 800);
       ctx.fillText(speed, rx, top + 40);
       mono(ctx, 12);
       ctx.fillStyle = "#b5b6ab";
       ctx.fillText("MPH", rx + 3, top + 58);
-      lines.forEach((l, i) => ctx.fillText(l, rx + sw + gap, top + 12 + i * 16));
+      lines.forEach((l, i) => ctx.fillText(l, rx + sw + gapX, top + 12 + i * 16));
     } else {
-      rx = Math.min(Math.max(cx + R * 1.2, w * 0.62), w - (play ? 150 : 110));
+      rx = Math.min(Math.max(cx + R * 1.2, w * 0.62), w - (play ? 170 : 110));
       ctx.fillStyle = "#f2ead7";
       display(ctx, Math.round(Math.min(h * 0.2, w * 0.11)), 800);
       ctx.fillText(speed, rx, area * 0.42);
       mono(ctx, play ? 12 : 9);
       ctx.fillStyle = "#b5b6ab";
       ctx.fillText("MPH", rx + 4, area * 0.42 + 16);
-      lines.forEach((l, i) => ctx.fillText(l, rx + 4, area * 0.42 + 40 + i * (play ? 18 : 13)));
+      mono(ctx, lineMono);
+      lines.forEach((l, i) => {
+        ctx.fillStyle = i === 4 && gap !== null ? (gap <= 0 ? "#8ad9a8" : "#ffd23f") : "#b5b6ab";
+        ctx.fillText(l, rx + 4, area * 0.42 + 42 + i * (play ? 20 : 13));
+      });
     }
 
     // christmas tree while staging
     if (c.phase === "tree" || c.phase === "idle") {
-      const tx = stacked ? w - 16 : rx + (play ? 190 : 120), ty = stacked ? dialTop + 4 : area * 0.22;
+      const tx = stacked ? w - 16 : rx + (play ? 210 : 120), ty = stacked ? dialTop + 4 : area * 0.22;
       for (let i = 0; i < 4; i++) {
         const lit = c.phase === "tree" && (i < 3 ? c.tree >= i * 0.5 : c.tree >= 1.6);
         ctx.fillStyle = lit ? (i < 3 ? "#ffb300" : "#3ddc84") : "#1c211e";
@@ -570,13 +783,14 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       }
     }
 
-    // call-outs
-    if (c.call && t - c.callT < 0.9) {
+    // call-outs sit on the row above the lanes, where the staging prompt is, so nothing lands on the dial's numbers
+    if (c.call && t - c.callT < 0.9 && (play || c.phase === "run")) {
       ctx.globalAlpha = 1 - (t - c.callT) / 0.9;
-      ctx.fillStyle = c.call === "PERFECT" || c.call === "GREAT LAUNCH" ? "#8ad9a8" : "#ffd23f";
-      display(ctx, Math.round(R * 0.22), 800);
+      ctx.fillStyle = c.call === "PERFECT" || c.call === "PERFECT LAUNCH" || c.call === "GREAT LAUNCH" ? "#8ad9a8" : "#ffd23f";
+      display(ctx, stacked ? 24 : Math.round(Math.max(24, R * 0.22)), 800);
       ctx.textAlign = "center";
-      ctx.fillText(c.call, cx, cy - R * 0.62);
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(c.call, w / 2, ry - (stacked ? 10 : 20));
       ctx.globalAlpha = 1;
       ctx.textAlign = "left";
     }
@@ -596,20 +810,16 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillText(line, w / 2, ry - 14);
       ctx.textAlign = "left";
     }
-    // the shift light, in words (steady: the lights above already flash), for the eye that is on the road and not the top of the dash
+    // the shift light, in words (steady: the lights above already show it), for the eye that is on the road and not the top of the dash
     if (play && c.phase === "run" && c.rpm >= SHIFT_AT - 200 && c.gear < RATIOS.length - 1 && c.shiftT <= 0) {
       ctx.fillStyle = "#5ab0ff";
       display(ctx, Math.round(R * 0.2), 800);
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillText("SHIFT", cx, cy - R * 0.1);
       ctx.textAlign = "left";
     }
     if (play && c.phase === "done") drawResult(ctx, c, w, area, t);
-    // exhaust pop flash
-    if (c.pop > 0) {
-      ctx.fillStyle = `rgba(255,140,40,${c.pop * 0.12})`;
-      ctx.fillRect(0, ry, w, roadH);
-    }
   }
 
   return (

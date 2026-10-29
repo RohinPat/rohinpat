@@ -22,6 +22,8 @@ export const bucketOf = (z: number) => {
 
 export type Palette = {
   road: string[];
+  /** the asphalt's other tone: the road is laid in bands of the two, which is what the eye reads as speed */
+  roadAlt: string[];
   edge: string[];
   rail: string[];
   railHi: string[];
@@ -42,6 +44,10 @@ export type Sprites = { red: HTMLCanvasElement; white: HTMLCanvasElement; orange
 export type Assets = {
   w: number;
   h: number;
+  /** device pixels per CSS pixel when these were made: the backdrop and the vignette are built at device size and drawn 1:1 */
+  dpr: number;
+  /** CSS px the backdrop is wider than the screen, each side (so a shake does not show its edge) */
+  backdropPad: number;
   /** the horizon with the camera level, px */
   hy0: number;
   /** px of panorama per radian of heading */
@@ -72,7 +78,7 @@ const smooth = (t: number) => {
 const FOG: RGB = [10, 14, 20];
 
 function makePalette(): Palette {
-  const pal: Palette = { road: [], edge: [], rail: [], railHi: [], post: [], reflL: [], reflR: [], rock: [], rockAlt: [], tunnel: [], ceiling: [], lamp: [], parapet: [], board: [] };
+  const pal: Palette = { road: [], roadAlt: [], edge: [], rail: [], railHi: [], post: [], reflL: [], reflR: [], rock: [], rockAlt: [], tunnel: [], ceiling: [], lamp: [], parapet: [], board: [] };
   for (let b = 0; b < BUCKETS; b++) {
     const z = bucketZ(b);
     const beam = Math.exp(-Math.max(0, z - 6) / 27);
@@ -80,6 +86,7 @@ function makePalette(): Palette {
     const fog = smooth((z - 120) / 700) * 0.7;
     const tone = (dark: RGB, lit: RGB, k: number): RGB => mix(mix(dark, lit, k), FOG, fog);
     pal.road.push(css(tone([11, 14, 18], [64, 63, 56], beam)));
+    pal.roadAlt.push(css(tone([13, 16, 20], [75, 73, 64], beam)));
     pal.edge.push(css(mix(mix([46, 44, 40], [238, 232, 214], refl), FOG, fog * 0.6)));
     pal.rail.push(css(tone([18, 22, 27], [124, 132, 138], beam * 0.92)));
     pal.railHi.push(css(tone([30, 36, 42], [214, 222, 228], Math.min(1, beam * 1.1))));
@@ -294,35 +301,41 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   const s = Math.max(0.6, Math.min(1.6, h / 700));
 
   // the backdrop: taller than the screen, so a hill's tilt of the horizon only slides it
+  const dpr = Math.max(1, ctx.getTransform ? ctx.getTransform().a : 1);
+  const pad = 8;
   const margin = Math.round(h * 0.42);
-  const bd = canvas(w, h + margin * 2);
+  const bd = canvas((w + pad * 2) * dpr, (h + margin * 2) * dpr);
   const bx = bd.getContext("2d")!;
+  bx.scale(dpr, dpr);
+  const bw = w + pad * 2;
   const sky = bx.createLinearGradient(0, 0, 0, margin + hy0 + h * 0.1);
   sky.addColorStop(0, "#02040a");
   sky.addColorStop(0.5, "#07101c");
   sky.addColorStop(0.82, "#0f1d2d");
   sky.addColorStop(1, "#1d2a38");
   bx.fillStyle = sky;
-  bx.fillRect(0, 0, w, margin + hy0 + h * 0.14);
+  bx.fillRect(0, 0, bw, margin + hy0 + h * 0.14);
   const haze = bx.createLinearGradient(0, margin + hy0 - h * 0.1, 0, margin + hy0 + h * 0.16);
   haze.addColorStop(0, "rgba(255,170,110,0)");
   haze.addColorStop(0.55, "rgba(255,160,100,0.1)");
   haze.addColorStop(1, "rgba(255,150,90,0)");
   bx.globalCompositeOperation = "lighter";
   bx.fillStyle = haze;
-  bx.fillRect(0, margin + hy0 - h * 0.1, w, h * 0.26);
+  bx.fillRect(0, margin + hy0 - h * 0.1, bw, h * 0.26);
   bx.globalCompositeOperation = "source-over";
   const ground = bx.createLinearGradient(0, margin + hy0 + h * 0.08, 0, margin * 2 + h);
   ground.addColorStop(0, "#0a1016");
   ground.addColorStop(0.35, "#070b0f");
   ground.addColorStop(1, "#030507");
   bx.fillStyle = ground;
-  bx.fillRect(0, margin + hy0 + h * 0.1, w, margin * 2 + h);
+  bx.fillRect(0, margin + hy0 + h * 0.1, bw, margin * 2 + h);
 
+  // the vignette at device size: a stretched small one costs a scaled blend of the whole screen every frame
   const vw = 96;
   const vh = Math.max(24, Math.round((96 * h) / w));
-  const vig = canvas(vw, vh);
+  const vig = canvas(w * dpr, h * dpr);
   const vx = vig.getContext("2d")!;
+  vx.scale((w * dpr) / vw, (h * dpr) / vh);
   const vg = vx.createRadialGradient(vw / 2, vh * 0.56, Math.min(vw, vh) * 0.35, vw / 2, vh * 0.56, Math.hypot(vw, vh) * 0.62);
   vg.addColorStop(0, "rgba(0,0,0,0)");
   vg.addColorStop(1, "rgba(0,0,0,0.62)");
@@ -336,5 +349,5 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   const mid = mountains(rng, W, Math.round(h * 0.17), [15, 22, 33], [9, 14, 21], 0.1, 0.12, 0.8);
   const near = mountains(rng, W, Math.round(h * 0.12), [9, 14, 21], [6, 10, 15], 0.05, 0.1, 0.7);
 
-  return { w, h, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(), pal: makePalette() };
+  return { w, h, dpr, backdropPad: pad, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(), pal: makePalette() };
 }
