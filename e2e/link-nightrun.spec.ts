@@ -467,6 +467,130 @@ test.describe("Night run: the phone as the wheel", () => {
   });
 });
 
+type DragCar = { phase: string; rpm: number; gear: number; t: number; call: string; launch: string; launchRpm: number; trap: number; best: number | null; vsBest: number | null; doneT: number };
+const dragCar = (page: Page) => page.evaluate(() => ({ ...(window as unknown as { __drag: { car: DragCar } }).__drag.car }));
+
+/**
+ * Drive the strip in the page, the way a player with good hands would: stage, feather the throttle to
+ * hold `rpm` through the tree, then flat out and an upshift at the light. Runs until the line.
+ */
+async function runTheStrip(page: Page, rpm: number) {
+  await page.evaluate(async (target) => {
+    const cv = document.querySelector('canvas[aria-label*="dashboard"]')!;
+    const key = (type: string, k: string) => cv.dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true }));
+    const car = () => (window as unknown as { __drag: { car: { phase: string; rpm: number; gear: number; shiftT: number } } }).__drag.car;
+    let held = false;
+    const set = (on: boolean) => {
+      if (on !== held) key(on ? "keydown" : "keyup", " ");
+      held = on;
+    };
+    set(true);
+    for (let i = 0; i < 4000; i++) {
+      await new Promise((r) => setTimeout(r, 8));
+      const c = car();
+      if (c.phase === "tree") set(c.rpm < target);
+      if (c.phase === "run") {
+        set(true);
+        if (c.rpm > 7320 && c.shiftT <= 0 && c.gear < 5) key("keydown", "ArrowUp");
+      }
+      if (c.phase === "done") break;
+    }
+    set(false);
+  }, rpm);
+}
+
+test.describe("Drag strip: the launch and the end card", () => {
+  test("the launch counts: the revs at the green set the call, and the card keeps the best of the visit", async ({ browser, baseURL }) => {
+    test.setTimeout(120_000);
+    const context = await newContext(browser, baseURL);
+    const page = await context.newPage();
+    await page.goto("/interests");
+    await page.locator('[data-piece="engine"]').click();
+    await expect(stage(page)).toBeVisible(SLOW);
+    await page.getByTestId("engine-mode-drag").click();
+    const dash = stage(page).getByRole("img", { name: /race dashboard/i });
+    await expect(dash).toBeVisible();
+    await dash.focus();
+
+    // a launch in the band, near the mark
+    await runTheStrip(page, 4900);
+    const a = await dragCar(page);
+    expect(a.phase).toBe("done");
+    expect(a.launch).toMatch(/^(PERFECT|GREAT) LAUNCH$/);
+    expect(a.launchRpm).toBeGreaterThan(4400);
+    expect(a.launchRpm).toBeLessThan(5400);
+    expect(a.trap).toBeGreaterThan(120);
+    expect(a.vsBest).toBeNull();
+    // the sr-only line says the whole of it
+    await expect(live(page)).toContainText(/quarter mile in \d+\.\d\d seconds at \d+ mph.*launch: (perfect|great) launch/i);
+
+    // the line is not skipped by a key that was still down, then the throttle runs it again, best kept
+    await page.waitForTimeout(800);
+    await page.keyboard.down(" ");
+    await expect.poll(async () => (await dragCar(page)).phase, { timeout: 5000 }).not.toBe("done");
+    await page.keyboard.up(" ");
+    expect((await dragCar(page)).best).toBeCloseTo(a.best!, 5);
+    await expect(live(page)).toHaveText("");
+
+    // the second run too many revs: wheelspin, and slower
+    await runTheStrip(page, 7000);
+    const b = await dragCar(page);
+    expect(b.phase).toBe("done");
+    expect(b.launch).toBe("WHEELSPIN");
+    expect(b.vsBest).toBeGreaterThan(0.1);
+    expect(b.best).toBeCloseTo(a.best!, 5);
+    await context.close();
+  });
+
+  test("on a phone the shift lights are not under the mode switch", async ({ browser, baseURL }) => {
+    test.setTimeout(60_000);
+    const context = await browser.newContext({ baseURL, viewport: PHONE, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    await page.goto("/interests");
+    await page.locator('[data-piece="engine"]').tap();
+    await expect(stage(page)).toBeVisible(SLOW);
+    await page.getByTestId("engine-mode-drag").tap();
+    const dash = stage(page).getByRole("img", { name: /race dashboard/i });
+    await expect(dash).toBeVisible();
+    // the lights are drawn at y = 62 in the dash's own pixels, the switch ends at 12 + 32
+    const [sw, cv] = await Promise.all([page.getByRole("group", { name: "Mode" }).boundingBox(), dash.boundingBox()]);
+    expect(sw!.y + sw!.height).toBeLessThan(cv!.y + 62 - 8);
+    await context.close();
+  });
+});
+
+test.describe("Night run on a phone-sized touch screen", () => {
+  test("every pad is on the screen, gas included, and the gas pad starts the run", async ({ browser, baseURL }) => {
+    test.setTimeout(60_000);
+    for (const width of [360, 390]) {
+      const context = await browser.newContext({ baseURL, viewport: { width, height: 800 }, hasTouch: true, isMobile: true });
+      const page = await context.newPage();
+      await page.goto("/interests");
+      await page.locator('[data-piece="engine"]').tap();
+      await expect(stage(page)).toBeVisible(SLOW);
+      await startRun(page);
+      const cv = (await canvas(page).boundingBox())!;
+      for (const id of ["left", "right", "brake", "hand", "gas"]) {
+        const b = (await page.getByTestId(`night-pad-${id}`).boundingBox())!;
+        expect(b.x, `${id} at ${width}`).toBeGreaterThanOrEqual(cv.x);
+        expect(b.x + b.width, `${id} at ${width}`).toBeLessThanOrEqual(cv.x + cv.width + 0.5);
+        expect(b.y + b.height, `${id} at ${width}`).toBeLessThanOrEqual(cv.y + cv.height + 0.5);
+      }
+      // the pads do not sit on one another
+      const boxes = await Promise.all(["left", "right", "brake", "hand", "gas"].map((id) => page.getByTestId(`night-pad-${id}`).boundingBox()));
+      for (let i = 0; i < boxes.length; i++)
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i]!, b = boxes[j]!;
+          const apart = a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+          expect(apart, `pads ${i} and ${j} at ${width}`).toBe(true);
+        }
+      await page.getByTestId("night-pad-gas").tap();
+      await expect(canvas(page)).toHaveAttribute("data-phase", "count", SLOW);
+      await context.close();
+    }
+  });
+});
+
 test.describe("no phone linked: Night run is as it was", () => {
   test("no hint, no link traffic, the keys drive it", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);

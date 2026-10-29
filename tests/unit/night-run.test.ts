@@ -8,7 +8,7 @@ import { GHOST_HZ, better, createRecorder, newPose, samplePose, timeAt, type Gho
 import { getTarget } from "@/components/offhours/night/target";
 import { buildPlan, drive } from "@/components/offhours/night/ai";
 import { newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeySteer } from "@/components/offhours/night/nightInput";
-import { NightGame } from "@/components/offhours/night/game";
+import { NightGame, forgetBestRun, getBestScore } from "@/components/offhours/night/game";
 import { createAxes } from "@/components/link/controllers/axes";
 import { createWheelFilter } from "@/lib/motion";
 import type { LinkMsg } from "@/lib/link/session";
@@ -128,6 +128,20 @@ describe("night run: the engine it shares with the drag strip", () => {
     expect(rpm).toBeGreaterThan(3500);
     for (let i = 0; i < 240; i++) rpm = engineRpm(rpm, 0, 0, 0, DT, false);
     expect(rpm).toBeLessThan(1000);
+  });
+  it("keeps the launch revs up through first gear instead of dipping to half and climbing again", () => {
+    const road = getRoad();
+    const c = newCar(12, 0);
+    let min = Infinity;
+    let peak = 0;
+    for (let i = 0; i < 120 * 4 && c.gear === 0; i++) {
+      stepCar(c, inp(0, 1), road, DT);
+      if (i > 120 * 0.5) min = Math.min(min, c.rpm);
+      peak = Math.max(peak, c.rpm);
+    }
+    expect(peak).toBeGreaterThan(5000);
+    // the old model fell to about 2.5k as the launch term faded under the wheels' own revs
+    expect(min).toBeGreaterThan(4500);
   });
 });
 
@@ -550,6 +564,112 @@ describe("night run: the game", () => {
     expect(parseNightState({ phase: "run", gear: 1.5 })).toBeNull();
     expect(parseNightState(undefined)).toBeNull();
     expect(parseNightState(nightStateData({ ...READY_VIEW, time: 1e9 }))!.time).toBe(9999);
+  });
+});
+
+describe("night run: the corner warning and the end card", () => {
+  /** drive the target's own driver at `pace` through the run and count how long the warning is lit */
+  const litShare = (pace: number, secs: number) => {
+    const g = new NightGame(true);
+    const plan = getTarget().plan;
+    const input = inp(0, 1);
+    g.start();
+    let run = 0;
+    let lit = 0;
+    for (let i = 0; i < 60 * secs && g.phase !== "done"; i++) {
+      if (g.phase === "run") drive(g.car, g.road, plan, pace, input);
+      g.update(1 / 60, input);
+      if (g.phase === "run" && g.endWhy === null) {
+        run++;
+        if (g.cue.on) lit++;
+      }
+    }
+    return lit / run;
+  };
+
+  it("is dark on the opening straight and while the car is under the plan's speed", () => {
+    const g = new NightGame(true);
+    g.start();
+    for (let i = 0; i < 60 * 13; i++) {
+      g.update(1 / 60, inp(0, 1));
+      expect(g.cue.on).toBe(false);
+    }
+    expect(g.car.s).toBeGreaterThan(200);
+    expect(litShare(0.8, 60)).toBeLessThan(0.08);
+  });
+
+  it("lights up for a driver who carries more speed than the road allows, with the way the corner turns", () => {
+    expect(litShare(1.25, 60)).toBeGreaterThan(0.12);
+    // gas only, no steering, no lifting: the first tight corner lights it, and it says which way the road goes
+    const road = getRoad();
+    const g = new NightGame(true);
+    g.start();
+    let lit: { dir: number; s: number } | null = null;
+    for (let i = 0; i < 60 * 40 && !lit; i++) {
+      g.update(1 / 60, inp(0, 1));
+      if (g.cue.on) lit = { dir: g.cue.dir, s: g.car.s };
+    }
+    expect(lit).not.toBeNull();
+    // the bend it is warning about is on that side, within a few seconds of road
+    let k = 0;
+    for (let s = lit!.s; s < lit!.s + 260; s += road.segM) {
+      const kk = road.kappa[Math.round(s / road.segM)];
+      if (Math.abs(kk) > Math.abs(k)) k = kk;
+    }
+    expect(Math.sign(k)).toBe(lit!.dir);
+  });
+
+  it("goes out for a recovering car and is gone on the end screen", () => {
+    const g = new NightGame(true);
+    g.start();
+    for (let i = 0; i < 60 * 20; i++) g.update(1 / 60, inp(0, 1));
+    g.timeLeft = 0.1;
+    for (let i = 0; i < 60 * 6; i++) g.update(1 / 60, inp(0, 1));
+    expect(g.phase).toBe("done");
+    expect(g.cue.on).toBe(false);
+  });
+
+  it("keeps the best score of the visit and says what the last best was", () => {
+    forgetBestRun();
+    expect(getBestScore()).toBe(0);
+    const run = (points: number) => {
+      const g = new NightGame(true);
+      g.start();
+      for (let i = 0; i < 60 * 4; i++) g.update(1 / 60, inp(0, 1));
+      g.bonusPoints = points;
+      g.timeLeft = 0.1;
+      for (let i = 0; i < 60 * 6; i++) g.update(1 / 60, inp(0, 1));
+      return g.result!;
+    };
+    const a = run(900);
+    expect(a.prevBestScore).toBe(0);
+    expect(a.bestScore).toBe(a.score);
+    expect(a.vsTargetS).toBeNull();
+    const b = run(300);
+    expect(b.prevBestScore).toBe(a.score);
+    expect(b.bestScore).toBe(a.score);
+    const c = run(2000);
+    expect(c.prevBestScore).toBe(a.score);
+    expect(c.bestScore).toBe(c.score);
+    expect(getBestScore()).toBe(c.score);
+    forgetBestRun();
+    expect(getBestScore()).toBe(0);
+  });
+
+  it("tells a finished run how far ahead of or behind the target driver it was", () => {
+    forgetBestRun();
+    const g = new NightGame(true);
+    const plan = getTarget().plan;
+    const input = inp(0, 1);
+    g.start();
+    for (let i = 0; i < 60 * 400 && g.phase !== "done"; i++) {
+      if (g.phase === "run") drive(g.car, g.road, plan, 0.9, input);
+      g.update(1 / 60, input);
+    }
+    expect(g.phase).toBe("done");
+    forgetBestRun();
+    if (g.result!.finished) expect(Number.isFinite(g.result!.vsTargetS)).toBe(true);
+    else expect(g.result!.vsTargetS).toBeNull();
   });
 });
 

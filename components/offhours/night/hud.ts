@@ -66,6 +66,24 @@ const rr = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
+/** a phone-width canvas: the page's switches take the top right, so the dash rearranges */
+export const isNarrow = (w: number) => w < 560;
+
+/** Break `text` into lines no wider than `maxW` at the font now set. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxW) {
+      out.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
 /** the tile's small dash: the name, and the speed */
 export function drawAttractHud(ctx: CanvasRenderingContext2D, w: number, h: number, speed: number) {
   ctx.textBaseline = "alphabetic";
@@ -95,6 +113,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, g: 
   if (g.phase === "count") drawCount(ctx, w, h, u, g, reduce);
   if (g.phase === "run") {
     drawToasts(ctx, w, h, u, g, reduce);
+    drawCue(ctx, w, h, u, g, now, reduce);
     if (g.goFlash > 0.4) {
       ctx.globalAlpha = Math.min(1, (g.goFlash - 0.4) * 1.8);
       font(ctx, "d", 120 * u, 800);
@@ -176,15 +195,22 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
   }
 
   // ---- the clock and the checkpoint strip
+  // wide: centred at the top. Narrow (a phone), the mode and gearbox switches own the
+  // top right and would sit on a centred clock, so it moves to the left, under the phone hint.
+  const narrow = isNarrow(w);
+  const top = narrow ? 40 * u : 0;
+  const ax = narrow ? 20 * u : w / 2;
+  const align: CanvasTextAlign = narrow ? "left" : "center";
+  ctx.textAlign = align;
   const t = Math.max(0, g.timeLeft);
   const low = t < 10 && live && g.endWhy === null;
   const flash = low && Math.floor(now * 4) % 2 === 0;
   font(ctx, "m", 10 * u, 500);
   ctx.fillStyle = MUTED;
-  ctx.fillText("TIME", w / 2, 22 * u);
+  ctx.fillText("TIME", ax, top + 22 * u);
   font(ctx, "d", 54 * u, 800);
   ctx.fillStyle = low ? (flash ? RED : AMBER) : CREAM;
-  ctx.fillText(fmt("time", Math.round(t * 10), (v) => (v / 10).toFixed(1)), w / 2, 22 * u + 50 * u);
+  ctx.fillText(fmt("time", Math.round(t * 10), (v) => (v / 10).toFixed(1)), ax, top + 22 * u + 50 * u);
   if (g.cpFlash > 0) {
     const a = Math.min(1, g.cpFlash);
     ctx.fillStyle = `rgba(138,217,168,${(a * 0.9).toFixed(2)})`;
@@ -194,11 +220,11 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     font(ctx, "m", 10 * u, 500);
   }
   const cpTxt = fmt("cp", g.cp * 100 + g.road.checks.length, () => `CHECKPOINT ${Math.min(g.cp + 1, g.road.checks.length)} / ${g.road.checks.length}`);
-  ctx.fillText(cpTxt, w / 2, 22 * u + 70 * u);
+  ctx.fillText(cpTxt, ax, top + 22 * u + 70 * u);
   // the strip: the road in eight legs, filled to where the car is
-  const sw = Math.min(260 * u, w * 0.4);
-  const sx = w / 2 - sw / 2;
-  const sy = 22 * u + 80 * u;
+  const sw = narrow ? Math.min(150, w * 0.42) : Math.min(260 * u, w * 0.4);
+  const sx = narrow ? ax : w / 2 - sw / 2;
+  const sy = top + 22 * u + 80 * u;
   ctx.fillStyle = "rgba(242,234,215,0.16)";
   ctx.fillRect(sx, sy, sw, 3);
   const frac = Math.max(0, Math.min(1, (car.s - 12) / (g.road.finish - 12)));
@@ -218,10 +244,10 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
   ctx.arc(tx, sy + 1.5, 4.5, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ---- the score, top left (under the phone hint)
+  // ---- the score, top left (under the phone hint; on a phone, under the clock)
   ctx.textAlign = "left";
   const lx = 20 * u;
-  const ly = 62 * u;
+  const ly = narrow ? sy + 30 * u : 62 * u;
   font(ctx, "m", 10 * u, 500);
   ctx.fillStyle = MUTED;
   ctx.fillText("SCORE", lx, ly);
@@ -240,7 +266,8 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     const d = g.deltaS;
     const ahead = d <= 0;
     const rx = w - 20 * u;
-    const ry = 128 * u;
+    // under the page's switches: on a phone those are two rows tall, 88 px down
+    const ry = narrow ? 128 : 128 * u;
     font(ctx, "m", 10 * u, 500);
     ctx.fillStyle = MUTED;
     ctx.fillText("VS TARGET", rx, ry - 22 * u);
@@ -296,6 +323,48 @@ function drawDrift(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   }
 }
 
+/** the corner warning: an amber chevron pill that points the way the road turns */
+function drawCue(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, now: number, reduce: boolean) {
+  const cue = g.cue;
+  if (!cue.on) return;
+  const dir = cue.dir;
+  // it grows more urgent as the corner closes: the pulse speeds up
+  const near = Math.max(0, Math.min(1, 1 - cue.dist / 190));
+  const pulse = reduce ? 1 : 0.78 + 0.22 * Math.sin(now * (6 + near * 10));
+  const cx = w / 2;
+  const cy = h * 0.27 + (isNarrow(w) ? 14 * u : 0);
+  font(ctx, "d", 30 * u, 800);
+  const label = dir > 0 ? "CORNER RIGHT" : "CORNER LEFT";
+  const tw = ctx.measureText(label).width;
+  const pw = tw + 96 * u;
+  const ph = 56 * u;
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = INK;
+  rr(ctx, cx - pw / 2, cy - ph / 2, pw, ph, ph / 2);
+  ctx.fill();
+  ctx.strokeStyle = AMBER;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = AMBER;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(label, cx, cy + 3 * u);
+  font(ctx, "m", 10 * u, 700);
+  ctx.fillText("LIFT OR BRAKE", cx, cy + 20 * u);
+  // chevrons on the side it turns toward
+  ctx.lineWidth = 3.5 * u;
+  ctx.lineCap = "round";
+  for (let i = 0; i < 2; i++) {
+    const x = cx + dir * (pw / 2 - (22 + i * 11) * u);
+    ctx.beginPath();
+    ctx.moveTo(x - dir * 5 * u, cy - 11 * u);
+    ctx.lineTo(x + dir * 5 * u, cy);
+    ctx.lineTo(x - dir * 5 * u, cy + 11 * u);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean) {
   ctx.textAlign = "center";
   let y = h * 0.4;
@@ -344,7 +413,8 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.fillStyle = "rgba(4,7,6,0.5)";
   ctx.fillRect(0, 0, w, h);
   ctx.textAlign = "center";
-  const cy = h * 0.27;
+  const narrow = isNarrow(w);
+  const cy = h * 0.27 + (narrow ? 20 : 0);
   font(ctx, "m", 12 * u, 700);
   ctx.fillStyle = MINT;
   ctx.fillText("A CANYON ROAD, AFTER MIDNIGHT", w / 2, cy - 62 * u);
@@ -355,13 +425,34 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.fillStyle = MINT;
   const go = opt.touch ? "HOLD GAS TO START" : opt.linked ? "HOLD ↑ OR SPACE, OR GAS ON YOUR PHONE" : "HOLD ↑ OR SPACE TO START";
   ctx.fillText(go, w / 2, cy + 62 * u);
-  font(ctx, "m", 11 * u, 500);
-  ctx.fillStyle = MUTED;
-  const lines = opt.touch
-    ? ["STEER WITH THE ARROWS · LIFT OR BRAKE INTO A CORNER TO KICK THE TAIL OUT", `${g.road.checks.length} CHECKPOINTS · BEAT THE TARGET`]
+  const text = opt.touch
+    ? ["STEER WITH THE ARROWS. LIFT OR BRAKE INTO A CORNER TO KICK THE TAIL OUT.", `${g.road.checks.length} CHECKPOINTS. BEAT THE TARGET.`]
     : ["← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX", "LIFT OR BRAKE INTO A CORNER AND THE TAIL STEPS OUT: HOLD IT WITH COUNTER-STEER AND GAS", `${g.road.checks.length} CHECKPOINTS · BEAT THE TARGET`];
-  lines.forEach((l, i) => ctx.fillText(l, w / 2, cy + 94 * u + i * 20 * u));
+  // the how-to sits on a dark card: the road's white lines run right through it otherwise
+  font(ctx, "m", 11 * u, 500);
+  const maxW = w - 56;
+  const lines = text.flatMap((t) => wrap(ctx, t, maxW));
+  const lh = 20 * u;
+  const widest = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)));
+  const y0 = cy + 94 * u;
+  ctx.fillStyle = "rgba(6,9,8,0.72)";
+  rr(ctx, w / 2 - widest / 2 - 16, y0 - 18 * u, widest + 32, lines.length * lh + 14 * u, 12 * u);
+  ctx.fill();
+  ctx.fillStyle = "#c4c7bc";
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, y0 + i * lh));
 }
+
+/** how tall the end card is, in the dash's own units, and where its bottom edge is on the canvas (the button goes under it) */
+const RESULT_H = 404;
+export function resultBottom(w: number, h: number, opt: { touch: boolean }) {
+  void opt;
+  const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
+  const ph = RESULT_H * u;
+  const y = Math.max(16, h * 0.5 - ph / 2 - 10 * u);
+  return y + ph;
+}
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
 function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, opt: HudOptions) {
   const r = g.result;
@@ -369,7 +460,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   ctx.fillStyle = "rgba(4,7,6,0.62)";
   ctx.fillRect(0, 0, w, h);
   const pw = Math.min(460 * u, w - 32);
-  const ph = 372 * u;
+  const ph = RESULT_H * u;
   const x = w / 2 - pw / 2;
   const y = Math.max(16, h * 0.5 - ph / 2 - 10 * u);
   ctx.fillStyle = "rgba(10,13,12,0.9)";
@@ -388,11 +479,13 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   font(ctx, "m", 10 * u, 500);
   ctx.fillStyle = MUTED;
   ctx.fillText("TOTAL SCORE", x + 28 * u, y + 120 * u);
+  const vs = r.vsTargetS;
   const rows: [string, string][] = [
-    ["DISTANCE", `${r.miles.toFixed(2)} mi`],
+    r.finished ? ["FINISH TIME", clock(r.time)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
+    vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
-    ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["DRIFT BANKED", grouped(r.driftTotal)],
+    ["BEST THIS VISIT", grouped(r.bestScore)],
   ];
   rows.forEach(([k, v], i) => {
     const ry = y + 160 * u + i * 31 * u;
@@ -401,17 +494,25 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     ctx.textAlign = "left";
     ctx.fillText(k, x + 28 * u, ry);
     font(ctx, "d", 24 * u, 800);
-    ctx.fillStyle = CREAM;
+    ctx.fillStyle = k === "VS TARGET" ? (vs !== null && vs <= 0 ? MINT : AMBER) : CREAM;
     ctx.textAlign = "right";
     ctx.fillText(v, x + pw - 28 * u, ry + 3 * u);
   });
   ctx.textAlign = "left";
   font(ctx, "m", 11 * u, 700);
+  // two honest lines at most: a new best score (there was one before it to beat), and the ghost
+  const lineY = y + ph - 60 * u;
+  let n = 0;
+  if (r.prevBestScore > 0 && r.score > r.prevBestScore) {
+    ctx.fillStyle = MINT;
+    ctx.fillText(`● NEW BEST SCORE, UP FROM ${grouped(r.prevBestScore)}`, x + 28 * u, lineY - n * 20 * u);
+    n++;
+  }
   if (r.newBest) {
     ctx.fillStyle = MINT;
-    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, y + ph - 64 * u);
+    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, lineY - n * 20 * u);
   }
   ctx.fillStyle = CREAM;
-  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 30 * u);
+  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 26 * u);
   void LIMIT;
 }

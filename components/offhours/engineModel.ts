@@ -36,12 +36,13 @@ export const tractiveForce = (rpm: number, g: number, pedal: number) => ((torque
 
 /**
  * Where the engine speed goes next: tied to the wheels, but never under idle,
- * and with some clutch slip off the line (the revs hold up against the pedal
- * until the car is rolling), smoothed so a shift dips and recovers.
+ * and with some clutch slip off the line (in first the revs hold up against the
+ * pedal until the wheels have caught them, so the note climbs from the launch
+ * instead of dropping to half and climbing again), smoothed so a shift dips and recovers.
  */
 export function engineRpm(rpm: number, v: number, gear: number, pedal: number, dt: number, shifting: boolean): number {
   const coupled = wheelRpm(v, gear);
-  const launch = IDLE + pedal * 4300 * Math.max(0, 1 - v / 9);
+  const launch = IDLE + pedal * 4300 * (gear === 0 ? 1 : Math.max(0, 1 - v / 9));
   const target = Math.max(coupled, launch);
   const next = rpm + (target - rpm) * Math.min(1, dt * (shifting ? 18 : 10));
   return Math.min(LIMIT + 60, Math.max(IDLE, next));

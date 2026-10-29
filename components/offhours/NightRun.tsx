@@ -9,7 +9,7 @@ import { buildAssets, type Assets } from "./night/assets";
 import { Attract } from "./night/attract";
 import { drawScene } from "./night/draw";
 import { NightGame, type GameEvent } from "./night/game";
-import { drawAttractHud, drawHud, grouped, type HudOptions } from "./night/hud";
+import { drawAttractHud, drawHud, grouped, resultBottom, type HudOptions } from "./night/hud";
 import { newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeySteer, type Sources } from "./night/nightInput";
 import { NightSound } from "./night/sound";
 
@@ -33,6 +33,8 @@ export type NightProps = PieceProps & {
 };
 
 const C = ENGINE_CAL;
+/** the touch pads' height with their padding, px: the dash lifts by this much */
+const PAD_LIFT = 112;
 
 type Held = { left: boolean; right: boolean; gas: boolean; space: boolean; brake: boolean; hand: boolean };
 type Pads = { left: boolean; right: boolean; gas: boolean; brake: boolean; hand: boolean; steer: number };
@@ -59,6 +61,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const lastAudioTry = useRef(0);
   const lastData = useRef(0);
   const mineRef = useRef<RemoteHandlers | null>(null);
+  const againRef = useRef<HTMLButtonElement>(null);
 
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<string>("ready");
@@ -316,8 +319,11 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         }
       }
       drawScene(ctx, a, g.scene, q.level);
-      const opt: HudOptions = { touch: touchRef.current, linked: linkRef.current.linked, lift: touchRef.current ? 108 : 0 };
+      const opt: HudOptions = { touch: touchRef.current, linked: linkRef.current.linked, lift: touchRef.current ? PAD_LIFT : 0 };
       drawHud(ctx, w, h, g, opt, now, reduce);
+      // the end card is drawn on the canvas, the button is under it wherever its bottom edge falls
+      const again = againRef.current;
+      if (again && g.phase === "done") again.style.top = `${Math.round(resultBottom(w, h, opt) + 14)}px`;
     },
     {
       interactive: play,
@@ -464,30 +470,33 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           type="button"
           data-testid="night-again"
           onClick={startOrAgain}
+          ref={againRef}
           className="absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-[var(--mint)] px-6 py-2.5 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink)]"
-          style={{ top: "calc(50% + 12.8rem)" }}
+          style={{ top: "calc(50% + 13.5rem)" }}
         >
           Drive again
         </button>
       )}
       {touch && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-3 p-3" data-testid="night-pads">
-          <div className="flex gap-2">
-            <button type="button" aria-label="Steer left" data-testid="night-pad-left" className={`${padClass} h-20 w-20 text-lg`} {...pad("left")}>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" aria-label="Steer left" data-testid="night-pad-left" className={`${padClass} h-[88px] w-16 text-lg sm:h-20 sm:w-20`} {...pad("left")}>
               ◀
             </button>
-            <button type="button" aria-label="Steer right" data-testid="night-pad-right" className={`${padClass} h-20 w-20 text-lg`} {...pad("right")}>
+            <button type="button" aria-label="Steer right" data-testid="night-pad-right" className={`${padClass} h-[88px] w-16 text-lg sm:h-20 sm:w-20`} {...pad("right")}>
               ▶
             </button>
           </div>
-          <div className="flex items-end gap-2">
-            <button type="button" aria-label="Brake" data-testid="night-pad-brake" className={`${padClass} h-16 w-20`} {...pad("brake")}>
-              Brake
-            </button>
-            <button type="button" aria-label="Handbrake" data-testid="night-pad-hand" className={`${padClass} h-16 w-20`} {...pad("hand")}>
-              Drift
-            </button>
-            <button type="button" aria-label="Gas" data-testid="night-pad-gas" className={`${padClass} h-24 w-28 !bg-[#1d5e3f]/70 text-[13px]`} {...pad("gas")}>
+          <div className="flex shrink-0 items-end gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <button type="button" aria-label="Brake" data-testid="night-pad-brake" className={`${padClass} h-10 w-[72px] sm:h-16 sm:w-20`} {...pad("brake")}>
+                Brake
+              </button>
+              <button type="button" aria-label="Handbrake" data-testid="night-pad-hand" className={`${padClass} h-10 w-[72px] sm:h-16 sm:w-20`} {...pad("hand")}>
+                Drift
+              </button>
+            </div>
+            <button type="button" aria-label="Gas" data-testid="night-pad-gas" className={`${padClass} h-[88px] w-[88px] !bg-[#1d5e3f]/70 text-[13px] sm:h-24 sm:w-28`} {...pad("gas")}>
               Gas
             </button>
           </div>
