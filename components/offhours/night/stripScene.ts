@@ -153,61 +153,89 @@ export function paintStrip(x: CanvasRenderingContext2D, w: number, h: number, pl
   const th = Math.min(wallY * 0.7, 300 * sc);
   for (const t of towers) tower(x, w * t, wallY, Math.max(14, wallY - th * (t > 0.1 && t < 0.9 ? 0.7 : 1)), wallY + roadH * 0.5, (0.5 - t) * w * 0.25);
 
-  // ---- the grandstand, on the right behind the lanes: stepped rows, a crowd, a roof lit underneath, and a timing tower at the finish end
-  const sx0 = play ? Math.max(x0 + w * 0.34, w * 0.4) : Math.max(x0 + w * 0.3, w * 0.34);
+  // ---- the grandstand: low, on the right beside the strip and clear of the dial and its words, with an uneven scatter of people and a timing tower at the finish end
+  const sx0 = Math.max(x0 + w * 0.5, w * 0.72);
   const sx1 = Math.min(w - 8, x1 + 6);
-  const rows = 5;
-  const sh = Math.min(gh * 1.7, wallY * 0.3);
-  // (a narrow screen has its readouts along the wall: no stand there)
+  const rows = 4;
+  const sh = Math.min(gh * 0.9, wallY * 0.13);
   if (sx1 - sx0 > 60 && w >= 560) {
+    const bank = x.createLinearGradient(0, wallY - sh, 0, wallY);
+    bank.addColorStop(0, "#09130f");
+    bank.addColorStop(1, "#0f1b17");
+    x.fillStyle = bank;
+    x.fillRect(sx0, wallY - sh, sx1 - sx0 - 54 * sc, sh + 1);
+    const ph = [rng() * 6.28, rng() * 6.28];
     for (let r = 0; r < rows; r++) {
       const y1 = wallY - (sh * r) / rows;
       const y0 = wallY - (sh * (r + 1)) / rows;
-      x.fillStyle = r % 2 ? "#0c1613" : "#101b17";
-      x.fillRect(sx0 + r * 4, y0, sx1 - sx0 - r * 8 - 54 * sc, y1 - y0 + 0.5);
-      const n = Math.round((sx1 - sx0) / 9);
+      x.fillStyle = "rgba(242,234,215,0.05)";
+      x.fillRect(sx0, y0, sx1 - sx0 - 54 * sc, 0.8);
+      const span = sx1 - sx0 - 60 * sc;
+      const n = Math.round(span / 10);
       for (let i = 0; i < n; i++) {
-        if (rng() < 0.2) continue;
-        const px = sx0 + 4 + r * 4 + rng() * (sx1 - sx0 - r * 8 - 62 * sc);
+        const px = sx0 + 4 + rng() * span;
+        const u = (px - sx0) / span;
+        const dens = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(u * 13 + ph[0] + r * 1.7)) * (0.6 + 0.4 * Math.sin(u * 37 + ph[1]));
+        if (rng() > dens * 0.75) continue;
+        const py = y0 + (y1 - y0) * (0.35 + rng() * 0.55);
         const tone = rng();
-        x.fillStyle = tone < 0.1 ? "rgba(242,234,215,0.42)" : tone < 0.2 ? "rgba(138,217,168,0.36)" : tone < 0.32 ? "rgba(255,200,130,0.3)" : "rgba(44,60,57,0.9)";
-        const ph = Math.max(3, (y1 - y0) * 0.5);
-        x.fillRect(px, y1 - ph - (y1 - y0) * 0.1, 2.6, ph);
-        x.fillRect(px - 0.4, y1 - ph - (y1 - y0) * 0.1 - 1.6, 3.4, 2);
+        x.fillStyle = tone < 0.06 ? "rgba(242,234,215,0.28)" : tone < 0.12 ? "rgba(138,217,168,0.24)" : tone < 0.2 ? "rgba(255,196,120,0.2)" : "rgba(46,62,59,0.75)";
+        x.beginPath();
+        x.arc(px, py, 0.8 + rng() * 0.9, 0, Math.PI * 2);
+        x.fill();
       }
     }
-    // the roof on posts, its underside lit
+    // the roof, its underside a little lit
     x.fillStyle = "#08100e";
-    x.fillRect(sx0 - 4, wallY - sh - gh * 0.3, sx1 - sx0 - 48 * sc, gh * 0.12);
-    x.fillStyle = "#16221e";
-    for (let px = sx0; px < sx1 - 56 * sc; px += 46) x.fillRect(px, wallY - sh - gh * 0.18, 2, gh * 0.18 + 2);
+    x.fillRect(sx0 - 3, wallY - sh - gh * 0.16, sx1 - sx0 - 50 * sc, gh * 0.07);
     x.globalCompositeOperation = "lighter";
-    const under = x.createLinearGradient(0, wallY - sh - gh * 0.2, 0, wallY - sh + gh * 0.2);
-    under.addColorStop(0, "rgba(255,236,190,0.4)");
-    under.addColorStop(1, "rgba(255,236,190,0)");
+    const under = x.createLinearGradient(0, wallY - sh - gh * 0.1, 0, wallY - sh + gh * 0.1);
+    under.addColorStop(0, "rgba(255,226,170,0.22)");
+    under.addColorStop(1, "rgba(255,226,170,0)");
     x.fillStyle = under;
-    x.fillRect(sx0, wallY - sh - gh * 0.18, sx1 - sx0 - 52 * sc, gh * 0.4);
-    x.fillStyle = "rgba(242,234,215,0.8)";
-    x.fillRect(sx0 - 4, wallY - sh - gh * 0.3, sx1 - sx0 - 48 * sc, 1.3);
+    x.fillRect(sx0, wallY - sh - gh * 0.09, sx1 - sx0 - 54 * sc, gh * 0.2);
     x.globalCompositeOperation = "source-over";
     // the timing tower: a box with a few lit rows, beside the finish
     const tx = sx1 - 46 * sc;
     const tw = 38 * sc;
-    const tHt = sh + gh * 0.5;
+    const tHt = sh + gh * 0.4;
     x.fillStyle = "#0b1512";
     x.fillRect(tx, wallY - tHt, tw, tHt);
-    x.strokeStyle = "rgba(242,234,215,0.25)";
+    x.strokeStyle = "rgba(242,234,215,0.2)";
     x.lineWidth = 1;
     x.strokeRect(tx + 0.5, wallY - tHt + 0.5, tw - 1, tHt - 1);
     x.globalCompositeOperation = "lighter";
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < 3; r++) {
       for (let c = 0; c < 3; c++) {
-        if (rng() < 0.18) continue;
-        x.fillStyle = rng() < 0.2 ? "rgba(196,226,255,0.8)" : "rgba(255,214,150,0.85)";
-        x.fillRect(tx + 4 * sc + c * 11 * sc, wallY - tHt + 6 * sc + r * (tHt / 4.4), 7 * sc, 4 * sc);
+        if (rng() < 0.35) continue;
+        x.fillStyle = "rgba(255,200,130,0.5)";
+        x.fillRect(tx + 5 * sc + c * 11 * sc, wallY - tHt + 6 * sc + r * (tHt / 3.4), 6 * sc, 3.5 * sc);
       }
     }
     x.globalCompositeOperation = "source-over";
+  }
+
+  // ---- a calm place for the instruments: a soft ink wash behind the dial, the readouts and the words under them, so none of the above competes with them
+  {
+    const cxw = w < 560 ? w * 0.5 : w * 0.45;
+    const rxw = w < 560 ? w * 0.62 : w * 0.4;
+    const ryw = wallY * 0.62;
+    x.save();
+    x.translate(cxw, wallY * 0.5);
+    x.scale(1, ryw / rxw);
+    const calm = x.createRadialGradient(0, 0, rxw * 0.2, 0, 0, rxw);
+    calm.addColorStop(0, "rgba(3,6,5,0.78)");
+    calm.addColorStop(0.7, "rgba(3,6,5,0.5)");
+    calm.addColorStop(1, "rgba(3,6,5,0)");
+    x.fillStyle = calm;
+    x.fillRect(-rxw, -rxw, rxw * 2, rxw * 2);
+    x.restore();
+    // and under the words that sit on the wall
+    const band = x.createLinearGradient(0, wallY - 46, 0, wallY + wallH);
+    band.addColorStop(0, "rgba(3,6,5,0)");
+    band.addColorStop(1, "rgba(3,6,5,0.8)");
+    x.fillStyle = band;
+    x.fillRect(w * 0.12, wallY - 46, Math.min(w * 0.62, sx0 - w * 0.12), 46 + wallH);
   }
 
   // ---- the wall in front of the stands: a dark face, a pale top edge, a kerb of mint and ink blocks, reflectors

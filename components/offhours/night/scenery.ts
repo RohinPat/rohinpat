@@ -207,7 +207,7 @@ export function buildScenery(road: Road): Scenery {
   place(8, 28, -1, "stand", 7);
   place(8, 28, 1, "stand", 7);
   // the start: a stand, so the opening picture has somewhere to be, and a floodlight either side of the line
-  for (const [s0, side, kindL, o] of [[70, 1, "stand", 6], [40, -1, "flood", 4], [110, 1, "flood", 4]] as const) {
+  for (const [s0, side, kindL, o] of [[130, 1, "stand", 8], [40, -1, "flood", 4], [110, 1, "flood", 4]] as const) {
     const spot = find(s0, side, 1, 160);
     if (spot) lm.push({ s: spot.s, side: spot.side, kind: kindL, out: o });
   }

@@ -733,7 +733,7 @@ function drawProps(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View,
       }
       const pw = (wm * f) / z;
       const ph = (pw * img.height) / img.width;
-      if (ph < 2) continue;
+      if (ph < 2 || P.x + pw / 2 < 0 || P.x - pw / 2 > v.w || P.y - ph > v.h) continue;
       const al = z < 110 ? 1 : Math.max(0, 1 - (z - 110) / (maxZ + 30 - 110));
       if (al !== alpha) {
         ctx.globalAlpha = al;
@@ -752,6 +752,8 @@ function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, 
   const f = v.f;
   if (!nodeProj(k, side * (rail + 1.1), 0, v)) return;
   const bx = P.x, by = P.y, z = P.z;
+  // a lamp wholly off to the side of the picture is not drawn
+  if (bx < -300 || bx > v.w + 300) return;
   const b = bucketOf(z);
   if (!nodeProj(k, side * (rail + 1.1), 7.6, v)) return;
   const tx = P.x, ty = P.y;
@@ -801,7 +803,7 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
     if (!project(v, tmp.x, tmp.y, tmp.z)) continue;
     const bx = P.x, by = P.y, z = P.z;
     if (z < NEAR_Z !== near) continue;
-    if (z > 700) continue;
+    if (z > 700 || bx < -v.w * 0.6 || bx > v.w * 1.6) continue;
     const phi = tmp.phi;
     const y0 = tmp.y;
     const nx = Math.cos(phi);
@@ -815,6 +817,7 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
         if (!project(v, tmp.x, tmp.y, tmp.z)) break;
         const pw = (15 * f) / P.z;
         const ph = (pw * sp.canopy.height) / sp.canopy.width;
+        if (P.x + pw / 2 < 0 || P.x - pw / 2 > v.w) break;
         ctx.drawImage(sp.canopy, P.x - pw / 2, P.y - ph * 0.96, pw, ph);
         break;
       }
@@ -824,6 +827,7 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
         if (!project(v, tmp.x, tmp.y, tmp.z)) break;
         const pw = (34 * f) / P.z;
         const ph = (pw * sp.stand.height) / sp.stand.width;
+        if (P.x + pw / 2 < 0 || P.x - pw / 2 > v.w) break;
         ctx.drawImage(sp.stand, P.x - pw / 2, P.y - ph * 0.98, pw, ph);
         break;
       }

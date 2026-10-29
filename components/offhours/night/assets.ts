@@ -247,21 +247,23 @@ function houseSprite(rng: () => number, w: number, h: number, kind: number): HTM
   x.lineWidth = 1.2;
   roof();
   x.stroke();
-  // windows
-  const cols = kind ? 3 : 4;
+  // windows: one or two, small, a low warm glow (the brightest thing here should not be somebody's kitchen)
+  const cols = kind ? 2 : 3;
   x.globalCompositeOperation = "lighter";
+  let lit = 0;
   for (let i = 0; i < cols; i++) {
-    if (rng() < 0.22) continue;
-    const wx = bx + bw * (0.12 + (0.76 * i) / cols);
-    const wy = h - bodyH * 0.78;
-    const ww = (bw * 0.5) / cols;
-    const wh = bodyH * 0.34;
-    const hg = x.createRadialGradient(wx + ww / 2, wy + wh / 2, 0, wx + ww / 2, wy + wh / 2, ww * 1.6);
-    hg.addColorStop(0, "rgba(255,196,110,0.45)");
-    hg.addColorStop(1, "rgba(255,196,110,0)");
+    if (rng() < 0.45 && !(i === cols - 1 && lit === 0)) continue;
+    lit++;
+    const ww = (bw * 0.3) / cols;
+    const wx = bx + bw * (0.16 + (0.7 * i) / cols) + (bw * 0.5) / cols / 2 - ww / 2;
+    const wy = h - bodyH * 0.74;
+    const wh = bodyH * 0.24;
+    const hg = x.createRadialGradient(wx + ww / 2, wy + wh / 2, 0, wx + ww / 2, wy + wh / 2, ww * 1.8);
+    hg.addColorStop(0, "rgba(255,170,96,0.2)");
+    hg.addColorStop(1, "rgba(255,170,96,0)");
     x.fillStyle = hg;
-    x.fillRect(wx - ww * 1.6, wy - ww * 1.3, ww * 4.2, wh + ww * 2.6);
-    x.fillStyle = rng() < 0.2 ? "rgba(190,226,255,0.95)" : "rgba(255,214,140,0.95)";
+    x.fillRect(wx - ww * 1.8, wy - ww * 1.6, ww * 4.6, wh + ww * 3.2);
+    x.fillStyle = "rgba(255,186,110,0.5)";
     x.fillRect(wx, wy, ww, wh);
   }
   x.globalCompositeOperation = "source-over";
@@ -287,8 +289,8 @@ function canopySprite(w: number, h: number): HTMLCanvasElement {
   x.fillStyle = "#0f1a18";
   x.fillRect(w * 0.64, h * 0.42, w * 0.3, h * 0.55);
   x.globalCompositeOperation = "lighter";
-  x.fillStyle = "rgba(220,255,230,0.85)";
-  x.fillRect(w * 0.68, h * 0.52, w * 0.2, h * 0.17);
+  x.fillStyle = "rgba(200,240,215,0.55)";
+  x.fillRect(w * 0.7, h * 0.54, w * 0.15, h * 0.12);
   x.globalCompositeOperation = "source-over";
   // posts and the roof
   x.fillStyle = "#17211f";
@@ -309,40 +311,59 @@ function canopySprite(w: number, h: number): HTMLCanvasElement {
 }
 
 function standSprite(rng: () => number, w: number, h: number): HTMLCanvasElement {
-  // a grandstand seen side-on at night: stepped rows with a crowd of dim dots, a roof whose underside is lit
+  // a grandstand seen side-on at night: a dark stepped bank with a scatter of people (clustered, uneven, dim), a roof whose underside glows a little; its ends fade out
   const c = canvas(w, h);
   const x = c.getContext("2d")!;
   const rows = 5;
   const baseY = h - 2;
   const sh = h * 0.48;
+  const bank = x.createLinearGradient(0, baseY - sh, 0, baseY);
+  bank.addColorStop(0, "#0a1411");
+  bank.addColorStop(1, "#101c18");
+  x.fillStyle = bank;
+  x.fillRect(w * 0.06, baseY - sh, w * 0.88, sh);
+  // a few phases make the crowd clump and thin instead of falling in rows
+  const ph = [rng() * 6.28, rng() * 6.28, rng() * 6.28];
   for (let r = 0; r < rows; r++) {
     const y1 = baseY - (sh * r) / rows;
     const y0 = baseY - (sh * (r + 1)) / rows;
-    x.fillStyle = r % 2 ? "#0e1816" : "#121e1b";
-    x.fillRect(w * 0.06 + r * 3, y0, w * 0.88 - r * 6, y1 - y0);
-    // the people
-    const n = Math.round(w / 6);
+    // the step's edge, barely there
+    x.fillStyle = "rgba(242,234,215,0.05)";
+    x.fillRect(w * 0.06, y0, w * 0.88, 0.8);
+    const n = Math.round(w / 9);
     for (let i = 0; i < n; i++) {
-      if (rng() < 0.2) continue;
-      const px = w * 0.07 + r * 3 + rng() * (w * 0.86 - r * 6);
+      const px = w * 0.07 + rng() * w * 0.86;
+      const u = px / w;
+      const density = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(u * 17 + ph[0] + r)) * (0.6 + 0.4 * Math.sin(u * 41 + ph[1]));
+      if (rng() > density * 0.8) continue;
+      const py = y0 + (y1 - y0) * (0.35 + rng() * 0.55);
+      const rad = 0.8 + rng() * 0.9;
       const tone = rng();
-      x.fillStyle = tone < 0.15 ? "rgba(242,234,215,0.7)" : tone < 0.3 ? "rgba(138,217,168,0.65)" : tone < 0.5 ? "rgba(255,200,130,0.55)" : "rgba(70,86,84,0.9)";
-      x.fillRect(px, y0 + 1, 1.7, (y1 - y0) * 0.55);
+      x.fillStyle = tone < 0.06 ? "rgba(242,234,215,0.3)" : tone < 0.12 ? "rgba(138,217,168,0.26)" : tone < 0.2 ? "rgba(255,196,120,0.22)" : `rgba(${50 + Math.floor(rng() * 24)},${66 + Math.floor(rng() * 24)},${64 + Math.floor(rng() * 20)},0.7)`;
+      x.beginPath();
+      x.arc(px, py, rad, 0, Math.PI * 2);
+      x.fill();
     }
   }
-  // roof, on posts
-  x.fillStyle = "#0a1210";
-  x.fillRect(w * 0.04, h * 0.1, w * 0.92, h * 0.1);
-  x.fillStyle = "#1a2623";
-  for (let i = 0; i <= 8; i++) x.fillRect(w * (0.06 + i * 0.1), h * 0.2, 2, baseY - sh - h * 0.2 + 2);
+  // roof, on a few posts
+  x.fillStyle = "#08100e";
+  x.fillRect(w * 0.04, h * 0.1, w * 0.92, h * 0.09);
+  x.fillStyle = "rgba(26,38,35,0.8)";
+  for (let i = 0; i <= 5; i++) x.fillRect(w * (0.07 + i * 0.172), h * 0.19, 1.6, baseY - sh - h * 0.19 + 2);
   x.globalCompositeOperation = "lighter";
-  const under = x.createLinearGradient(0, h * 0.18, 0, h * 0.4);
-  under.addColorStop(0, "rgba(255,236,190,0.55)");
-  under.addColorStop(1, "rgba(255,236,190,0)");
+  const under = x.createLinearGradient(0, h * 0.18, 0, h * 0.34);
+  under.addColorStop(0, "rgba(255,226,170,0.26)");
+  under.addColorStop(1, "rgba(255,226,170,0)");
   x.fillStyle = under;
-  x.fillRect(w * 0.05, h * 0.2, w * 0.9, h * 0.2);
-  x.fillStyle = "rgba(242,234,215,0.85)";
-  x.fillRect(w * 0.04, h * 0.095, w * 0.92, 1.4);
+  x.fillRect(w * 0.05, h * 0.19, w * 0.9, h * 0.15);
+  x.globalCompositeOperation = "destination-in";
+  const fade = x.createLinearGradient(0, 0, w, 0);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(0.1, "rgba(0,0,0,1)");
+  fade.addColorStop(0.9, "rgba(0,0,0,1)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = fade;
+  x.fillRect(0, 0, w, h);
   x.globalCompositeOperation = "source-over";
   return c;
 }
