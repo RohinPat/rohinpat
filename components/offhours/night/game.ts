@@ -6,6 +6,7 @@ import { better, createRecorder, newPose, samplePose, timeAt, type Ghost } from 
 import { bankNow, loseDrift, newDrift, pending, stepDrift, type Drift } from "./score";
 import { newScene, stepCamera, stepFxFromCar, type Scene } from "./scene";
 import { getTarget, poseOf, type Target } from "./target";
+import { planSpeed } from "./ai";
 import { getRoad, pointAt } from "./road";
 
 // The run. The phases: ready (the car on the line, waiting for the gas), count
@@ -53,14 +54,29 @@ export type Result = {
   score: number;
   /** a new best run of this visit */
   newBest: boolean;
+  /** the best score of this visit including this run, and the best before it (0 on the first run) */
+  bestScore: number;
+  prevBestScore: number;
+  /** seconds behind (+) or ahead (-) of the target driver at the finish, or null if the run did not finish */
+  vsTargetS: number | null;
 };
+
+/** The corner coming up faster than the car can take it: which way it turns (-1 left, 1 right) and how far off, m. */
+export type CornerCue = { on: boolean; dir: -1 | 1; dist: number };
 
 /** The best run of this visit: memory only, gone when the page is. */
 let bestRun: Ghost | null = null;
+let bestScore = 0;
 export const getBestRun = () => bestRun;
+export const getBestScore = () => bestScore;
 export const forgetBestRun = () => {
   bestRun = null;
+  bestScore = 0;
 };
+
+/** The corner warning looks this many seconds of road ahead, and lights when the car is over the plan's speed there by this much. */
+const CUE_LEAD_S = 1.5;
+const CUE_MARGIN = 1.03;
 
 const MPH = 2.2369;
 export const mph = (ms: number) => ms * MPH;
@@ -100,6 +116,8 @@ export class NightGame {
   deltaS = 0;
   gapM = 0;
   deltaOn = false;
+  /** the corner warning: lit while the road ahead needs more braking than the car has room for */
+  readonly cue: CornerCue = { on: false, dir: 1, dist: 0 };
   onEvent: (e: GameEvent) => void = () => {};
 
   private acc = 0;
@@ -110,6 +128,8 @@ export class NightGame {
   private anim = 0;
   private pose = newPose();
   private finishAt = 0;
+  private cueOn = 0;
+  private cueOff = 0;
 
   constructor(reduce = false) {
     this.scene = newScene(this.road, reduce);
@@ -157,6 +177,8 @@ export class NightGame {
     this.spinT = 0;
     this.recoverT = 0;
     this.deltaOn = false;
+    this.cue.on = false;
+    this.cueOn = this.cueOff = 0;
     this.rec.reset();
     this.phase = "ready";
     this.phaseT = 0;
@@ -202,6 +224,11 @@ export class NightGame {
       } else if (e.kind === "chain") {
         this.onEvent({ kind: "chain", combo: e.combo });
       }
+    }
+    if (this.phase === "run" && this.endWhy === null && this.recoverT <= 0) this.stepCue(dt);
+    else {
+      this.cue.on = false;
+      this.cueOn = this.cueOff = 0;
     }
     this.cpFlash = Math.max(0, this.cpFlash - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
@@ -341,6 +368,44 @@ export class NightGame {
     c.u *= k;
   }
 
+  /**
+   * The corner warning. The target driver's plan knows the fastest speed the tyres
+   * allow at every point of the road, braked back from each corner. If the car is
+   * going faster than the plan allows a short way ahead (a second and a bit of
+   * road), a corner is coming that it will not make without braking now. It waits
+   * a moment before lighting (a blip is not a warning) and a moment before going
+   * out, and stays quiet while the car is deliberately sliding.
+   */
+  private stepCue(dt: number) {
+    const c = this.car;
+    const v = speedOf(c);
+    const lead = CUE_LEAD_S * v + 10;
+    const over = !this.drift.sliding && v > 14 && v > planSpeed(this.target.plan, this.road, c.s + lead) * CUE_MARGIN;
+    const cue = this.cue;
+    if (over) {
+      this.cueOff = 0;
+      this.cueOn += dt;
+      if (this.cueOn > 0.12) {
+        if (!cue.on) {
+          // which way the worst of the bend ahead turns
+          const seg = this.road.segM;
+          let k = 0;
+          for (let s = c.s + lead; s <= c.s + lead + 90; s += seg) {
+            const kk = this.road.kappa[Math.min(this.road.n, Math.max(0, Math.round(s / seg)))];
+            if (Math.abs(kk) > Math.abs(k)) k = kk;
+          }
+          cue.dir = k < 0 ? -1 : 1;
+        }
+        cue.on = true;
+        cue.dist = lead;
+      }
+    } else {
+      this.cueOn = 0;
+      this.cueOff += dt;
+      if (this.cueOff > 0.45) cue.on = false;
+    }
+  }
+
   private beginEnd(why: "time" | "finish") {
     this.endWhy = why;
     this.endT = RUN.coastS;
@@ -356,6 +421,8 @@ export class NightGame {
     const run = this.rec.snapshot(finished ? this.finishAt : this.clock, finished);
     const newBest = better(run, bestRun);
     if (newBest) bestRun = run;
+    const prevBestScore = bestScore;
+    bestScore = Math.max(bestScore, score);
     this.result = {
       finished,
       time: run.time,
@@ -366,6 +433,9 @@ export class NightGame {
       checkpoints: this.cp,
       score,
       newBest,
+      bestScore,
+      prevBestScore,
+      vsTargetS: finished ? run.time - this.target.ghost.time : null,
     };
     this.phase = "done";
     this.phaseT = 0;

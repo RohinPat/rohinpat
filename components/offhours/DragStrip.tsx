@@ -19,6 +19,20 @@ import { EngineVoice } from "./engineVoice";
 
 const QUARTER = 402.3;
 
+/**
+ * The launch. The light goes green and the car goes with whatever the revs are
+ * then: inside the band it is a launch, outside it is not (too few and it bogs,
+ * too many and the tyres spin). Inside the band the best is near the middle:
+ * the further from SWEET, the more the tyres slip off the line.
+ */
+/** a run can be started again this long after the line (so the finish is not skipped by a key still held), s */
+const AGAIN_AFTER_S = 0.6;
+
+const LAUNCH = { lo: 3200, hi: 6500, sweet: 4900, perfect: 350, great: 900 };
+
+/** the quickest quarter of this visit: memory only, kept while the strip is closed and opened again, gone with the page */
+let bestVisit: number | null = null;
+
 type Car = {
   phase: "idle" | "tree" | "run" | "done";
   rpm: number;
@@ -35,6 +49,14 @@ type Car = {
   perfect: number;
   call: string;
   callT: number;
+  /** how the launch went (kept for the end card), and the revs at green */
+  launch: string;
+  launchRpm: number;
+  /** seconds since the finish line, and what it did to the best time (null: a first run or a tile) */
+  doneT: number;
+  /** the speed over the line, mph */
+  trap: number;
+  vsBest: number | null;
   limiter: number;
   slip: number;
   best: number | null;
@@ -57,6 +79,11 @@ const freshCar = (best: number | null = null): Car => ({
   perfect: 0,
   call: "",
   callT: 0,
+  launch: "",
+  launchRpm: 0,
+  doneT: 0,
+  trap: 0,
+  vsBest: null,
   limiter: 0,
   slip: 0,
   best,
@@ -73,7 +100,7 @@ export type DragProps = PieceProps & {
 
 export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const play = mode === "play";
-  const car = useRef<Car>(freshCar());
+  const car = useRef<Car>(freshCar(play ? bestVisit : null));
   const eng = useRef<EngineVoice | null>(null);
   const clock = useRef(0);
   const [done, setDone] = useState<string>("");
@@ -83,14 +110,35 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const told = useRef({ at: -Infinity, key: "" });
   const mineRef = useRef<RemoteHandlers | null>(null);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // with the mock link (tests, local work) a page can read the dash
+    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: Car } }).__drag = { get car() { return car.current; } };
+    return () => {
       eng.current?.stop();
-    },
-    [],
-  );
+    };
+  }, [play]);
+
+  // the sound stops when the piece is paused or the tab is hidden, and a key held when the tab went away never sees its keyup
+  useEffect(() => {
+    if (paused) eng.current?.silence();
+  }, [paused]);
+  useEffect(() => {
+    const away = () => {
+      if (document.hidden) eng.current?.silence();
+      held.current = false;
+      car.current.throttle = false;
+    };
+    document.addEventListener("visibilitychange", away);
+    window.addEventListener("blur", away);
+    return () => {
+      document.removeEventListener("visibilitychange", away);
+      window.removeEventListener("blur", away);
+    };
+  }, []);
 
   const throttle = (on: boolean) => {
+    // after the finish the throttle (key, tap or button) is the way to go again
+    if (on && play && car.current.phase === "done" && car.current.doneT > AGAIN_AFTER_S) again();
     held.current = on;
     car.current.throttle = on;
     if (on && play && !eng.current) {
@@ -116,10 +164,10 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       }
     }
   };
-  const again = () => {
+  function again() {
     car.current = freshCar(car.current.best);
     setDone("");
-  };
+  }
 
   // A linked phone: its throttle axis is a pedal, its shift gesture is the up
   // arrow, and it is told the revs, gear and shift light. Without one this does nothing.
@@ -231,9 +279,12 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       if (c.tree >= 1.6) {
         c.phase = "run";
         c.t = 0;
-        // launch: too few revs bogs, too many spins the tyres
-        c.slip = c.rpm > 6500 ? 0.9 : c.rpm < 3200 ? -0.6 : 0.25;
-        c.call = c.rpm > 6500 ? "WHEELSPIN" : c.rpm < 3200 ? "BOGGED" : "GREAT LAUNCH";
+        // launch: too few revs bogs, too many spins the tyres, and in between the tyres slip more the further from the sweet spot
+        const off = Math.abs(c.rpm - LAUNCH.sweet);
+        c.slip = c.rpm > LAUNCH.hi ? 0.9 : c.rpm < LAUNCH.lo ? -0.6 : 0.05 + 0.35 * Math.min(1, off / 1600);
+        c.call = c.rpm > LAUNCH.hi ? "WHEELSPIN" : c.rpm < LAUNCH.lo ? "BOGGED" : off <= LAUNCH.perfect ? "PERFECT LAUNCH" : off <= LAUNCH.great ? "GREAT LAUNCH" : "GOOD LAUNCH";
+        c.launch = c.call;
+        c.launchRpm = c.rpm;
         c.callT = t;
       }
     } else if (c.phase === "run") {
@@ -250,7 +301,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         c.throttle && c.shiftT <= 0 && !(onLimiter && Math.floor(t * 30) % 2)
           ? Math.min(17500, (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) * c.pedal // traction-limited
           : 0;
-      const bog = c.slip < 0 ? 1 + c.slip * 0.6 : 1 - Math.max(0, c.slip) * 0.35;
+      const bog = c.slip < 0 ? 1 + c.slip * 0.9 : 1 - Math.max(0, c.slip) * 0.65;
       const drag = 0.39 * c.v * c.v + 180;
       const a = (drive * bog - drag) / 1550;
       c.v = Math.max(0, c.v + a * dt);
@@ -264,13 +315,20 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       if (c.x >= QUARTER) {
         c.phase = "done";
         c.tree = 0;
+        c.doneT = 0;
+        c.trap = c.v * 2.237;
+        c.vsBest = c.best === null ? null : c.t - c.best;
         c.best = c.best === null ? c.t : Math.min(c.best, c.t);
-        if (play)
+        if (play) {
+          bestVisit = c.best;
+          const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best.` : ` ${c.vsBest.toFixed(2)} seconds off your best.`;
           setDone(
-            `Quarter mile in ${c.t.toFixed(2)} seconds at ${(c.v * 2.237).toFixed(0)} mph. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. ${c.perfect} perfect shifts.`,
+            `Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. ${c.perfect} perfect shifts. Launch: ${c.launch.toLowerCase()}.${vs}`,
           );
+        }
       }
     } else {
+      c.doneT += dt;
       c.rpm += rpmRate(c.pedal, 7000, 4000) * dt;
       c.v = Math.max(0, c.v - 6 * dt);
     }
@@ -283,6 +341,68 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     const e = eng.current;
     if (!e) return;
     e.update({ rpm: c.rpm, pedal: c.pedal, throttle: c.throttle, cut: c.phase === "run" && c.shiftT > 0 });
+  }
+
+  /** the end card: the time, what made it, and whether it beat the best of this visit */
+  function drawResult(ctx: CanvasRenderingContext2D, c: Car, w: number, area: number, t: number) {
+    const k = Math.min(1, c.doneT / 0.25);
+    ctx.globalAlpha = k;
+    ctx.fillStyle = "rgba(8,10,9,0.72)";
+    ctx.fillRect(0, 0, w, area);
+    const narrow = w < 560;
+    const pw = Math.min(440, w - 24);
+    const ph = narrow ? 254 : 268;
+    const x = w / 2 - pw / 2;
+    const y = Math.max(10, area / 2 - ph / 2);
+    ctx.fillStyle = "rgba(10,13,12,0.94)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, pw, ph, 16);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(138,217,168,0.55)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    const px = x + 24;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    mono(ctx, 11);
+    ctx.fillStyle = "#8ad9a8";
+    ctx.fillText("QUARTER MILE", px, y + 34);
+    ctx.fillStyle = "#f2ead7";
+    display(ctx, narrow ? 64 : 76, 800);
+    ctx.fillText(c.t.toFixed(2), px, y + (narrow ? 100 : 108));
+    const tw = ctx.measureText(c.t.toFixed(2)).width;
+    mono(ctx, 12);
+    ctx.fillStyle = "#b5b6ab";
+    ctx.fillText("SECONDS", px + tw + 10, y + (narrow ? 100 : 108));
+    const rows: [string, string][] = [
+      ["TRAP SPEED", `${Math.round(c.trap)} MPH`],
+      ["0–60", c.split60 ? `${c.split60.toFixed(2)} S` : "—"],
+      ["LAUNCH", c.launch ? `${c.launch.replace(" LAUNCH", "")} · ${(c.launchRpm / 1000).toFixed(1)}K` : "—"],
+      ["PERFECT SHIFTS", String(c.perfect)],
+    ];
+    mono(ctx, 11);
+    rows.forEach(([name, val], i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      const cxp = px + col * (pw - 48) / 2;
+      const cyp = y + (narrow ? 134 : 146) + row * 32;
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText(name, cxp, cyp);
+      ctx.fillStyle = "#f2ead7";
+      ctx.fillText(val, cxp, cyp + 15);
+    });
+    // the best of this visit, in one line: first run, or how far off it this one was
+    mono(ctx, 11);
+    const vs = c.vsBest;
+    ctx.fillStyle = vs === null || vs < 0 ? "#8ad9a8" : "#ffd23f";
+    ctx.fillText(
+      vs === null ? "● FIRST RUN: THIS IS YOUR BEST" : vs < 0 ? `● NEW BEST: ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · THIS RUN ${vs.toFixed(2)} S OFF`,
+      px,
+      y + ph - 44,
+    );
+    ctx.fillStyle = "#f2ead7";
+    if (c.doneT > AGAIN_AFTER_S) ctx.fillText(narrow ? "TAP TO RUN AGAIN" : "SPACE, ENTER OR TAP TO RUN AGAIN", px, y + ph - 20);
+    ctx.globalAlpha = 1;
+    void t;
   }
 
   function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number) {
@@ -314,7 +434,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     // narrow (a phone, played): the dial is centred and big, speed and the
     // stats sit in a row under it, the prompt under that. Nothing shares a line.
     const stacked = play && w < 560;
-    const ledY = Math.max(16, area * 0.07);
+    // narrow, the mode switch sits across the top right of the stage: the shift lights go under it
+    const ledY = stacked ? 62 : Math.max(16, area * 0.07);
     const dialTop = ledY + 24;
     const foot = 100; // stats block (64) + prompt row + gaps
     const R = stacked ? Math.max(36, Math.min(w * 0.38, (area - dialTop - foot) / 1.8)) : Math.min(w * 0.3, area * 0.42);
@@ -335,6 +456,25 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.beginPath();
     ctx.arc(cx, cy, R, a0, ang(Math.min(9000, c.rpm)));
     ctx.stroke();
+    // the launch band, outside the dial while staging: the revs to hold at the green, with the sweet spot marked
+    const staging = play && (c.phase === "idle" || c.phase === "tree");
+    if (staging) {
+      const inBand = c.rpm >= LAUNCH.lo && c.rpm <= LAUNCH.hi;
+      ctx.lineCap = "butt";
+      ctx.lineWidth = R * 0.05;
+      ctx.strokeStyle = inBand ? "#8ad9a8" : "rgba(138,217,168,0.4)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.1, ang(LAUNCH.lo), ang(LAUNCH.hi));
+      ctx.stroke();
+      const sa = ang(LAUNCH.sweet);
+      ctx.lineWidth = Math.max(2, R * 0.025);
+      ctx.strokeStyle = "#f2ead7";
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(sa) * R * 1.03, cy + Math.sin(sa) * R * 1.03);
+      ctx.lineTo(cx + Math.cos(sa) * R * 1.16, cy + Math.sin(sa) * R * 1.16);
+      ctx.stroke();
+      ctx.lineCap = "round";
+    }
     ctx.fillStyle = "#f2ead7";
     display(ctx, Math.round(R * 0.14), 700);
     ctx.textAlign = "center";
@@ -384,10 +524,10 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     const lines = [
       `TIME   ${c.phase === "run" || c.phase === "done" ? c.t.toFixed(2) : "—"}`,
       `0–60   ${c.split60 ? c.split60.toFixed(2) : "—"}`,
-      `DIST   ${Math.round(c.x)} / 402 m`,
+      `DIST   ${Math.min(402, Math.round(c.x))} / 402 m`,
       `BEST   ${c.best ? c.best.toFixed(2) : "—"}`,
     ];
-    const speed = String(Math.round(c.v * 2.237)).padStart(3, " ");
+    const speed = String(Math.round(c.phase === "done" ? c.trap : c.v * 2.237)).padStart(3, " "); // after the line it holds the speed over it
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
     let rx: number;
@@ -440,13 +580,31 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.globalAlpha = 1;
       ctx.textAlign = "left";
     }
-    if (c.phase === "idle" && play) {
-      ctx.fillStyle = "#f2ead7";
+    if (play && (c.phase === "idle" || c.phase === "tree")) {
       mono(ctx, 12);
       ctx.textAlign = "center";
-      ctx.fillText(w < 640 ? "HOLD THE THROTTLE TO STAGE" : "HOLD THE THROTTLE TO STAGE · LAUNCH BETWEEN 3.2K AND 6.5K", w / 2, ry - 14);
+      let line: string;
+      if (c.phase === "idle") {
+        ctx.fillStyle = "#f2ead7";
+        line = w < 640 ? "HOLD THE THROTTLE TO STAGE" : "HOLD THE THROTTLE TO STAGE · THEN KEEP THE REVS IN THE BAND";
+      } else {
+        // the light is counting: say where the revs are against the band
+        const inBand = c.rpm >= LAUNCH.lo && c.rpm <= LAUNCH.hi;
+        ctx.fillStyle = inBand ? "#8ad9a8" : "#ffd23f";
+        line = c.rpm > LAUNCH.hi ? "TOO MANY REVS: EASE OFF" : c.rpm < LAUNCH.lo ? "TOO FEW REVS: GIVE IT SOME" : "IN THE BAND: HOLD IT FOR THE GREEN";
+      }
+      ctx.fillText(line, w / 2, ry - 14);
       ctx.textAlign = "left";
     }
+    // the shift light, in words (steady: the lights above already flash), for the eye that is on the road and not the top of the dash
+    if (play && c.phase === "run" && c.rpm >= SHIFT_AT - 200 && c.gear < RATIOS.length - 1 && c.shiftT <= 0) {
+      ctx.fillStyle = "#5ab0ff";
+      display(ctx, Math.round(R * 0.2), 800);
+      ctx.textAlign = "center";
+      ctx.fillText("SHIFT", cx, cy - R * 0.1);
+      ctx.textAlign = "left";
+    }
+    if (play && c.phase === "done") drawResult(ctx, c, w, area, t);
     // exhaust pop flash
     if (c.pop > 0) {
       ctx.fillStyle = `rgba(255,140,40,${c.pop * 0.12})`;
@@ -481,9 +639,10 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
             onPointerDown={() => throttle(true)}
             onPointerUp={() => throttle(false)}
             onPointerLeave={() => throttle(false)}
+            onClick={() => done && again()}
             className="flex-1 h-16 rounded-xl bg-[#1d5e3f] text-[#f2ead7] font-mono text-xs uppercase tracking-[0.2em] active:scale-[0.98] select-none touch-none"
           >
-            Throttle · hold
+            {done ? "Run again" : "Throttle · hold"}
           </button>
           <button
             type="button"
@@ -492,11 +651,6 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
           >
             Shift ↑
           </button>
-          {done && (
-            <button type="button" onClick={again} className="w-36 h-16 rounded-xl border border-white/20 text-[#f2ead7] font-mono text-xs uppercase tracking-[0.2em]">
-              Run again
-            </button>
-          )}
           <p aria-live="polite" className="sr-only">
             {done}
           </p>

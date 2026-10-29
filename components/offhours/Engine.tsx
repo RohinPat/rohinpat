@@ -26,8 +26,8 @@ const MODES: { id: EngineMode; label: string }[] = [
 // the strip has its own hints.
 const DRAG_HOW = [
   "Keyboard: hold Space (or ↑) for throttle, ↑ shifts up",
-  "Hold the throttle to stage, then launch between 3.2k and 6.5k",
-  "Shift when the light comes on. Night run is in the corner",
+  "Hold the throttle to stage, then keep the revs in the band, near the mark, when the light goes green",
+  "Shift when the light comes on. Space or a tap runs it again. Night run is in the corner",
 ];
 
 export default function EnginePiece({ mode, paused }: PieceProps) {
