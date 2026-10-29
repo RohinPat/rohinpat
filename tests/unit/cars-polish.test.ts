@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, type NightInput } from "@/components/offhours/engineRemote";
+import { ENGINE_CAL, NO_INPUT, type NightInput } from "@/components/offhours/engineRemote";
 import { NightGame, forgetBestRun, getBestScore, type GameEvent } from "@/components/offhours/night/game";
 import { MEDALS, medalsAt, nextMedal } from "@/components/offhours/night/medals";
 import { MARK_N, clearFx, mark, newFx } from "@/components/offhours/night/fx";
@@ -16,24 +16,40 @@ import { DRAG_GHOST_DT, gapToGhost, ghostAt, ghostTimeAt } from "@/components/of
 const inp = (steer = 0, throttle = 0, brake = 0, hand = 0): NightInput => ({ steer, throttle, brake, hand });
 const DT = 1 / 60;
 
-/** drive the whole canyon the way a keyboard player would: steer to the target's line with a keyboard's ramp, at `pace` of the plan's speed (or gas only) */
-function canyon(pace: number | "gas", steer: "none" | "keys") {
+/**
+ * Drive the whole canyon the way a keyboard player would: steer to the target's line with a keyboard's ramp, at `pace` of the plan's
+ * speed (or gas only). `flick`: pull the handbrake for that long, steering hard into it, whenever a corner tighter than 1/200 comes up
+ * within 40 m (and not twice inside three seconds).
+ */
+function canyon(pace: number | "gas", steer: "none" | "keys", flick = 0) {
   forgetBestRun();
   const g = new NightGame(true);
   const plan = getTarget().plan;
   const ai = { ...NO_INPUT };
   const input = inp(0, 1);
   let ks = 0;
+  let handUntil = -1;
+  let cool = 0;
   g.start();
   for (let i = 0; i < 60 * 260 && g.phase !== "done"; i++) {
     if (g.phase === "run") {
       drive(g.car, g.road, plan, pace === "gas" ? 9 : pace, ai);
+      let want = ai.steer;
+      const kap = g.road.kappa[Math.round((g.car.s + 40) / g.road.segM)] || 0;
+      cool -= DT;
+      if (flick > 0 && cool <= 0 && Math.abs(kap) > 1 / 200 && g.speed > 24) {
+        handUntil = g.clock + flick;
+        cool = 3;
+      }
+      const hand = g.clock < handUntil;
+      if (hand) want = Math.sign(kap || 1) * 0.8;
       if (steer === "keys") {
-        ks = stepKeySteer(ks, ai.steer > 0.12 ? 1 : ai.steer < -0.12 ? -1 : 0, DT);
+        ks = stepKeySteer(ks, want > 0.12 ? 1 : want < -0.12 ? -1 : 0, DT);
         input.steer = ks;
       }
-      input.throttle = pace === "gas" ? 1 : ai.throttle;
-      input.brake = pace === "gas" ? 0 : ai.brake;
+      input.throttle = pace === "gas" ? 1 : hand ? 1 : ai.throttle;
+      input.brake = pace === "gas" || hand ? 0 : ai.brake;
+      input.hand = hand ? 1 : 0;
     }
     g.update(DT, input);
   }
@@ -55,7 +71,7 @@ describe("cars: medals", () => {
     expect(nextMedal(MEDALS[2].score)).toBeNull();
   });
 
-  it("sit where driving of different care lands: flooring it blind is under bronze, a driver at the target's pace clears it, a careful one clears silver", () => {
+  it("sit where driving of different care lands: flooring it blind is under bronze, a driver at the target's pace clears it, a careful one clears silver, a drifter reaches gold", () => {
     const blind = canyon("gas", "none");
     expect(blind.phase).toBe("done");
     expect(medalsAt(blind.score)).toBe(0);
@@ -64,6 +80,9 @@ describe("cars: medals", () => {
     const careful = canyon(0.75, "keys");
     expect(careful.finished).toBe(true);
     expect(medalsAt(careful.score)).toBeGreaterThanOrEqual(2);
+    const drifter = canyon(0.9, "keys", 0.3);
+    expect(drifter.finished).toBe(true);
+    expect(medalsAt(drifter.score)).toBe(3);
   });
 
   it("are announced when the score crosses them, once each, and are in the result with the next one to go for", () => {
@@ -157,6 +176,21 @@ describe("cars: what the screen says", () => {
 });
 
 describe("cars: the feel", () => {
+  it("starts a key's steering at a quarter of lock, not at nothing, and still lets go to centre", () => {
+    expect(ENGINE_CAL.keySnap).toBeGreaterThan(0.1);
+    expect(stepKeySteer(0, 1, DT)).toBeGreaterThanOrEqual(ENGINE_CAL.keySnap);
+    expect(stepKeySteer(0, -1, DT)).toBeLessThanOrEqual(-ENGINE_CAL.keySnap);
+    // a tap is still a nudge: a tenth of a second is well short of lock
+    let v = 0;
+    for (let i = 0; i < 6; i++) v = stepKeySteer(v, 1, DT);
+    expect(v).toBeLessThan(0.7);
+    // and a key let go comes back to exactly nothing
+    while (v > 0) v = stepKeySteer(v, 0, DT);
+    expect(v).toBe(0);
+    // across centre there is no snap to fight: it goes straight through
+    expect(stepKeySteer(-0.5, 1, DT)).toBeLessThan(0);
+  });
+
   it("launches with smoke and a punch of the lens, and with reduced motion only the smoke", () => {
     const run = (reduce: boolean) => {
       const g = new NightGame(reduce);

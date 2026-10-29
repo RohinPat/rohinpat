@@ -259,7 +259,7 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
   // which checkpoint is next, and how far (to the nearest ten metres)
   const nextAt = g.road.checks[Math.min(g.cp, g.road.checks.length - 1)];
   const toGate = Math.max(0, Math.round((nextAt - car.s) / 10) * 10);
-  const cpTxt = fmt("cp", g.cp * 100000 + toGate, () => `CHECKPOINT ${Math.min(g.cp + 1, g.road.checks.length)} / ${g.road.checks.length}${g.cp < g.road.checks.length ? ` · ${toGate} M` : ""}`);
+  const cpTxt = fmt("cp", g.cp * 100000 + toGate, () => `NEXT: CHECKPOINT ${Math.min(g.cp + 1, g.road.checks.length)} / ${g.road.checks.length}${g.cp < g.road.checks.length ? ` · ${toGate} M` : ""}`);
   ctx.fillText(cpTxt, ax, top + 22 * u + 70 * u);
   // the strip: the road in eight legs, filled to where the car is
   const sw = narrow ? Math.min(150, w * 0.42) : Math.min(260 * u, w * 0.4);
@@ -307,6 +307,14 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     font(ctx, "m", Math.max(9, 10 * u), 700);
     ctx.fillStyle = MEDAL_COLOR[medalsAt(g.score)];
     ctx.fillText(fmt("medal", medalsAt(g.score), () => `NEXT: ${nm.name} ${grouped(nm.score)}`), lx, ly + below);
+    below += 16 * u;
+  }
+  // and the best of this visit, to beat (a phone's left column is the clock's: no room there)
+  const bv = getBestScore();
+  if (bv > 0 && !narrow) {
+    font(ctx, "m", Math.max(9, 10 * u), 500);
+    ctx.fillStyle = MUTED;
+    ctx.fillText(fmt("bestv", bv, (v) => `BEST THIS VISIT ${grouped(v)}`), lx, ly + below);
   }
 
   // ---- against the target driver, top right (under the mode switch)
@@ -477,7 +485,7 @@ function drawCoach(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   const tw = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 28);
   const ph = lines.length * lh + 14 * u;
   // under the clock on a wide screen; on a phone the score block is there, so it moves down to the road
-  const cy = narrow ? h * 0.33 : h * 0.2;
+  const cy = narrow ? h * 0.33 : Math.max(h * 0.2, 132 * u);
   ctx.globalAlpha = a;
   ctx.fillStyle = INK;
   rr(ctx, w / 2 - tw / 2, cy - 10 * u, tw, ph, 10 * u);
@@ -523,10 +531,9 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.fillText(go, w / 2, cy + 62 * u);
   const best = getBestScore();
   const text = [
-    opt.touch ? "STEER WITH THE PADS. BRAKE, OR TAP DRIFT TO KICK THE TAIL OUT." : "← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX",
+    opt.touch ? "STEER WITH THE PADS. BRAKE, OR TAP DRIFT TO KICK THE TAIL OUT." : "← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX · R RESTART",
     "SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM.",
-    `${g.road.checks.length} CHECKPOINTS ADD TIME. THE GREEN CAR IS THE TARGET DRIVER.`,
-    best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `MEDALS AT ${MEDALS.map((m) => grouped(m.score)).join(" · ")}`,
+    best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `${g.road.checks.length} CHECKPOINTS ADD TIME. MEDALS AT ${MEDALS.map((m) => grouped(m.score)).join(" · ")}`,
   ];
   // the how-to sits on a dark card: the road's white lines run right through it otherwise
   font(ctx, "m", 11 * u, 500);

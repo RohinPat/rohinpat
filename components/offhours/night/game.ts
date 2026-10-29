@@ -556,7 +556,8 @@ export class NightGame {
     r.speed = speedOf(c);
     r.slip = c.slip;
     r.skid = this.phase === "run" || this.phase === "done" ? c.skid : 0;
-    r.brake = this.phase === "ready" || this.phase === "count" ? 0.5 : c.brake;
+    // the handbrake lights the tail lamps, as a real one does
+    r.brake = this.phase === "ready" || this.phase === "count" ? 0.5 : Math.max(c.brake, c.hand > 0.5 ? 0.75 : 0);
     r.pedal = c.pedal;
     r.ay = c.ay;
     r.ax = c.ax;

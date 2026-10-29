@@ -222,6 +222,8 @@ export const ENGINE_CAL = {
   pedalSmoothS: 0.05,
   /** a keyboard steers by ramping: seconds from centre to full lock, back to centre, and across a flip of direction */
   keySteerS: 0.26,
+  /** a key that has just gone down starts at this share of lock, not at nothing (0..1) */
+  keySnap: 0.25,
   keyReturnS: 0.14,
   /** the phone is told the run this often at most, ms */
   nightStateEveryMs: 100,

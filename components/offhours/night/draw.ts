@@ -637,23 +637,19 @@ function drawMainCar(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: Vie
   ctx.globalCompositeOperation = "source-over";
 }
 
+/** the beams: a wide pool well down the road and a hotter one just ahead of the bonnet, from the one sprite (no gradient built in a frame) */
 function headlights(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View) {
   const car = sc.car;
-  pointAt(sc.road, car.s + 22, car.lat * 0.7, tmp);
-  if (!project(v, tmp.x, tmp.y, tmp.z)) return;
-  const x = P.x, y = P.y, z = P.z;
-  const rw = (v.f * 9) / z;
-  ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.translate(x, y);
-  ctx.scale(1, 0.3);
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw * 1.5);
-  g.addColorStop(0, "rgba(255,240,205,0.30)");
-  g.addColorStop(0.35, "rgba(255,230,190,0.13)");
-  g.addColorStop(1, "rgba(255,225,180,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(-rw * 1.6, -rw * 1.6, rw * 3.2, rw * 3.2);
-  ctx.restore();
+  for (let i = 0; i < 2; i++) {
+    pointAt(sc.road, car.s + (i ? 11 : 24), car.lat * (i ? 0.85 : 0.7), tmp);
+    if (!project(v, tmp.x, tmp.y, tmp.z)) continue;
+    const rw = (v.f * (i ? 6.5 : 11)) / P.z;
+    ctx.globalAlpha = i ? 0.5 : 0.62;
+    ctx.drawImage(a.sprites.white, P.x - rw, P.y - rw * 0.2, rw * 2, rw * 0.4);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawGate(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, s: number, finish: boolean, passed: boolean) {

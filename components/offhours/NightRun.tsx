@@ -303,6 +303,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           cut: car.shiftT > 0,
           speed: g.speed,
           skid: g.phase === "run" ? car.skid : 0,
+          slip: car.slip,
           scrape: car.scrape && g.phase === "run",
           brake: g.phase === "run" ? car.brake : 0,
           hand: g.phase === "run" && car.hand > 0.5,
@@ -377,6 +378,13 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
             break;
           case "t":
             if (down && !e.repeat) toggleAuto();
+            break;
+          case "r":
+            // a run that is going badly is not worth the two minutes: start over (the abandoned one is not kept)
+            if (down && !e.repeat && (g.phase === "run" || g.phase === "count")) {
+              g.reset();
+              startOrAgain();
+            }
             break;
           case "Enter":
             if (down && !e.repeat) startOrAgain();
@@ -462,7 +470,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         data-testid="night-canvas"
         data-phase={phase}
         role="img"
-        aria-label="Night run: a canyon road after midnight. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand. Hold the gas or press Enter to start."
+        aria-label="Night run: a canyon road after midnight. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start."
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
       <div role="group" aria-label="Gearbox" className="absolute right-3 top-14 z-10 flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70 font-mono text-[11px] uppercase tracking-[0.14em]">

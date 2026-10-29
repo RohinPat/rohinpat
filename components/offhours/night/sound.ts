@@ -17,6 +17,8 @@ export type Mood = {
   speed: number;
   /** 0..1: how hard the tyres work */
   skid: number;
+  /** the body angle to the road, rad (the squeal is a slide's: wheelspin off the line is a third as loud) */
+  slip: number;
   /** grinding along the rail */
   scrape: boolean;
   /** the brake pedal, 0..1, and the handbrake is up */
@@ -79,8 +81,10 @@ export class NightSound {
     // the squeal: off until the tyres work, then louder and a little higher
     const s = Math.max(0, m.skid - 0.38) / 0.62;
     const wob = 1 + 0.03 * Math.sin(now * 37);
-    set(this.squeal, 0.34 * s * Math.min(1, m.speed / 14), (1750 + 900 * s + m.speed * 8) * wob);
-    set(this.squeal2, 0.2 * s * s * Math.min(1, m.speed / 14), (2900 + 1100 * s) * wob);
+    // the first gear spins the tyres for the first three seconds of every run: that is a chirp under the engine, not a drift
+    const slide = 0.33 + 0.67 * Math.min(1, Math.abs(m.slip) / 0.12);
+    set(this.squeal, 0.34 * s * slide * Math.min(1, m.speed / 14), (1750 + 900 * s + m.speed * 8) * wob);
+    set(this.squeal2, 0.2 * s * s * slide * Math.min(1, m.speed / 14), (2900 + 1100 * s) * wob);
     set(this.scrape, m.scrape ? 0.5 * Math.min(1, m.speed / 25) : 0, 2300 + Math.random() * 900);
     // hard braking at speed: the discs sing, higher as the car slows
     const bk = Math.max(0, m.brake - 0.55) / 0.45;

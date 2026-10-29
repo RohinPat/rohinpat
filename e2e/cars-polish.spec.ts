@@ -137,6 +137,23 @@ test.describe("Night run: medals and reduced motion", () => {
     await context.close();
   });
 
+  test("R starts a run over, and the abandoned one is not kept", async ({ browser, baseURL }) => {
+    test.setTimeout(60_000);
+    const context = await browser.newContext({ baseURL, viewport: LAPTOP });
+    const page = await context.newPage();
+    await openCars(page);
+    await page.keyboard.down("ArrowUp");
+    await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
+    await expect.poll(() => nightEval(page, (g) => g.car.s), { timeout: 15_000 }).toBeGreaterThan(80);
+    await page.keyboard.press("r");
+    // back on the line and counting down again, with the gas still held
+    await expect(canvas(page)).toHaveAttribute("data-phase", "count", SLOW);
+    expect(await nightEval(page, (g) => g.car.s)).toBeLessThan(20);
+    await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
+    await page.keyboard.up("ArrowUp");
+    await context.close();
+  });
+
   test("with reduced motion the lens does not kick, the camera does not lean and no marks are laid", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const context = await browser.newContext({ baseURL, viewport: LAPTOP, reducedMotion: "reduce" });
