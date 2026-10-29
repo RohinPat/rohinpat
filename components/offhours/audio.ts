@@ -3,7 +3,7 @@
 // One shared AudioContext for the Off hours pieces. Every sound is
 // synthesized here in the browser — no audio files, no requests. The
 // context is created on the first sound (always after a click or key), and
-// the stage's sound switch mutes the master bus. Nothing is remembered.
+// the stage's sound switch mutes the output. Nothing is remembered.
 //
 // A game opened from a linked phone can make a sound before the visitor has
 // touched the laptop. The browser then keeps the context suspended; the stage
@@ -11,6 +11,10 @@
 
 let ctx: AudioContext | null = null;
 let bus: GainNode | null = null;
+// the sound switch is its own gain after the bus, so the scope (analyser) can
+// listen before it and still draw with the sound off
+let mute: GainNode | null = null;
+let tap: AnalyserNode | null = null;
 let muted = false;
 const subs = new Set<() => void>();
 const stateSubs = new Set<() => void>();
@@ -25,11 +29,13 @@ export function getAudio(): Audio | null {
     if (!AC) return null;
     ctx = new AC();
     bus = ctx.createGain();
-    bus.gain.value = muted ? 0 : LEVEL;
+    bus.gain.value = LEVEL;
+    mute = ctx.createGain();
+    mute.gain.value = muted ? 0 : 1;
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -10;
     limiter.ratio.value = 8;
-    bus.connect(limiter).connect(ctx.destination);
+    bus.connect(mute).connect(limiter).connect(ctx.destination);
     ctx.addEventListener("statechange", () => stateSubs.forEach((f) => f()));
     stateSubs.forEach((f) => f());
   }
@@ -38,6 +44,21 @@ export function getAudio(): Audio | null {
 }
 
 export const isMuted = () => muted;
+
+/** Everything the pieces are playing, before the sound switch, for the scope (Scope.tsx).
+ *  Null until a piece has made its first sound: the scope never creates the context. */
+export function analyser(): AnalyserNode | null {
+  if (!ctx || !bus) return null;
+  if (!tap) {
+    tap = ctx.createAnalyser();
+    tap.fftSize = 4096; // ~12 Hz a bin at 48 kHz: enough to split an idling V8's low harmonics
+    tap.smoothingTimeConstant = 0.6;
+    tap.minDecibels = -90;
+    tap.maxDecibels = -30;
+    bus.connect(tap);
+  }
+  return tap;
+}
 
 /** A game has asked for sound (so there is a context) and the browser is not letting it play yet. */
 export const audioBlocked = () => !!ctx && ctx.state !== "running";
@@ -56,7 +77,7 @@ export function resumeAudio() {
 
 export function setMuted(m: boolean) {
   muted = m;
-  if (ctx && bus) bus.gain.setTargetAtTime(m ? 0 : LEVEL, ctx.currentTime, 0.02);
+  if (ctx && mute) mute.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.02);
   subs.forEach((f) => f());
 }
 
