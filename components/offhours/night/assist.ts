@@ -28,7 +28,7 @@ const smooth = (t: number) => {
 /** The share of the way to the line's wheel each level goes at full fade. */
 export const assistGain = (level: AssistLevel) => (level === 2 ? A.full : level === 1 ? A.light : 0);
 
-/** Move the fade on `dt` seconds: down fast when the car slides, the handbrake is held or a kick is on; up slowly when it is straight. */
+/** Move the fade on `dt` seconds: down fast when the car slides, the handbrake is held or a clutch kick is on; up slowly when it is straight. */
 export function stepFade(st: AssistState, slip: number, hand: boolean, kicked: boolean, dt: number): number {
   if (hand || kicked) st.hold = A.holdS;
   else st.hold = Math.max(0, st.hold - dt);
@@ -43,7 +43,7 @@ export function stepFade(st: AssistState, slip: number, hand: boolean, kicked: b
  * fade lets it. Call it every step, whatever the level, so the fade is always where the slide has left it.
  */
 export function assistSteer(st: AssistState, level: AssistLevel, c: Car, road: Road, plan: Plan, inp: NightInput, dt: number): number {
-  const fade = stepFade(st, c.slip, inp.hand > 0.5, false, dt);
+  const fade = stepFade(st, c.slip, inp.hand > 0.5, c.kickT > 0, dt);
   const base = assistGain(level);
   if (base <= 0) return inp.steer;
   // near the rail the pull grows (from `guardFromM` off the middle to the rail's foot), and it lets go of the slide later than the rest of the assist does

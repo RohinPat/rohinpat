@@ -209,12 +209,12 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     const a = ang(k * 1000);
     ctx.fillRect(cx + Math.cos(a) * (R - 11 * u) - 1, cy + Math.sin(a) * (R - 11 * u) - 1, 2, 2);
   }
-  // the shift light (by hand only): steady, amber on the way and red at the line. It does not flash: a light that blinks faster than three times a second is not safe to look at, and a steady one reads as well
-  if (car.rpm >= ENGINE_CAL.engine.shiftAt - 600 && !car.auto && live && !car.limiter) {
-    const over = car.rpm >= ENGINE_CAL.engine.shiftAt;
-    ctx.fillStyle = over ? RED : AMBER;
+  // the shift light (by hand only): steady, amber on the way and green in the window where a shift pays (the same window the drag strip calls perfect), red on the limiter. It does not flash: a light that blinks faster than three times a second is not safe to look at, and a steady one reads as well
+  if (car.rpm >= ENGINE_CAL.engine.shiftAt - 600 && !car.auto && live && !limiter) {
+    const inWindow = car.rpm >= ENGINE_CAL.car.shiftGreenFromRpm;
+    ctx.fillStyle = inWindow ? MINT : AMBER;
     ctx.beginPath();
-    ctx.arc(cx, cy - R - 10 * u, (over && !reduce ? 5.5 + 1.5 * Math.sin(now * 12) : 5) * u, 0, Math.PI * 2);
+    ctx.arc(cx, cy - R - 10 * u, (inWindow && !reduce ? 5.5 + 1.5 * Math.sin(now * 12) : 5) * u, 0, Math.PI * 2);
     ctx.fill();
   }
   if (limiter) {
@@ -222,6 +222,14 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     font(ctx, "m", Math.max(10, 11 * u), 700);
     ctx.fillStyle = RED;
     ctx.fillText(car.auto ? "REV LIMIT" : "REV LIMIT: SHIFT UP", cx, cy - R - 24 * u);
+  } else if (g.shiftFlash > 0 && live) {
+    // a shift in the green window paid: one small word where the limiter's would be
+    ctx.textAlign = "center";
+    font(ctx, "m", Math.max(10, 11 * u), 700);
+    ctx.globalAlpha = Math.min(1, g.shiftFlash / 0.25);
+    ctx.fillStyle = MINT;
+    ctx.fillText("SHIFT", cx, cy - R - 24 * u);
+    ctx.globalAlpha = 1;
   }
   const speed = Math.round(mph(g.speed));
   ctx.textAlign = "center";

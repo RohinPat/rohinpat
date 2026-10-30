@@ -146,7 +146,10 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         s?.chain(e.combo);
         break;
       case "shift":
-        s?.pop(e.hard);
+        s?.pop(e.hard || e.good);
+        break;
+      case "kick":
+        s?.crackle();
         break;
       case "backfire":
         s?.crackle();

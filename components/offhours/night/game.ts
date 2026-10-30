@@ -28,6 +28,8 @@ const STEP = 1 / 120;
 /** the countdown: a second apiece on a first run (it is also the time to read the screen), and half that on the runs after it, so a second try is under two seconds from the key to the road */
 const COUNT_STEP = 0.9;
 const COUNT_FAST = 0.5;
+/** the dash's SHIFT after a good shift stays up this long, s */
+const SHIFT_FLASH_S = 0.6;
 const START_S = 12;
 
 export type Phase = "ready" | "count" | "run" | "done";
@@ -51,7 +53,8 @@ export type GameEvent =
   | { kind: "chain"; combo: number }
   | { kind: "bank"; points: number; combo: number }
   | { kind: "lost"; points: number }
-  | { kind: "shift"; up: boolean; hard: boolean }
+  | { kind: "shift"; up: boolean; hard: boolean; /** a manual upshift in the green window: it pays */ good: boolean }
+  | { kind: "kick" }
   | { kind: "backfire" }
   | { kind: "medal"; n: number }
   | { kind: "end"; result: Result };
@@ -155,6 +158,8 @@ export class NightGame {
   penaltyS = 0;
   penaltyShown = 0;
   hitFlash = 0;
+  /** a shift in the green window has just paid: the dash says SHIFT for this long (s) */
+  shiftFlash = 0;
   bankFlash = 0;
   goFlash = 0;
   /** the run is ending: the car coasts for this long, why */
@@ -184,6 +189,7 @@ export class NightGame {
   private spinT = 0;
   private recoverT = 0;
   private lastHitAt = -9;
+  private kicked = false;
   /** the rail was last touched at this time: a touch more than RAIL_GAP_S after that is a new incident (and costs time) */
   private lastContactAt = -9;
   /** the leg since the last gate has had no rail and no spin (a clean leg pays at the gate) */
@@ -239,7 +245,7 @@ export class NightGame {
     this.bonusPoints = 0;
     this.result = null;
     this.toasts.length = 0;
-    this.cpFlash = this.hitFlash = this.bankFlash = this.goFlash = 0;
+    this.cpFlash = this.hitFlash = this.bankFlash = this.goFlash = this.shiftFlash = 0;
     this.bonusShown = 0;
     this.penaltyShown = 0;
     this.rails = this.railS = this.spins = this.cleanLegs = 0;
@@ -357,6 +363,7 @@ export class NightGame {
     this.penaltyShown = Math.max(0, this.penaltyShown - dt);
     this.coachT = Math.max(0, this.coachT - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
+    this.shiftFlash = Math.max(0, this.shiftFlash - dt);
     this.bankFlash = Math.max(0, this.bankFlash - dt * 1.8);
     this.goFlash = Math.max(0, this.goFlash - dt);
     for (let i = this.toasts.length - 1; i >= 0; i--) {
@@ -454,10 +461,17 @@ export class NightGame {
     const c = this.car;
     if (c.shifted !== 0) {
       const up = c.shifted > 0;
-      this.onEvent({ kind: "shift", up, hard: up && c.pedal > 0.5 });
-      if (up && c.pedal > 0.5) this.scene.cam.kick = Math.max(this.scene.cam.kick, 0.22);
+      const good = c.boostGood;
+      this.onEvent({ kind: "shift", up, hard: up && c.pedal > 0.5, good });
+      if (up && c.pedal > 0.5) this.scene.cam.kick = Math.max(this.scene.cam.kick, good ? 0.38 : 0.22);
+      if (good) this.shiftFlash = SHIFT_FLASH_S;
       c.shifted = 0;
+      c.boostGood = false;
     }
+    if (c.kickT > 0 && c.kickK > 0 && !this.kicked) {
+      this.kicked = true;
+      this.onEvent({ kind: "kick" });
+    } else if (c.kickT <= 0) this.kicked = false;
     if (c.lift) {
       c.lift = false;
       this.onEvent({ kind: "backfire" });

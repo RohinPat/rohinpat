@@ -121,6 +121,28 @@ export const ENGINE_CAL = {
     halfLenM: 2.2,
     /** a car slower than this does not skid or spin, and below it the tyres blend into a plain rolling model, m/s */
     crawlMs: 3,
+    /**
+     * The manual gearbox pays. An upshift with the pedal down and the revs in the green window (the drag strip's PERFECT: from the
+     * shift light, short of the limiter) gives this much extra torque, easing off over shiftBoostS seconds after the torque cut.
+     */
+    shiftBoost: 0.4,
+    shiftBoostS: 0.4,
+    shiftGreenFromRpm: 7300,
+    shiftGreenToRpm: 7980,
+    /**
+     * The clutch kick. A manual downshift with the handbrake held (at least kickHandK of a kick), or one that throws the revs up
+     * (kickMinRpm to kickFullRpm after the change: 0 to a full kick) while the car is turning in, dumps the engine's braking on the
+     * rear tyres for kickS seconds (kickN, N) and swings the tail (kickYaw, N m): the rear lets go and a slide starts. It needs
+     * kickMinMs of speed and waits kickCoolS between kicks.
+     */
+    kickMinRpm: 4800,
+    kickFullRpm: 7000,
+    kickHandK: 0.85,
+    kickS: 0.45,
+    kickN: 7000,
+    kickYaw: 5500,
+    kickMinMs: 14,
+    kickCoolS: 0.9,
   },
 
   // ----------------------------------------------------------- night run: the road
