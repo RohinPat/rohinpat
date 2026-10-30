@@ -27,7 +27,7 @@ const MODES: { id: EngineMode; label: string }[] = [
 const DRAG_HOW = [
   "Keyboard: hold Space for throttle, ↑ (or E) shifts up",
   "Hold the throttle to stage, tap it to keep the revs near the mark, and be on it when the light goes green",
-  "Shift when the lights go blue. Your best run of this visit races you. Space or a tap runs it again",
+  "Shift when the lights go blue. Three runs make a set, and its best run races you. Space or a tap goes again",
 ];
 
 export default function EnginePiece({ mode, paused }: PieceProps) {

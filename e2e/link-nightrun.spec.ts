@@ -305,6 +305,50 @@ test.describe("Drag strip", () => {
     await expect(canvas(page)).toBeVisible();
     await context.close();
   });
+
+  test("the phone's throttle runs every run of a set, its Run again button goes on to the next, and after the set card to a new set", async ({ browser, baseURL }) => {
+    test.setTimeout(120_000);
+    const { context, host, phone } = await onTheGrid(browser, baseURL);
+    await openNight(host, phone);
+    await host.getByTestId("engine-mode-drag").click();
+    await expect(phone.getByTestId("engine-controller")).toBeVisible(SLOW);
+    type Hook = { __drag: { car: { phase: string; x: number; v: number }; set: { cond: { shift: number }; runs: unknown[] }; par: number } };
+    const state = () => host.evaluate(() => ({ phase: (window as unknown as Hook).__drag.car.phase, runs: (window as unknown as Hook).__drag.set.runs.length, shift: (window as unknown as Hook).__drag.set.cond.shift, par: (window as unknown as Hook).__drag.par }));
+    const first = await state();
+    // the phone opens the throttle, the car stages and runs (put near the line to save the wait), and the phone is told it is done
+    const finish = async () => {
+      await send(phone, { type: "axis", name: "throttle", v: 0.9 });
+      await expect.poll(async () => (await state()).phase, { timeout: 20_000 }).toBe("run");
+      await host.evaluate(() => {
+        const c = (window as unknown as Hook).__drag.car;
+        c.x = 395;
+        c.v = 50;
+      });
+      await expect.poll(async () => (await state()).phase, SLOW).toBe("done");
+      await send(phone, { type: "axis", name: "throttle", v: 0 });
+      await expect(phone.getByTestId("engine-view")).toHaveAttribute("data-phase", "done", SLOW);
+    };
+    for (let n = 1; n <= 3; n++) {
+      await finish();
+      expect((await state()).runs).toBe(n);
+      await host.waitForTimeout(1200);
+      if (n < 3) {
+        await expect(live(host)).toContainText(new RegExp(`^Run ${n} of 3\\.`));
+        await phone.getByTestId("engine-again").click();
+        await expect.poll(async () => (await state()).phase, SLOW).toBe("idle");
+        expect((await state()).shift).toBe(first.shift);
+      }
+    }
+    await expect(live(host)).toContainText(/^Set done\./);
+    // the phone's Run again on the set card begins a new set: other conditions, other par
+    await phone.getByTestId("engine-again").click();
+    await expect.poll(async () => (await state()).runs, SLOW).toBe(0);
+    const next = await state();
+    expect(next.phase).toBe("idle");
+    expect(next.shift).not.toBe(first.shift);
+    expect(next.par).not.toBe(first.par);
+    await context.close();
+  });
 });
 
 test.describe("Night run: the phone as the wheel", () => {

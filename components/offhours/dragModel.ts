@@ -11,6 +11,11 @@ import { rpmRate } from "./engineRemote";
 // the shift light gives, not before it and not on the limiter). The result says
 // how each of the three went, and what a run with all three right would have
 // taken (par).
+//
+// A set is three runs under the same conditions (the launch band sits a little
+// higher or lower, the tree waits within a different range), drawn when the set
+// starts and changing between sets. Par belongs to the set's conditions. The
+// set's result is its best run and how far off par that was.
 
 export const QUARTER = 402.3;
 /** sixty feet, m */
@@ -29,6 +34,58 @@ export const LAUNCH = { lo: 3200, hi: 6500, sweet: 4900, perfect: 350, great: 90
  * then three ambers a half second apart, then the green TREE_GREEN_S after the first amber.
  */
 export const TREE_WAIT = { min: 0.25, spread: 0.7 };
+
+/** a set is this many runs */
+export const SET_RUNS = 3;
+/** a best run this close to par (or closer) is within par, s */
+export const WITHIN_PAR = 0.08;
+
+/**
+ * What a set changes: where the launch band sits (`shift` moves its centre and its ends, rpm) and how long the tree
+ * waits before its first amber (`treeMin`, then up to `treeSpread` more).
+ */
+export type DragConds = { shift: number; treeMin: number; treeSpread: number };
+export const DEFAULT_CONDS: DragConds = { shift: 0, treeMin: TREE_WAIT.min, treeSpread: TREE_WAIT.spread };
+const SHIFTS = [-300, -250, -200, -150, 150, 200, 250, 300];
+const TREE_MINS = [0.25, 0.35, 0.45, 0.55];
+const TREE_SPREADS = [0.3, 0.4, 0.5, 0.6, 0.7];
+function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const drawn: DragConds[] = [];
+/**
+ * The conditions of the n-th set of a visit (n counts up in memory from 0: no date, nothing stored). Each set differs from the
+ * one before it in the launch band and in the tree's range.
+ */
+export function dragConds(n: number): DragConds {
+  while (drawn.length <= n) {
+    const i = drawn.length;
+    const prev = drawn[i - 1];
+    const r = rng(i * 7919 + 17);
+    let next: DragConds;
+    let tries = 0;
+    do {
+      next = { shift: SHIFTS[Math.floor(r() * SHIFTS.length)], treeMin: TREE_MINS[Math.floor(r() * TREE_MINS.length)], treeSpread: TREE_SPREADS[Math.floor(r() * TREE_SPREADS.length)] };
+    } while (prev && tries++ < 50 && (Math.abs(next.shift - prev.shift) < 150 || (next.treeMin === prev.treeMin && next.treeSpread === prev.treeSpread)));
+    drawn.push(next);
+  }
+  return drawn[Math.max(0, n)];
+}
+/**
+ * A set with the band higher is on a grippier surface: it takes more revs at the green and the tyres hold more drive, so the
+ * set's par is quicker (a lower band is a slipperier one, and slower). The most drive the tyres put down, N.
+ */
+export const TRACTION_N = 17500;
+export const tractionN = (cd: DragConds) => TRACTION_N * (1 + cd.shift * 0.0004);
+/** the launch band under these conditions: the ends of the window and the sweet spot, rpm */
+export const launchBand = (cd: DragConds) => ({ lo: LAUNCH.lo + cd.shift, hi: LAUNCH.hi + cd.shift, sweet: LAUNCH.sweet + cd.shift });
 export const TREE_STEP_S = 0.5;
 export const TREE_GREEN_S = 1.6;
 /** the green is this long after staging: the wait, then the amber sequence */
@@ -41,6 +98,8 @@ export type DragPhase = "idle" | "tree" | "run" | "done";
 export type ShiftCounts = { perfect: number; good: number; early: number; late: number };
 
 export type DragCar = {
+  /** the set's conditions: the launch band and the tree's range */
+  cond: DragConds;
   phase: DragPhase;
   rpm: number;
   v: number;
@@ -80,7 +139,8 @@ export type DragCar = {
   pop: number;
 };
 
-export const freshCar = (best: number | null = null): DragCar => ({
+export const freshCar = (best: number | null = null, cond: DragConds = DEFAULT_CONDS): DragCar => ({
+  cond,
   phase: "idle",
   rpm: IDLE,
   v: 0,
@@ -141,7 +201,7 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
     if (c.stageHeld > 0.35) {
       c.phase = "tree";
       c.tree = 0;
-      c.wait = TREE_WAIT.min + rand() * TREE_WAIT.spread;
+      c.wait = c.cond.treeMin + rand() * c.cond.treeSpread;
     }
   } else if (c.phase === "tree") {
     c.rpm += rpmRate(c.pedal, 7000, 6000) * dt;
@@ -150,9 +210,10 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
       c.phase = "run";
       c.t = 0;
       // launch: too few revs bogs, too many spins the tyres, and in between the tyres slip more the further from the sweet spot
-      const off = Math.abs(c.rpm - LAUNCH.sweet);
-      c.slip = c.rpm > LAUNCH.hi ? 0.9 : c.rpm < LAUNCH.lo ? -0.6 : 0.05 + 0.35 * Math.min(1, off / 1600);
-      c.call = c.rpm > LAUNCH.hi ? "WHEELSPIN" : c.rpm < LAUNCH.lo ? "BOGGED" : off <= LAUNCH.perfect ? "PERFECT LAUNCH" : off <= LAUNCH.great ? "GREAT LAUNCH" : "GOOD LAUNCH";
+      const band = launchBand(c.cond);
+      const off = Math.abs(c.rpm - band.sweet);
+      c.slip = c.rpm > band.hi ? 0.9 : c.rpm < band.lo ? -0.6 : 0.05 + 0.35 * Math.min(1, off / 1600);
+      c.call = c.rpm > band.hi ? "WHEELSPIN" : c.rpm < band.lo ? "BOGGED" : off <= LAUNCH.perfect ? "PERFECT LAUNCH" : off <= LAUNCH.great ? "GREAT LAUNCH" : "GOOD LAUNCH";
       c.launch = c.call;
       c.launchRpm = c.rpm;
       c.callT = t;
@@ -177,7 +238,7 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
     c.limiter = onLimiter ? c.limiter + dt : 0;
     const drive =
       c.throttle && c.shiftT <= 0 && !(onLimiter && Math.floor(t * 30) % 2)
-        ? Math.min(17500, (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) * c.pedal // traction-limited
+        ? Math.min(tractionN(c.cond), (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) * c.pedal // traction-limited
         : 0;
     const bog = c.slip < 0 ? 1 + c.slip * 0.9 : 1 - Math.max(0, c.slip) * 0.65;
     const drag = 0.39 * c.v * c.v + 180;
@@ -211,30 +272,39 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
   c.pop = Math.max(0, c.pop - dt * 4);
 }
 
+
 /**
- * What a run with every part right would have taken: the revs held at the sweet spot at the green, on the throttle, and every
- * shift in the shift light's window. The same model, driven that way (a few thousand steps, made once).
+ * What a run with every part right would have taken under these conditions: the revs held at the sweet spot at the green, on
+ * the throttle, and every shift in the shift light's window. The same model, driven that way (a few thousand steps, made once
+ * per set of conditions).
  */
-let par: number | null = null;
-export function parEt(): number {
-  if (par !== null) return par;
-  const c = freshCar();
+const pars = new Map<string, number>();
+export function parEt(cond: DragConds = DEFAULT_CONDS): number {
+  const key = `${cond.shift}|${cond.treeMin}|${cond.treeSpread}`;
+  const known = pars.get(key);
+  if (known !== undefined) return known;
+  const c = freshCar(null, cond);
+  const sweet = launchBand(cond).sweet;
   const path: number[] = [];
   const dt = 1 / 120;
   let t = 0;
   for (let i = 0; i < 120 * 40 && c.phase !== "done"; i++) {
-    c.throttle = c.phase === "tree" ? c.rpm < LAUNCH.sweet : true;
+    c.throttle = c.phase === "tree" ? c.rpm < sweet : true;
     c.pedal = c.throttle ? 1 : 0;
     if (c.phase === "run" && c.shiftT <= 0 && c.rpm >= SHIFT_AT + 50) shiftUp(c, t);
     stepDrag(c, dt, t, path, {}, () => 0.5);
     t += dt;
   }
-  par = c.t;
-  return par;
+  pars.set(key, c.t);
+  return c.t;
 }
 
-/** The one line of advice under a finished run, in capitals: the first thing it did wrong, or how far off par it was. */
-export function dragAdvice(c: Pick<DragCar, "launch" | "launchRpm" | "reaction" | "shifts" | "t">, p: number): string {
+/** What a run leaves behind for its advice and for the set card: its time, and how the launch, the throttle and the shifts went. */
+export type RunRecord = Pick<DragCar, "launch" | "launchRpm" | "reaction" | "shifts" | "t"> & { cond?: DragConds };
+export const noteRun = (c: DragCar): RunRecord => ({ launch: c.launch, launchRpm: c.launchRpm, reaction: c.reaction, shifts: { ...c.shifts }, t: c.t, cond: c.cond });
+
+/** The first thing a run did wrong, in capitals, or null when the launch, the throttle and the shifts were all clean. */
+export function dragFault(c: RunRecord): string | null {
   const s = c.shifts;
   const plural = (n: number) => (n > 1 ? "S" : "");
   if (c.reaction !== null && c.reaction > 0.15) return `${c.reaction.toFixed(2)} S TO GET ON THE THROTTLE AT GREEN`;
@@ -242,7 +312,36 @@ export function dragAdvice(c: Pick<DragCar, "launch" | "launchRpm" | "reaction" 
   if (c.launch === "BOGGED") return "TOO FEW REVS AT GREEN. HOLD THE MARK";
   if (s.early > 0) return `${s.early} EARLY SHIFT${plural(s.early)}. WAIT FOR BLUE`;
   if (s.late > 0) return `${s.late} LATE SHIFT${plural(s.late)}. SHIFT ON BLUE`;
-  if (c.launch === "GOOD LAUNCH") return `LAUNCH ${Math.round(Math.abs(c.launchRpm - LAUNCH.sweet) / 50) * 50} RPM FROM THE MARK`;
+  if (c.launch === "GOOD LAUNCH") return `LAUNCH ${Math.round(Math.abs(c.launchRpm - launchBand(c.cond ?? DEFAULT_CONDS).sweet) / 50) * 50} RPM FROM THE MARK`;
   if (s.good > 0) return `${s.good} SHIFT${plural(s.good)} A LITTLE EARLY. WAIT FOR BLUE`;
-  return `${Math.max(0, c.t - p).toFixed(2)} S OFF PAR. LAUNCH AND SHIFTS CLEAN`;
+  return null;
+}
+
+/** The one line of advice under a finished run, in capitals: the first thing it did wrong, or how far off par it was. */
+export function dragAdvice(c: RunRecord, p: number): string {
+  return dragFault(c) ?? `${Math.max(0, c.t - p).toFixed(2)} S OFF PAR. LAUNCH AND SHIFTS CLEAN`;
+}
+
+export type SetResult = {
+  /** the times, in the order they were run */
+  ets: number[];
+  /** the index of the best */
+  bestAt: number;
+  best: number;
+  /** par under the set's conditions */
+  par: number;
+  /** best minus par: how far off the set was */
+  off: number;
+  within: boolean;
+  /** what held the best run back (its first fault), or null when it was clean */
+  tip: string | null;
+};
+
+/** The set's result: its best run, how far off par that was, and the best run's first fault (the reason for the gap). */
+export function setResult(runs: RunRecord[], cond: DragConds): SetResult {
+  const ets = runs.map((r) => r.t);
+  const bestAt = ets.indexOf(Math.min(...ets));
+  const par = parEt(cond);
+  const off = ets[bestAt] - par;
+  return { ets, bestAt, best: ets[bestAt], par, off, within: off <= WITHIN_PAR, tip: dragFault({ ...runs[bestAt], cond }) };
 }
