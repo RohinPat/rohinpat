@@ -7,7 +7,7 @@ import { display, mono } from "./font";
 import type { Remote, RemoteHandlers } from "@/lib/link/remote";
 import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, type EnginePhase } from "./engineRemote";
 import { LIMIT, REDLINE, RATIOS, SHIFT_AT } from "./engineModel";
-import { LAUNCH, QUARTER, TREE_STEP_S, dragAdvice, freshCar, parEt, shiftUp, sinceAmber, stepDrag, treeTime, type DragCar } from "./dragModel";
+import { DEFAULT_CONDS, QUARTER, SET_RUNS, TREE_STEP_S, dragAdvice, dragConds, freshCar, launchBand, noteRun, parEt, setResult, shiftUp, sinceAmber, stepDrag, treeTime, type DragCar, type DragConds, type RunRecord } from "./dragModel";
 import { EngineVoice } from "./engineVoice";
 import { gapToGhost, ghostAt, type DragPath } from "./dragGhost";
 import { paintStrip, stripGeom } from "./night/stripScene";
@@ -15,12 +15,16 @@ import { paintStrip, stripGeom } from "./night/stripScene";
 // The drag strip: a race dash and a quarter mile (Cars' second mode; Night run
 // is the first). The engine is the shared model (engineModel.ts: torque curve,
 // gear ratios, drag) and the shared V8 (engineVoice.ts). Hold the throttle to
-// stage and launch, shift on the green light; perfect shifts pop and pull. A
+// stage and launch, shift on the green light; perfect shifts pop and pull. Three
+// runs make a set, under conditions drawn when the set starts (dragModel.ts: where
+// the launch band sits, how long the tree waits), and the set card says how near
+// par the best of the three was. A
 // linked phone is a throttle grip: it sends the `throttle` axis (0..1, a pedal
 // part way down), shifts with `engine-shift`, and is told the revs and gear
 // back. Engine.tsx owns the phone link and hands the messages down. The strip
-// shows two lanes, you in one and the best run of this visit (a ghost, in memory
-// only) in the other, with the gap to it as you go. The lanes are a floodlit strip
+// shows two lanes, you in one and a ghost in the other (the best run of the set,
+// and until there is one the best run of this visit; in memory only), with the gap
+// to it as you go. The lanes are a floodlit strip
 // at night (night/stripScene.ts: a grandstand, a ridge and a town, towers, a wall,
 // rubber on the line), with the start tree beside the line and the distances on
 // boards along the foot.
@@ -30,8 +34,16 @@ const AGAIN_AFTER_S = 0.6;
 
 /** the quickest quarter of this visit: memory only, kept while the strip is closed and opened again, gone with the page */
 let bestVisit: number | null = null;
-/** that run as distance every DRAG_GHOST_DT seconds: the ghost the next run races */
+/** that run as distance every DRAG_GHOST_DT seconds: the ghost a new set races */
 let bestPath: DragPath | null = null;
+/** the next set's number: it seeds the set's conditions, counts up in memory only and starts again with the page */
+let setIndex = 0;
+/** a set card is not skipped by a key or a tap meant for the finish, s */
+const SET_CARD_HOLD_S = 1;
+
+/** a set under way: its conditions, the runs so far, and its quickest run as a ghost */
+type DragSet = { cond: DragConds; runs: RunRecord[]; path: DragPath | null };
+const newSet = (): DragSet => ({ cond: dragConds(setIndex), runs: [], path: null });
 
 /** tyre smoke off the line (screen space, a small fixed pool) */
 const PUFFS = 32;
@@ -64,10 +76,15 @@ export type DragProps = PieceProps & {
 
 export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const play = mode === "play";
-  const car = useRef<DragCar>(freshCar(play ? bestVisit : null));
+  const sref = useRef<DragSet>(null as unknown as DragSet);
+  if (!sref.current) sref.current = play ? newSet() : { cond: DEFAULT_CONDS, runs: [], path: null };
+  const car = useRef<DragCar>(null as unknown as DragCar);
+  if (!car.current) car.current = freshCar(null, sref.current.cond);
   const eng = useRef<EngineVoice | null>(null);
   const clock = useRef(0);
   const [done, setDone] = useState<string>("");
+  /** the card up is the set card (after the third run) */
+  const [setCard, setSetCard] = useState(false);
   // the keys / pedal button (held) and a linked phone (target, then smoothed)
   const held = useRef(false);
   const phone = useRef({ target: 0, smooth: 0 });
@@ -75,22 +92,30 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const mineRef = useRef<RemoteHandlers | null>(null);
   /** this run's distance every DRAG_GHOST_DT seconds from the green (it becomes the ghost if it is the best), and the layers and smoke */
   const rec = useRef<number[]>([]);
-  const layers = useRef<{ ground?: Layer; face?: Layer; beam?: Layer; bulbs?: Record<string, HTMLCanvasElement> }>({});
+  const layers = useRef<{ ground?: Layer; face?: Layer; beam?: Layer; run?: Layer; bulbs?: Record<string, HTMLCanvasElement> }>({});
   const puffs = useRef<Puffs>(newPuffs());
   const wasThrottle = useRef(false);
 
   useEffect(() => {
     // with the mock link (tests, local work) a page can read the dash
-    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: DragCar; ghost: DragPath | null } }).__drag = {
+    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: DragCar; ghost: DragPath | null; set: DragSet; par: number } }).__drag = {
         get car() {
           return car.current;
         },
         get ghost() {
-          return bestPath;
+          return sref.current.path ?? bestPath;
+        },
+        get set() {
+          return sref.current;
+        },
+        get par() {
+          return parEt(sref.current.cond);
         },
       };
     return () => {
       eng.current?.stop();
+      // leaving a set part way (or on its card) means the next one is new
+      if (play && sref.current.runs.length > 0) setIndex++;
     };
   }, [play]);
 
@@ -133,8 +158,16 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     }
   };
   function again() {
-    car.current = freshCar(car.current.best);
+    const s = sref.current;
+    if (play && s.runs.length >= SET_RUNS) {
+      // after the set card: a new set, with its own conditions and nothing run yet
+      if (car.current.doneT < SET_CARD_HOLD_S) return;
+      setIndex++;
+      sref.current = newSet();
+      car.current = freshCar(null, sref.current.cond);
+    } else car.current = freshCar(car.current.best, s.cond);
     setDone("");
+    setSetCard(false);
   }
 
   // A linked phone: its throttle axis is a pedal, its shift gesture is the up
@@ -234,7 +267,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     if (c.phase === "run" && c.rpm > SHIFT_AT + 100 && c.shiftT <= 0) shift();
     if (c.phase === "done") {
       c.tree += dt;
-      if (c.tree > 2.5) Object.assign(c, freshCar(c.best));
+      if (c.tree > 2.5) Object.assign(c, freshCar(c.best, c.cond));
     }
   }
 
@@ -247,16 +280,31 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       },
       finish: () => {
         if (!play) return;
+        const s = sref.current;
+        // c.best is the set's best: a run quicker than it is the set's ghost, and quicker than the visit's best it is the visit's too
         const faster = c.vsBest === null || c.vsBest < 0;
-        bestVisit = c.best;
         if (faster) {
           rec.current.push(QUARTER);
-          bestPath = Float32Array.from(rec.current);
+          s.path = Float32Array.from(rec.current);
         }
-        const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best.` : ` ${c.vsBest.toFixed(2)} seconds off your best.`;
+        if (bestVisit === null || c.t < bestVisit) {
+          bestVisit = c.t;
+          bestPath = s.path;
+        }
+        s.runs.push(noteRun(c));
+        const n = s.runs.length;
+        if (n >= SET_RUNS) {
+          const r = setResult(s.runs, s.cond);
+          setSetCard(true);
+          setDone(
+            `Set done. Times ${r.ets.map((e) => e.toFixed(2)).join(", ")} seconds. Best ${r.best.toFixed(2)}, ${Math.abs(r.off) < 0.005 ? "on" : `${Math.abs(r.off).toFixed(2)} seconds ${r.off > 0 ? "off" : "under"}`} par ${r.par.toFixed(2)}. ${(r.tip ?? "Launch and shifts clean").toLowerCase()}.`,
+          );
+          return;
+        }
+        const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best of the set.` : ` ${c.vsBest.toFixed(2)} seconds off your best of the set.`;
         const sh = c.shifts;
         setDone(
-          `Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. Reaction ${(c.reaction ?? 0).toFixed(2)} seconds. 60 feet in ${c.sixtyFt?.toFixed(2) ?? "—"}. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. Launch: ${c.launch.toLowerCase()}. Shifts: ${sh.perfect} perfect, ${sh.good} good, ${sh.early} early, ${sh.late} late. Par is ${parEt().toFixed(2)}.${vs}`,
+          `Run ${n} of ${SET_RUNS}. Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. Reaction ${(c.reaction ?? 0).toFixed(2)} seconds. 60 feet in ${c.sixtyFt?.toFixed(2) ?? "—"}. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. Launch: ${c.launch.toLowerCase()}. Shifts: ${sh.perfect} perfect, ${sh.good} good, ${sh.early} early, ${sh.late} late. Par is ${parEt(s.cond).toFixed(2)}.${vs}`,
         );
       },
     });
@@ -275,8 +323,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     e.update({ rpm: c.rpm, pedal: c.pedal, throttle: c.throttle, cut: c.phase === "run" && c.shiftT > 0 });
   }
 
-  /** the end card: the time, how the three things went (the reaction, the launch, the shifts), par, and whether it beat the best of this visit */
-  function drawResult(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number, t: number) {
+  /** the end card's frame: a dim backdrop over the strip (the speed column is hidden under it) and the panel, with its header and the big time */
+  function cardFrame(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number, head: string, headRight: string, big: number) {
     const k = Math.min(1, c.doneT / 0.25);
     ctx.globalAlpha = k;
     ctx.fillStyle = "rgba(8,10,9,0.8)";
@@ -298,20 +346,28 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.textBaseline = "alphabetic";
     mono(ctx, 11);
     ctx.fillStyle = "#8ad9a8";
-    ctx.fillText("QUARTER MILE", px, y + 34);
-    // what a run with the launch, the throttle and the shifts all right takes: the number to chase
-    const p = parEt();
+    ctx.fillText(head, px, y + 34);
+    // what a run with the launch, the throttle and the shifts all right takes under this set's conditions: the number to chase
     ctx.fillStyle = "#b5b6ab";
     ctx.textAlign = "right";
-    ctx.fillText(`PAR ${p.toFixed(2)}`, x + pw - 24, y + 34);
+    ctx.fillText(headRight, x + pw - 24, y + 34);
     ctx.textAlign = "left";
     ctx.fillStyle = "#f2ead7";
     display(ctx, narrow ? 64 : 76, 800);
-    ctx.fillText(c.t.toFixed(2), px, y + (narrow ? 100 : 108));
-    const tw = ctx.measureText(c.t.toFixed(2)).width;
+    ctx.fillText(big.toFixed(2), px, y + (narrow ? 100 : 108));
+    const tw = ctx.measureText(big.toFixed(2)).width;
     mono(ctx, 12);
     ctx.fillStyle = "#b5b6ab";
     ctx.fillText("SECONDS", px + tw + 10, y + (narrow ? 100 : 108));
+    return { x, y, pw, ph, px, narrow };
+  }
+
+  /** the end card of a run: the time, how the three things went (the reaction, the launch, the shifts), par, one tip, and how it compares with the best of the set */
+  function drawResult(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number) {
+    const set = sref.current;
+    if (set.runs.length >= SET_RUNS) return drawSetCard(ctx, c, w, area);
+    const p = parEt(set.cond);
+    const { y, pw, ph, px, narrow } = cardFrame(ctx, c, w, area, `RUN ${set.runs.length} OF ${SET_RUNS}`, `PAR ${p.toFixed(2)}`, c.t);
     const sh = c.shifts;
     const shifts = sh.perfect + sh.good + sh.early + sh.late;
     const rows: [string, string, string?][] = [
@@ -330,17 +386,50 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillStyle = col ?? "#f2ead7";
       ctx.fillText(val, cxp, cyp + 15);
     });
-    // one thing to do better, then (after the first run) how this one compares with the best of the visit
+    // one thing to do better, then (after the first run) how this one compares with the best of the set
     mono(ctx, 11);
     const vs = c.vsBest;
     ctx.fillStyle = "#f2ead7";
-    ctx.fillText(dragAdvice(c, p), px, y + ph - (vs === null ? 24 : 46));
+    ctx.fillText(dragAdvice(noteRun(c), p), px, y + ph - (vs === null ? 24 : 46));
     if (vs !== null) {
       ctx.fillStyle = vs < 0 ? "#8ad9a8" : "#ffd23f";
       ctx.fillText(vs < 0 ? `NEW BEST, ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · ${vs.toFixed(2)} S OFF`, px, y + ph - 24);
     }
     ctx.globalAlpha = 1;
-    void t;
+  }
+
+  /** the set card, after the third run: the three times with the best marked, how far off par the best was, and what held it back */
+  function drawSetCard(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number) {
+    const set = sref.current;
+    const r = setResult(set.runs, set.cond);
+    const { y, pw, ph, px, narrow } = cardFrame(ctx, c, w, area, `BEST OF ${SET_RUNS}`, `PAR ${r.par.toFixed(2)}`, r.best);
+    const colW = (pw - 48) / SET_RUNS;
+    const ry = y + (narrow ? 134 : 146);
+    r.ets.forEach((et, i) => {
+      const cxp = px + i * colW;
+      const best = i === r.bestAt;
+      if (best) {
+        ctx.fillStyle = "rgba(138,217,168,0.16)";
+        ctx.strokeStyle = "rgba(138,217,168,0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(cxp - 8, ry - 15, colW - 6, 40, 8);
+        ctx.fill();
+        ctx.stroke();
+      }
+      mono(ctx, 11);
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText(`RUN ${i + 1}`, cxp, ry);
+      mono(ctx, 14);
+      ctx.fillStyle = best ? "#8ad9a8" : "#f2ead7";
+      ctx.fillText(et.toFixed(2), cxp, ry + 18);
+    });
+    mono(ctx, 11);
+    ctx.fillStyle = r.within ? "#8ad9a8" : "#ffd23f";
+    ctx.fillText(Math.abs(r.off) < 0.005 ? "ON PAR" : `${Math.abs(r.off).toFixed(2)} S ${r.off > 0 ? "OFF" : "UNDER"} PAR`, px, y + ph - 46);
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillText(r.tip ?? "LAUNCH AND SHIFTS CLEAN", px, y + ph - 24);
+    ctx.globalAlpha = 1;
   }
 
   /** a car seen from above, nose to the right at `nose`: graphite with a mint line, tail lamps, a wing */
@@ -637,16 +726,17 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.arc(cx, cy, R, a0, ang(Math.min(9000, c.rpm)));
     ctx.stroke();
     // the launch band, outside the dial while staging: the revs to hold at the green, with the sweet spot marked
+    const band = launchBand(c.cond);
     const staging = play && (c.phase === "idle" || c.phase === "tree");
     if (staging) {
-      const inBand = c.rpm >= LAUNCH.lo && c.rpm <= LAUNCH.hi;
+      const inBand = c.rpm >= band.lo && c.rpm <= band.hi;
       ctx.lineCap = "butt";
       ctx.lineWidth = R * 0.05;
       ctx.strokeStyle = inBand ? "#8ad9a8" : "rgba(138,217,168,0.4)";
       ctx.beginPath();
-      ctx.arc(cx, cy, R * 1.1, ang(LAUNCH.lo), ang(LAUNCH.hi));
+      ctx.arc(cx, cy, R * 1.1, ang(band.lo), ang(band.hi));
       ctx.stroke();
-      const sa = ang(LAUNCH.sweet);
+      const sa = ang(band.sweet);
       ctx.lineWidth = Math.max(2, R * 0.025);
       ctx.strokeStyle = "#f2ead7";
       ctx.beginPath();
@@ -770,12 +860,23 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         line = w < 640 ? "HOLD THE THROTTLE TO STAGE" : "HOLD THE THROTTLE TO STAGE · THEN KEEP THE REVS IN THE BAND";
       } else {
         // the light is counting: say where the revs are against the band
-        const inBand = c.rpm >= LAUNCH.lo && c.rpm <= LAUNCH.hi;
+        const inBand = c.rpm >= band.lo && c.rpm <= band.hi;
         ctx.fillStyle = inBand ? "#8ad9a8" : "#ffd23f";
-        line = c.rpm > LAUNCH.hi ? "TOO MANY REVS: EASE OFF" : c.rpm < LAUNCH.lo ? "TOO FEW REVS: GIVE IT SOME" : "IN THE BAND: HOLD IT FOR THE GREEN";
+        line = c.rpm > band.hi ? "TOO MANY REVS: EASE OFF" : c.rpm < band.lo ? "TOO FEW REVS: GIVE IT SOME" : "IN THE BAND: HOLD IT FOR THE GREEN";
       }
       ctx.fillText(line, w / 2, ry - 14);
       ctx.textAlign = "left";
+    }
+    // which run of the set this is (the cards say it themselves once a run is over)
+    if (play && c.phase !== "done") {
+      const label = `RUN ${Math.min(SET_RUNS, sref.current.runs.length + 1)} OF ${SET_RUNS}`;
+      layers.current.run = layer(layers.current.run, `${label}@${dpr}`, 90, 16, dpr, (x) => {
+        mono(x, 11);
+        x.fillStyle = "#b5b6ab";
+        x.textBaseline = "alphabetic";
+        x.fillText(label, 0, 12);
+      });
+      ctx.drawImage(layers.current.run.c, 14, linkRef.current.linked ? 50 : 16, 90, 16);
     }
     // the shift light, in words (steady: the lights above already show it), for the eye that is on the road and not the top of the dash
     if (play && c.phase === "run" && c.rpm >= SHIFT_AT - 200 && c.gear < RATIOS.length - 1 && c.shiftT <= 0) {
@@ -786,7 +887,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillText("SHIFT", cx, cy - R * 0.1);
       ctx.textAlign = "left";
     }
-    if (play && c.phase === "done") drawResult(ctx, c, w, area, t);
+    if (play && c.phase === "done") drawResult(ctx, c, w, area);
   }
 
   return (
@@ -819,7 +920,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
             onClick={() => done && again()}
             className="flex-1 h-16 rounded-xl bg-[#1d5e3f] text-[#f2ead7] font-mono text-xs uppercase tracking-[0.2em] active:scale-[0.98] select-none touch-none"
           >
-            {done ? "Run again" : "Throttle · hold"}
+            {done ? (setCard ? "New set" : "Run again") : "Throttle · hold"}
           </button>
           <button
             type="button"

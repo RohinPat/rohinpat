@@ -1,10 +1,12 @@
-import { freshCar, shiftUp, stepDrag, type DragCar } from "@/components/offhours/dragModel";
+import { DEFAULT_CONDS, freshCar, launchBand, shiftUp, stepDrag, type DragCar, type DragConds } from "@/components/offhours/dragModel";
 import { SHIFT_AT } from "@/components/offhours/engineModel";
 
 export type DragBot = {
   name: string;
-  /** the revs it holds while the tree counts, by tapping the key */
+  /** the revs it holds while the tree counts, by tapping the key (a number is read off the mark: the set's sweet spot, plus this much) */
   holdRpm: number | "hold";
+  /** a bot that does not read the mark holds this absolute rev whatever the set */
+  fixedRpm?: boolean;
   /** shift when the revs reach this */
   shiftRpm: number;
   /** its reaction to a shift light, s (random up to) */
@@ -31,9 +33,10 @@ function rng(seed: number) {
 export type DragRun = { reaction: number | null; sixtyFt: number | null; shifts: string; bot: string; et: number; trap: number; s60: number; launch: string; launchRpm: number; perfect: number; calls: string[]; car: DragCar };
 
 const DT = 1 / 120;
-export function runDrag(bot: DragBot, seed: number, mk: () => DragCar = freshCar, pre?: (c: DragCar) => void): DragRun {
+export function runDrag(bot: DragBot, seed: number, mk: () => DragCar = freshCar, pre?: (c: DragCar) => void, cond: DragConds = DEFAULT_CONDS): DragRun {
   const R = rng(seed * 104729 + 7);
   const c = mk();
+  c.cond = cond;
   pre?.(c);
   const path: number[] = [];
   let t = 0;
@@ -41,7 +44,8 @@ export function runDrag(bot: DragBot, seed: number, mk: () => DragCar = freshCar
   let lateUntil = -1;
   const calls: string[] = [];
   let shiftDue = -1;
-  const aim = typeof bot.holdRpm === "number" ? bot.holdRpm + (R() - 0.5) * 2 * (bot.wobble ?? 0) : 0;
+  // a bot that holds a number reads the mark: its aim is that, measured from the set's sweet spot (4900 on the default one)
+  const aim = typeof bot.holdRpm === "number" ? bot.holdRpm + (bot.fixedRpm ? 0 : launchBand(cond).sweet - launchBand(DEFAULT_CONDS).sweet) + (R() - 0.5) * 2 * (bot.wobble ?? 0) : 0;
   const keyQ: boolean[] = [];
   const lag = Math.round((bot.tapLag ?? 0) / DT);
   let lastPhase = c.phase;
