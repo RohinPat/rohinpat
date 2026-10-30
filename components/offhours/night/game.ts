@@ -8,6 +8,7 @@ import { launchSmoke, newScene, stepCamera, stepFxFromCar, type Scene } from "./
 import { MEDALS, medalsAt, nextMedal } from "./medals";
 import { getTarget, poseOf, type Target } from "./target";
 import { planSpeed } from "./ai";
+import { assistSteer, newAssist, type AssistLevel } from "./assist";
 import { curvatureAt, getRoad, pointAt } from "./road";
 
 // The run. The phases: ready (the car on the line, waiting for the gas), count
@@ -172,10 +173,14 @@ export class NightGame {
   firstRun = true;
   /** medals earned so far this run */
   medals = 0;
+  /** the steering assist: 0 off, 1 light, 2 full (the page sets it; the phone held like a wheel runs with it off), and how much of it is on this moment (it fades while the car slides) */
+  assist: AssistLevel = 0;
+  readonly assistState = newAssist();
   private slideT = 0;
   onEvent: (e: GameEvent) => void = () => {};
 
   private acc = 0;
+  private driven: NightInput = { steer: 0, throttle: 0, brake: 0, hand: 0 };
   private spinT = 0;
   private recoverT = 0;
   private lastHitAt = -9;
@@ -244,6 +249,8 @@ export class NightGame {
     this.coach = "";
     this.coachT = 0;
     this.medals = 0;
+    this.assistState.fade = 1;
+    this.assistState.hold = 0;
     this.slideT = 0;
     this.endT = 0;
     this.endWhy = null;
@@ -400,7 +407,16 @@ export class NightGame {
     const ending = this.endWhy !== null;
     let drive = inp;
     if (ending) drive = { steer: 0, throttle: 0, brake: 0.18, hand: 0 };
-    else if (drive.hand > 0.5) this.handUsed = true;
+    else {
+      if (drive.hand > 0.5) this.handUsed = true;
+      // the assist pulls the wheel toward the line (and lets go while the car slides)
+      const d = this.driven;
+      d.steer = assistSteer(this.assistState, this.assist, c, this.road, this.target.plan, inp, STEP);
+      d.throttle = inp.throttle;
+      d.brake = inp.brake;
+      d.hand = inp.hand;
+      drive = d;
+    }
     if (this.recoverT > 0) this.recover(c);
     stepCar(c, drive, this.road, STEP);
     this.rec.push(this.clock, poseOf(c, this.pose));

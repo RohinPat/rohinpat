@@ -142,6 +142,16 @@ export const ENGINE_CAL = {
     startStraightM: 200,
   },
 
+  // ----------------------------------------------------- night run: the steering assist
+  /**
+   * The assist blends the player's steering toward the wheel that would hold the line (the racing line, or the middle of the
+   * road): light this share of the way, full this share. It fades out while the car slides (from `slipFrom` rad of body angle it
+   * starts to go, and is gone by `slipTo`, which is about where a slide starts to score) and while the handbrake is held, and it
+   * comes back over `upS` seconds once the car has straightened (and `holdS` after the handbrake is let go). It never touches the
+   * score and a phone held like a wheel ignores it.
+   */
+  assist: { light: 0.55, full: 0.8, centre: false, slipFrom: 0.15, slipTo: 0.5, downPerS: 9, upS: 0.7, holdS: 0.35, guard: 2, guardFromM: 1, edgeFrom: 0.9, edgeTo: 1.6 },
+
   // ------------------------------------------------------ night run: the run itself
   run: {
     /** the countdown before GO, s */

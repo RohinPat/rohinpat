@@ -12,6 +12,7 @@ import { NightGame, type GameEvent } from "./night/game";
 import { drawAttractHud, drawHud, grouped, resultBottom, type HudOptions } from "./night/hud";
 import { keySteerFeel, newKeyAxes, newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeyPedal, stepKeys, stepKeySteer, type Sources } from "./night/nightInput";
 import { adviceFor } from "./night/advice";
+import { ASSIST_DEFAULT, ASSIST_NAMES, type AssistLevel } from "./night/assist";
 import { MEDALS } from "./night/medals";
 import { NightSound } from "./night/sound";
 
@@ -69,6 +70,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<string>("ready");
   const [auto, setAuto] = useState(true);
+  const [assist, setAssist] = useState<AssistLevel>(ASSIST_DEFAULT);
+  const assistRef = useRef<AssistLevel>(ASSIST_DEFAULT);
   const [touch, setTouch] = useState(false);
 
   const game = () => {
@@ -291,6 +294,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       s.padBrake = pa.brake;
       s.padHand = p.hand;
       const input = resolveInput(s, inp.current);
+      // a phone held like a wheel steers by tilt, which is analogue: it gets no assist
+      g.assist = linkRef.current.linked ? 0 : assistRef.current;
       if (g.phase === "ready" && input.throttle > 0.5) startOrAgain();
       g.update(dt, input);
       if (g.phase !== lastPhase.current) {
@@ -337,6 +342,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           el.dataset.combo = String(g.drift.combo);
           el.dataset.dist = String(Math.round(g.car.s));
           el.dataset.quality = String(q.level);
+          el.dataset.assist = String(g.assist);
         }
       }
       drawScene(ctx, a, g.scene, Math.min(q.level, 2), q.level);
@@ -419,6 +425,15 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
     setAuto(next);
   }
 
+  const cycleAssist = (e: React.MouseEvent) => {
+    const next = ((assistRef.current + 1) % ASSIST_NAMES.length) as AssistLevel;
+    assistRef.current = next;
+    setAssist(next);
+    setStatus(`Steering assist: ${ASSIST_NAMES[next].toLowerCase()}.`);
+    // the keys listen on the canvas: a click must not leave them without a listener (a press of Enter or Space on the button stays where it is, so it can be pressed again)
+    if (e.detail > 0) ref.current?.focus();
+  };
+
   // coming back from the Drag strip with its switch still focused: hand the keys to the road
   useEffect(() => {
     const a = document.activeElement;
@@ -482,24 +497,34 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         aria-label="Night run: a canyon road after midnight. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start."
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
-      <div role="group" aria-label="Gearbox" className="absolute right-3 top-14 z-10 flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70 font-mono text-[11px] uppercase tracking-[0.14em]">
-        {[true, false].map((on) => (
-          <button
-            key={String(on)}
-            type="button"
-            aria-pressed={auto === on}
-            data-testid={on ? "night-auto" : "night-manual"}
-            onClick={() => {
-              game().setAuto(on);
-              setAuto(on);
-              // the keys listen on the canvas: a click on this switch must not leave them without a listener
-              ref.current?.focus();
-            }}
-            className={`h-8 px-3.5 ${auto === on ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
-          >
-            {on ? "Auto" : "Manual"}
-          </button>
-        ))}
+      <div className="absolute right-3 top-14 z-10 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em]">
+        <button
+          type="button"
+          data-testid="night-assist"
+          onClick={cycleAssist}
+          className={`h-8 rounded-full border border-white/15 px-3.5 ${assist > 0 ? "bg-[var(--paper)] text-[var(--ink)]" : "bg-[#0d100e]/70 text-[#f2ead7] hover:bg-white/10"}`}
+        >
+          Assist: {ASSIST_NAMES[assist]}
+        </button>
+        <div role="group" aria-label="Gearbox" className="flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70">
+          {[true, false].map((on) => (
+            <button
+              key={String(on)}
+              type="button"
+              aria-pressed={auto === on}
+              data-testid={on ? "night-auto" : "night-manual"}
+              onClick={() => {
+                game().setAuto(on);
+                setAuto(on);
+                // the keys listen on the canvas: a click on this switch must not leave them without a listener
+                ref.current?.focus();
+              }}
+              className={`h-8 px-3.5 ${auto === on ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
+            >
+              {on ? "Auto" : "Manual"}
+            </button>
+          ))}
+        </div>
       </div>
       {phase === "done" && (
         <button

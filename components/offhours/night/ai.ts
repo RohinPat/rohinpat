@@ -69,21 +69,32 @@ const at = (a: Float32Array, s: number, seg: number) => {
 export const planSpeed = (plan: Plan, road: Road, s: number) => at(plan.vmax, s, road.segM);
 
 /**
+ * The wheel (-1..1) that steers the car toward a line a little ahead: by pointing the direction of
+ * travel (not the nose) at it. `line` is metres right of the centre at each node (the plan's racing
+ * line), or null for the middle of the road. The driver steers with it, and so does the steering assist.
+ */
+export function steerToLine(c: Car, road: Road, line: Float32Array | null): number {
+  const v = Math.max(1, Math.hypot(c.u, c.w));
+  const seg = road.segM;
+  const look = Math.max(5, Math.min(26, 0.4 * v));
+  const lineAhead = line ? at(line, c.s + look, seg) : 0;
+  const eLat = lineAhead - c.lat;
+  const want = Math.max(-0.3, Math.min(0.3, Math.atan2(eLat, look * 1.6)));
+  const travel = c.psi + c.slip;
+  const wheel = 0.55 * (want - travel);
+  const kap = at(road.kappa, c.s, seg);
+  return Math.max(-1, Math.min(1, (wheel - roadSteer(kap, c.u)) / lockOf(c)));
+}
+
+/**
  * What the driver does this instant: written into `out`. `pace` is the share of
  * the plan's speed it will use (1 = at the limit of the tyres).
  */
 export function drive(c: Car, road: Road, plan: Plan, pace: number, out: NightInput): NightInput {
   const v = Math.max(1, Math.hypot(c.u, c.w));
   const seg = road.segM;
-  // steer to the line a little ahead, by pointing the direction of travel (not the nose) at it
-  const look = Math.max(5, Math.min(26, 0.4 * v));
-  const lineAhead = at(plan.line, c.s + look, seg);
-  const eLat = lineAhead - c.lat;
-  const want = Math.max(-0.3, Math.min(0.3, Math.atan2(eLat, look * 1.6)));
-  const travel = c.psi + c.slip;
-  const wheel = 0.55 * (want - travel);
-  const kap = at(road.kappa, c.s, seg);
-  out.steer = Math.max(-1, Math.min(1, (wheel - roadSteer(kap, c.u)) / lockOf(c)));
+  // steer to the line a little ahead
+  out.steer = steerToLine(c, road, plan.line);
   // speed: the plan a little ahead, since the brakes take time
   const target = at(plan.vmax, c.s + 0.25 * v, seg) * pace;
   const e = target - v;
