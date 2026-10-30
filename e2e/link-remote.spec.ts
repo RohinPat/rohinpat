@@ -211,6 +211,25 @@ test.describe("phone controllers: golf's driving range", () => {
     await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible();
     await context.close();
   });
+
+  test("the phone switches the laptop between putting and the driving range", async ({ browser, baseURL }) => {
+    const { context, host, phone } = await onTheGrid(browser, baseURL);
+    await phone.locator('[data-piece="golf"]').click();
+    await expect(stage(host)).toBeVisible(SLOW);
+    const game = phone.getByRole("group", { name: "Game" });
+    await expect(game.getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
+    await game.getByRole("button", { name: "Driving range" }).click();
+    await expect(stage(host).getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
+    await expect(host.getByTestId("golf-phone-hint")).toBeVisible();
+    await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible();
+    await game.getByRole("button", { name: "Putt" }).click();
+    await expect(stage(host).getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
+    await expect(phone.getByRole("heading", { name: /putting is on the laptop/i })).toBeVisible();
+    // and the laptop's own switch still reaches the phone
+    await stage(host).getByRole("button", { name: "Driving range" }).click();
+    await expect(game.getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
+    await context.close();
+  });
 });
 
 test.describe("no phone linked: golf is exactly as it was", () => {
