@@ -121,6 +121,28 @@ export const ENGINE_CAL = {
     halfLenM: 2.2,
     /** a car slower than this does not skid or spin, and below it the tyres blend into a plain rolling model, m/s */
     crawlMs: 3,
+    /**
+     * The manual gearbox pays. An upshift with the pedal down and the revs in the green window (the drag strip's PERFECT: from the
+     * shift light, short of the limiter) gives this much extra torque, easing off over shiftBoostS seconds after the torque cut.
+     */
+    shiftBoost: 0.4,
+    shiftBoostS: 0.4,
+    shiftGreenFromRpm: 7300,
+    shiftGreenToRpm: 7980,
+    /**
+     * The clutch kick. A manual downshift with the handbrake held (at least kickHandK of a kick), or one that throws the revs up
+     * (kickMinRpm to kickFullRpm after the change: 0 to a full kick) while the car is turning in, dumps the engine's braking on the
+     * rear tyres for kickS seconds (kickN, N) and swings the tail (kickYaw, N m): the rear lets go and a slide starts. It needs
+     * kickMinMs of speed and waits kickCoolS between kicks.
+     */
+    kickMinRpm: 4800,
+    kickFullRpm: 7000,
+    kickHandK: 0.85,
+    kickS: 0.45,
+    kickN: 7000,
+    kickYaw: 5500,
+    kickMinMs: 14,
+    kickCoolS: 0.9,
   },
 
   // ----------------------------------------------------------- night run: the road
@@ -141,6 +163,48 @@ export const ENGINE_CAL = {
     /** the first straight, m */
     startStraightM: 200,
   },
+
+  // ------------------------------------------------- night run: the climb (the second track)
+  /**
+   * A short, hairpin-heavy road up a mountain, built by the same generator as the canyon (night/road.ts) from its own seed and
+   * corner mix: `mix` is the odds of a gentle, medium, tight and hairpin corner (cumulative shares of one). It rises `riseM`
+   * metres over its length, is a little narrower, and a gate sits on a shorter straight than the canyon's. The clock and the
+   * target driver come out of the road the way they do on the canyon (ENGINE_CAL.run); its medals are in night/medals.ts. The seed is
+   * the best of the first forty for the mix it gave: nine corners, none wider than a 105 m radius, 64 s for the target driver.
+   */
+  climb: {
+    road: {
+      seed: 21,
+      segM: 4,
+      halfWidthM: 4.9,
+      railOffsetM: 0.9,
+      checkEveryM: 240,
+      checkpoints: 7,
+      runOutM: 340,
+      straightMinM: 10,
+      straightVarM: 30,
+      startStraightM: 130,
+      gateStraightM: 20,
+      mix: [0, 0.1, 0.32, 0.58],
+      flip: 0.94,
+      riseM: 230,
+      /** a hairpin's outer rail is a berm to a driver who never brakes: it takes this many times what the canyon's takes of the speed (a hit and the grinding along it) */
+      railK: 2,
+    },
+    /** what is different about the climb's run (the rest is ENGINE_CAL.run): a tighter clock, since a leg is a few seconds */
+    run: { startShare: 1.3, startFlatS: 3, legShare: 1.25, legFlatS: 1.5, finishSecondPoints: 100 },
+    driftPay: 2,
+  },
+
+  // ----------------------------------------------------- night run: the steering assist
+  /**
+   * The assist blends the player's steering toward the wheel that would hold the line (the racing line, or the middle of the
+   * road): light this share of the way, full this share. It fades out while the car slides (from `slipFrom` rad of body angle it
+   * starts to go, and is gone by `slipTo`, which is about where a slide starts to score) and while the handbrake is held, and it
+   * comes back over `upS` seconds once the car has straightened (and `holdS` after the handbrake is let go). It never touches the
+   * score and a phone held like a wheel ignores it.
+   */
+  assist: { light: 0.55, full: 0.8, centre: false, slipFrom: 0.15, slipTo: 0.5, downPerS: 9, upS: 0.7, holdS: 0.35, guard: 2, guardFromM: 1, edgeFrom: 0.9, edgeTo: 1.6 },
 
   // ------------------------------------------------------ night run: the run itself
   run: {

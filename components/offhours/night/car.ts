@@ -1,5 +1,5 @@
 import { ENGINE_CAL, type NightInput } from "../engineRemote";
-import { IDLE, LIMIT, SHIFT_CUT_S, SHIFT_HOLD_S, TOP_GEAR, autoGear, engineRpm, tractiveForce } from "../engineModel";
+import { IDLE, LIMIT, RATIOS, SHIFT_CUT_S, SHIFT_HOLD_S, TOP_GEAR, autoGear, engineRpm, tractiveForce } from "../engineModel";
 import type { Road } from "./road";
 
 // The car: a single-track ("bicycle") model with saturating tyres, which is
@@ -71,12 +71,21 @@ export type Car = {
   /** a gear change (+1 up, -1 down) happened since the game last looked, and the pedal was just lifted off high revs (the exhaust crackles); the game reads and clears them */
   shifted: 0 | 1 | -1;
   lift: boolean;
+  /** a manual upshift in the green window: the extra torque has this long to run (it includes the torque cut), and the game has not yet announced it */
+  boostT: number;
+  boostGood: boolean;
+  /** a manual downshift asked for a kick of this strength (0..1): the next step decides if the car is in a state for it. The kick under way: time left, strength, which way it swings the tail, and the wait before another */
+  kickReq: number;
+  kickT: number;
+  kickK: number;
+  kickDir: number;
+  kickCool: number;
 };
 
 export function newCar(s = 0, lat = 0): Car {
   return {
     s, lat, psi: 0, u: 0, w: 0, r: 0, delta: 0, gear: 0, rpm: IDLE, shiftT: 0, holdT: 0, auto: true,
-    pedal: 0, brake: 0, hand: 0, handT: 99, ax: 0, ay: 0, slip: 0, skid: 0, rearSat: 0, frontSat: 0, hit: 0, scrape: false, wallSide: 1, limiter: false, pop: 0, shifted: 0, lift: false,
+    pedal: 0, brake: 0, hand: 0, handT: 99, ax: 0, ay: 0, slip: 0, skid: 0, rearSat: 0, frontSat: 0, hit: 0, scrape: false, wallSide: 1, limiter: false, pop: 0, shifted: 0, lift: false, boostT: 0, boostGood: false, kickReq: 0, kickT: 0, kickK: 0, kickDir: 1, kickCool: 0,
   };
 }
 
@@ -118,8 +127,20 @@ function tyre(alpha: number, fmax: number): number {
 
 function shiftTo(c: Car, g: number) {
   if (g === c.gear) return;
-  if (g > c.gear && c.pedal > 0.5) c.pop = 1;
-  c.shifted = g > c.gear ? 1 : -1;
+  const up = g > c.gear;
+  if (up && c.pedal > 0.5) c.pop = 1;
+  if (!c.auto) {
+    // by hand: a shift in the green window with the pedal down pays; a downshift that throws the revs up (or comes with the handbrake) kicks the tail
+    if (up && c.pedal > 0.5 && c.rpm >= P.shiftGreenFromRpm && c.rpm < P.shiftGreenToRpm) {
+      c.boostT = SHIFT_CUT_S + P.shiftBoostS;
+      c.boostGood = true;
+    } else if (!up) {
+      const after = (c.rpm * RATIOS[g]) / RATIOS[c.gear];
+      const over = clamp((after - P.kickMinRpm) / (P.kickFullRpm - P.kickMinRpm), 0, 1);
+      c.kickReq = c.hand > 0.5 ? Math.max(over, P.kickHandK) : over;
+    }
+  }
+  c.shifted = up ? 1 : -1;
   c.gear = g;
   c.shiftT = SHIFT_CUT_S;
   c.holdT = SHIFT_HOLD_S;
@@ -157,10 +178,24 @@ export function stepCar(c: Car, inp: NightInput, road: Road, dt: number) {
   c.shiftT = Math.max(0, c.shiftT - dt);
   c.holdT = Math.max(0, c.holdT - dt);
   c.pop = Math.max(0, c.pop - dt * 5);
+  c.boostT = Math.max(0, c.boostT - dt);
+  c.kickT = Math.max(0, c.kickT - dt);
+  c.kickCool = Math.max(0, c.kickCool - dt);
 
   // ---- steering: the lock closes with speed, the wheels take a moment to turn; the road turns the wheel a share
   // of the way round its corner, and the assist counter-steers a slide
   const kap = curv(road, c.s);
+  // a downshift by hand asked for a kick: it takes if the car has the speed, is not just rolling out of one, and is turning in or has the handbrake on
+  if (c.kickReq > 0) {
+    const turning = Math.abs(inp.steer) > 0.06 || Math.abs(kap) > 1 / 300 || c.hand > 0.5;
+    if (c.kickReq > 0.25 && u > P.kickMinMs && c.kickCool <= 0 && turning) {
+      c.kickT = P.kickS;
+      c.kickK = c.kickReq;
+      c.kickCool = P.kickCoolS;
+      c.kickDir = Math.abs(inp.steer) > 0.06 ? Math.sign(inp.steer) : Math.abs(kap) > 1 / 300 ? Math.sign(kap) : Math.abs(c.r) > 0.05 ? Math.sign(c.r) : 1;
+    }
+    c.kickReq = 0;
+  }
   const beta = Math.atan2(c.w, Math.max(u, 1));
   // in a slide the wheels get more room to move: that is where you counter-steer
   const want = clamp(inp.steer, -1, 1) * lockOf(c);
@@ -176,7 +211,9 @@ export function stepCar(c: Car, inp: NightInput, road: Road, dt: number) {
   c.rpm = engineRpm(c.rpm, u, c.gear, c.pedal, dt, c.shiftT > 0);
   c.limiter = c.rpm >= LIMIT - 20 && c.pedal > 0.2;
   const cut = c.shiftT > 0 || c.limiter;
-  const drive = cut ? 0 : tractiveForce(c.rpm, c.gear, c.pedal) * P.powerScale;
+  // a shift in the green window leaves a little extra torque behind it, easing off
+  const boost = 1 + P.shiftBoost * clamp(c.boostT / P.shiftBoostS, 0, 1);
+  const drive = cut ? 0 : tractiveForce(c.rpm, c.gear, c.pedal) * P.powerScale * boost;
 
   // ---- weight: forward under the brakes, back under the throttle, and pressed down by the air
   const shift = clamp(((m * c.ax * P.cgHeightM) / L) * P.loadTransfer, -0.4 * N0R, 0.55 * N0F);
@@ -191,7 +228,9 @@ export function stepCar(c: Car, inp: NightInput, road: Road, dt: number) {
   // ---- forces along the car
   const fb = P.brakeN * c.brake;
   const fbf = fb * P.brakeFront;
-  const fbr = fb * (1 - P.brakeFront) + P.handbrakeN * c.hand * (u > 2 ? 1 : 0);
+  // the clutch kick: the engine's braking lands on the rear tyres all at once, which takes the grip the corner was using
+  const kt = c.kickT > 0 ? c.kickT / P.kickS : 0;
+  const fbr = fb * (1 - P.brakeFront) + P.handbrakeN * c.hand * (u > 2 ? 1 : 0) + P.kickN * c.kickK * kt;
   const lim = 0.92 * muR * nr;
   const fxr = clamp(drive - fbr, -lim, lim);
   const drag = P.dragC * u * u + (u > 0.2 ? P.rollingN : 0);
@@ -218,6 +257,9 @@ export function stepCar(c: Car, inp: NightInput, road: Road, dt: number) {
     const dir = Math.abs(inp.steer) > 0.08 ? Math.sign(inp.steer) : Math.abs(c.r) > 0.05 ? Math.sign(c.r) : 0;
     kick = P.handbrakeKick * dir * clamp(u / 16, 0, 1.6) * (1 - c.handT / 0.32);
   }
+
+  // and it swings the tail the way the car is turning
+  if (kt > 0) kick += P.kickYaw * c.kickK * c.kickDir * clamp(u / 16, 0, 1.6) * kt;
 
   // ---- integrate
   const cd = Math.cos(delta);
@@ -289,7 +331,7 @@ function wall(c: Car, road: Road, dt: number) {
     // bounce a little and lose some speed in proportion to how square it hit
     const e = 0.22;
     const nN = -e * vN;
-    const nT = vT * (1 - clamp(P.wallLossPerMs * into, 0, P.wallLossMax));
+    const nT = vT * (1 - clamp(P.wallLossPerMs * road.railK * into, 0, Math.min(0.9, P.wallLossMax * road.railK)));
     c.u = nT * cp + nN * sp;
     c.w = -nT * sp + nN * cp;
     // the nose is knocked away from the wall
@@ -297,6 +339,6 @@ function wall(c: Car, road: Road, dt: number) {
     if (into > c.hit) c.hit = into;
   }
   // and while it is grinding along the rail it keeps losing speed
-  c.u = Math.max(0, c.u - P.scrapeDecel * dt * clamp(c.u / 20, 0.3, 1));
+  c.u = Math.max(0, c.u - P.scrapeDecel * road.railK * dt * clamp(c.u / 20, 0.3, 1));
   c.u = Math.max(0, c.u);
 }

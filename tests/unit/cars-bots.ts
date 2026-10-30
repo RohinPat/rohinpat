@@ -1,6 +1,5 @@
 import { NO_INPUT, type NightInput } from "@/components/offhours/engineRemote";
 import { NightGame, forgetBestRun } from "@/components/offhours/night/game";
-import { getTarget } from "@/components/offhours/night/target";
 import { drive, planSpeed } from "@/components/offhours/night/ai";
 import { newKeyAxes, stepKeys } from "@/components/offhours/night/nightInput";
 
@@ -32,6 +31,15 @@ export type Bot = {
   pwm?: number;
   /** change gear by hand: up at this many rpm, down at 3,300 */
   manualUp?: number;
+  /** and down at this many rpm (default 3,300) */
+  manualDown?: number;
+  /** by hand, with the handbrake flick: downshift as well (the clutch kick with the handbrake held) */
+  kickWithHand?: boolean;
+  /** by hand, no handbrake: downshift into corners tighter than this curvature at this speed or more, steering into them (a clutch kick) */
+  kickK?: number;
+  kickS?: number;
+  /** what changes on the climb: the same driver with the same character, at the speeds and the corners of a hairpin road */
+  climb?: Partial<Bot>;
 };
 
 function rng(seed: number) {
@@ -70,16 +78,19 @@ export type RunStat = {
 
 const DT = 1 / 60;
 
-export function playRun(bot: Bot, seed = 1, setup?: (g: NightGame) => void): RunStat {
+export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): RunStat {
   forgetBestRun();
   const R = rng(seed * 7919 + 13);
   const g = new NightGame(true);
   setup?.(g);
-  const plan = getTarget().plan;
+  const bot: Bot = g.track.id === "climb" && base.climb ? { ...base, ...base.climb } : base;
+  const plan = g.target.plan;
   const ai: NightInput = { ...NO_INPUT };
   const inp: NightInput = { steer: 0, throttle: 1, brake: 0, hand: 0 };
   const axes = newKeyAxes();
   let handUntil = -1;
+  let kickUntil = -1;
+  let kickedFlick = false;
   let cool = 0;
   const lag = Math.round((bot.react ?? 0) / DT);
   const q: { dir: number; gas: boolean; brake: boolean; hand: boolean }[] = [];
@@ -100,7 +111,8 @@ export function playRun(bot: Bot, seed = 1, setup?: (g: NightGame) => void): Run
       const v = Math.max(1, Math.hypot(c.u, c.w));
       if (bot.manualUp) {
         if (c.rpm > bot.manualUp && c.gear < 5) g.shift(1);
-        else if (c.rpm < 3300 && c.gear > 0) g.shift(-1);
+        // down at 3,300 (but not into a handbrake slide, which is a kick: only a driver who means it does that)
+        else if (c.rpm < (bot.manualDown ?? 3300) && c.gear > 0 && (bot.kickWithHand || (g.clock >= handUntil && c.hand < 0.5))) g.shift(-1);
       }
       let dir = 0;
       let gas = true;
@@ -148,6 +160,25 @@ export function playRun(bot: Bot, seed = 1, setup?: (g: NightGame) => void): Run
         }
         if (g.clock < handUntil) {
           hand = true;
+          gas = true;
+          brake = false;
+          dir = Math.sign(k || 1);
+          // the handbrake is on (the car sees it from the next step): downshift into the slide
+          if (bot.kickWithHand && bot.manualUp && !kickedFlick && c.hand > 0.5 && c.gear > 0) {
+            g.shift(-1);
+            kickedFlick = true;
+          }
+        } else kickedFlick = false;
+      }
+      if (bot.kickK && bot.manualUp) {
+        cool -= DT;
+        const k = g.road.kappa[Math.round((c.s + 40) / g.road.segM)] || 0;
+        if (cool <= 0 && Math.abs(k) > bot.kickK && v > (bot.kickS ?? 30) && c.gear > 0 && !bot.flickK) {
+          kickUntil = g.clock + 0.4;
+          cool = 1.5;
+          g.shift(-1);
+        }
+        if (g.clock < kickUntil) {
           gas = true;
           brake = false;
           dir = Math.sign(k || 1);
@@ -221,9 +252,19 @@ export const BOTS: Bot[] = [
   { name: "gas+steer", pace: 9, gasOnly: true, steer: true, react: 0.15, noise: 0.2 },
   { name: "cue-only", pace: 9, steer: true, cueOnly: true, react: 0.25, noise: 0.2 },
   { name: "cautious", pace: 0.78, steer: true, cueBrake: true, react: 0.2, noise: 0.2 },
-  { name: "decent", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2 },
-  { name: "precise", pace: 0.95, steer: true, flickK: 1 / 330, flickCool: 0.8, flickS: 18, react: 0, noise: 0, pwm: 0.07 },
-  { name: "drifter", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2 },
+  // on the climb every corner is tighter than the canyon's flick marks, so the drivers flick by the same character at the road's own marks: the decent one the hairpins only, the drifter every bend
+  { name: "decent", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, climb: { flickK: 1 / 75, flickS: 16 } },
+  { name: "precise", pace: 0.95, steer: true, flickK: 1 / 330, flickCool: 0.8, flickS: 18, react: 0, noise: 0, pwm: 0.07, climb: { flickK: 1 / 120, flickS: 14 } },
+  { name: "drifter", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2, climb: { flickK: 1 / 130, flickS: 14, flickCool: 1.0 } },
+  // the same drivers by hand: up in the green window (7,300 to the limiter), a good shift; early and late are not
+  { name: "decent-manual", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, manualUp: 7350 },
+  { name: "decent-early", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, manualUp: 6400 },
+  { name: "decent-late", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, manualUp: 7990 },
+  { name: "drifter-manual", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2, manualUp: 7350 },
+  { name: "drifter-kick", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2, manualUp: 7350, kickWithHand: true },
+  // the automatic box with the same corners and the handbrake: what the clutch kick is measured against
+  { name: "flicker", pace: 1.0, steer: true, flickK: 1 / 300, flickS: 28, flickCool: 1.5, react: 0.1, noise: 0.2 },
+  { name: "kicker", pace: 1.0, steer: true, kickK: 1 / 300, kickS: 28, react: 0.1, noise: 0.2, manualUp: 7350 },
 ];
 
 export function stats(xs: number[]) {

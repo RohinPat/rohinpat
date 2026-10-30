@@ -18,14 +18,24 @@ export const MEDALS: Medal[] = [
   { name: "GOLD", score: 34_000 },
 ];
 
-/** How many medals this score has earned (0 to 3). */
-export function medalsAt(score: number): number {
+/**
+ * The climb's own marks, set the same way from the same drivers on its road (tests/unit/cars-climb.test.ts keeps them honest):
+ * a driver who only holds the gas does not reach bronze, a decent one is around silver, and the greedy drifter golds.
+ */
+export const CLIMB_MEDALS: Medal[] = [
+  { name: "BRONZE", score: 7_000 },
+  { name: "SILVER", score: 10_000 },
+  { name: "GOLD", score: 14_000 },
+];
+
+/** How many medals this score has earned (0 to 3), against a track's marks (the canyon's unless told). */
+export function medalsAt(score: number, table: Medal[] = MEDALS): number {
   let n = 0;
-  for (const m of MEDALS) if (score >= m.score) n++;
+  for (const m of table) if (score >= m.score) n++;
   return n;
 }
 
 /** The next medal to earn from this score, or null at the top. */
-export function nextMedal(score: number): Medal | null {
-  return MEDALS[medalsAt(score)] ?? null;
+export function nextMedal(score: number, table: Medal[] = MEDALS): Medal | null {
+  return table[medalsAt(score, table)] ?? null;
 }

@@ -3,6 +3,7 @@ import { buildPlan, drive, type Plan } from "./ai";
 import { newCar, stepCar, type Car } from "./car";
 import { createRecorder, newPose, timeAt, type Ghost, type Pose } from "./ghost";
 import { getRoad, type Road } from "./road";
+import { TRACKS, type TrackId } from "./tracks";
 
 // The target driver's run, recorded once from the AI at the pace the road
 // allows it. It is the ghost to chase, the tile's attract mode, and the yardstick
@@ -62,12 +63,14 @@ export function recordAI(road: Road, plan: Plan, pace = RUN.targetPace): Ghost {
   return rec.snapshot(finishT, true);
 }
 
-let cached: Target | null = null;
+const cached: Partial<Record<TrackId, Target>> = {};
 
-/** The target run (built on first use: a few milliseconds of driving). */
-export function getTarget(): Target {
-  if (cached) return cached;
-  const road = getRoad();
+/** A track's target run (built on first use: a few milliseconds of driving; the canyon's unless told). */
+export function getTarget(track: TrackId = "canyon"): Target {
+  const had = cached[track];
+  if (had) return had;
+  const road = getRoad(track);
+  const run = TRACKS[track].run;
   const plan = buildPlan(road);
   const ghost = recordAI(road, plan);
   const legT: number[] = [];
@@ -76,9 +79,8 @@ export function getTarget(): Target {
     const t = timeAt(ghost, road.checks[k]) ?? ghost.time;
     legT.push(t);
     const next = k + 1 < road.checks.length ? (timeAt(ghost, road.checks[k + 1]) ?? ghost.time) - t : 0;
-    bonusS.push(k + 1 < road.checks.length ? Math.round((next * RUN.legShare + RUN.legFlatS) * 2) / 2 : 0);
+    bonusS.push(k + 1 < road.checks.length ? Math.round((next * run.legShare + run.legFlatS) * 2) / 2 : 0);
   }
-  const startS = Math.round((legT[0] * RUN.startShare + RUN.startFlatS) * 2) / 2;
-  cached = { road, plan, ghost, startS, bonusS, legT };
-  return cached;
+  const startS = Math.round((legT[0] * run.startShare + run.startFlatS) * 2) / 2;
+  return (cached[track] = { road, plan, ghost, startS, bonusS, legT });
 }
