@@ -662,8 +662,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
       if (Math.abs(d - dCar) < 0.7 && Math.abs(g.pose.lat - car.lat) < 0.9) continue;
       if ((pass === 0) !== d > dCar) continue;
       if (d < 3 || d > 330) continue;
-      drawCar(ctx, v, gp, g.kind === 0 ? GHOST_TARGET : GHOST_BEST);
-      if (d > 7 && d < 140) tag(ctx, v, gp, g.kind === 0 ? "TARGET" : "YOUR BEST", g.kind === 0 ? "#8ad9a8" : "#f2ead7", d);
+      const look = g.kind === 0 ? GHOST_TARGET : GHOST_BEST;
+      // one behind the car is between it and the camera: faint, and gone as it nears the lens, so it never hides the road or the car
+      const behind = d < dCar;
+      look.alpha = behind ? 0.35 * Math.max(0, Math.min(1, (d - 3) / Math.max(1, dCar - 3))) : 1;
+      if (look.alpha < 0.03) continue;
+      drawCar(ctx, v, gp, look);
+      if (!behind && d > 7 && d < 140) tag(ctx, v, gp, g.kind === 0 ? "TARGET" : "YOUR BEST", g.kind === 0 ? "#8ad9a8" : "#f2ead7", d);
     }
   }
   drawSparks(ctx, sc, v);

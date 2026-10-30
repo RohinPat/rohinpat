@@ -397,13 +397,13 @@ export class NightGame {
     this.shiftFlash = Math.max(0, this.shiftFlash - dt);
     this.bankFlash = Math.max(0, this.bankFlash - dt * 1.8);
     this.goFlash = Math.max(0, this.goFlash - dt);
+    // the corner warning has the middle of the screen: what is on it waits (for a while at most), and so does the one queued
+    // behind it, or the queued one would catch up and the two would show at once
+    const held = this.cue.on ? this.toasts.find((t) => t.slot === "main" && t.age >= 0 && (t.held ?? 0) < 1.2) : undefined;
+    if (held) held.held = (held.held ?? 0) + dt;
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       const t = this.toasts[i];
-      // the corner warning has the middle of the screen: what is on it waits (for a while at most)
-      if (t.slot === "main" && this.cue.on && t.age >= 0 && (t.held ?? 0) < 1.2) {
-        t.held = (t.held ?? 0) + dt;
-        continue;
-      }
+      if (held && t.slot === "main") continue;
       t.age += dt;
       if (t.age >= t.life) this.toasts.splice(i, 1);
     }

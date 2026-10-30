@@ -14,7 +14,7 @@ import type { TrackId } from "./tracks";
 // on the horizon, cream paint, the warm of sodium lamps for contrast.
 //
 // A track config (THEMES) changes the place without a second renderer: the climb is higher
-// and colder, with a taller sky, steel-blue haze and snow-white ridges, a sea of cloud
+// and colder, with a taller sky, a cold green haze and snow-white ridges, a sea of cloud
 // below the horizon where the canyon has a town, and cool asphalt and rock. The canyon's
 // own numbers are the ones it always had.
 
@@ -156,19 +156,19 @@ const THEMES: Record<TrackId, Theme> = {
   },
   climb: {
     seed: 31_337,
-    fog: [26, 42, 64],
-    rim: "rgba(214,232,255,",
+    fog: [22, 44, 46],
+    rim: "rgba(214,240,232,",
     hy: 0.5,
-    sky: [[0, "#01030a"], [0.42, "#040b1c"], [0.74, "#0b1d34"], [0.92, "#183653"], [1, "#27506f"]],
-    wash: "rgba(150,196,240,",
-    haze: ["rgba(190,214,255,0)", "rgba(190,214,255,0.1)", "rgba(190,214,255,0)"],
-    ground: [[0, "#0a111a"], [0.35, "#060b12"], [1, "#03060b"]],
+    sky: [[0, "#010406"], [0.42, "#04100f"], [0.74, "#0a2124"], [0.92, "#153a3c"], [1, "#22504f"]],
+    wash: "rgba(160,224,206,",
+    haze: ["rgba(200,236,224,0)", "rgba(200,236,224,0.1)", "rgba(200,236,224,0)"],
+    ground: [[0, "#08120f"], [0.35, "#050c0b"], [1, "#030606"]],
     cool: 1,
     stars: 1.6,
     moon: 0.8,
-    far: { top: [92, 116, 152], bottom: [34, 52, 80], rim: 0.62, h: 0.27, floor: 0.2, peaky: 0.88, haze: 0.5 },
-    mid: { top: [34, 50, 76], bottom: [16, 26, 44], rim: 0.3 },
-    near: { top: [11, 17, 29], bottom: [6, 10, 18], rim: 0.12, teeth: false },
+    far: { top: [86, 120, 118], bottom: [30, 54, 56], rim: 0.62, h: 0.27, floor: 0.2, peaky: 0.88, haze: 0.5 },
+    mid: { top: [30, 52, 52], bottom: [14, 28, 29], rim: 0.3 },
+    near: { top: [10, 18, 18], bottom: [6, 11, 11], rim: 0.12, teeth: false },
     clouds: true,
   },
 };

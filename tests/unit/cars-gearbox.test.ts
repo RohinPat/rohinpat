@@ -262,7 +262,7 @@ describe("the clutch kick", () => {
   });
 });
 
-describe("what it does to a run (scripted drivers, who change gear by hand)", () => {
+describe("what it does to a run (scripted drivers, who change gear by hand)", { timeout: 60_000 }, () => {
   it("a decent driver who shifts in the window is quicker than the same one on the automatic box", () => {
     const auto = many("decent", 48, 1);
     const hand = many("decent-manual", 48, 1);

@@ -534,7 +534,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           type="button"
           data-testid="night-assist"
           onClick={cycleAssist}
-          className={`h-8 rounded-full border border-white/15 px-3.5 ${assist > 0 ? "bg-[var(--paper)] text-[var(--ink)]" : "bg-[#0d100e]/70 text-[#f2ead7] hover:bg-white/10"}`}
+          // on a phone the row is too wide for the clock while driving: the assist is picked before a run, so it steps aside during one
+          className={`h-8 rounded-full border border-white/15 px-3.5 ${phase === "run" || phase === "count" ? "max-sm:hidden" : ""} ${assist > 0 ? "bg-[var(--paper)] text-[var(--ink)]" : "bg-[#0d100e]/70 text-[#f2ead7] hover:bg-white/10"}`}
         >
           Assist: {ASSIST_NAMES[assist]}
         </button>

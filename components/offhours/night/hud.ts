@@ -492,10 +492,10 @@ function drawToast(ctx: CanvasRenderingContext2D, t: Toast, x: number, y: number
 function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean, lift: number) {
   ctx.textAlign = "center";
   if (!g.cue.on) {
-    for (const t of g.toasts) {
-      if (t.slot !== "main" || t.age < 0) continue;
-      drawToast(ctx, t, w / 2, h * 0.4, u, 44 * u, reduce);
-    }
+    // the one that has been up longest, should two ever overlap
+    let main: (typeof g.toasts)[number] | null = null;
+    for (const t of g.toasts) if (t.slot === "main" && t.age >= 0 && (!main || t.age > main.age)) main = t;
+    if (main) drawToast(ctx, main, w / 2, h * 0.4, u, 44 * u, reduce);
   }
   for (const t of g.toasts) {
     if (t.slot !== "bank") continue;

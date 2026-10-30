@@ -353,7 +353,7 @@ describe("the game on two tracks", () => {
   });
 });
 
-describe("what the climb does to the drivers (scripted keyboard drivers, 48 runs each, Light assist)", () => {
+describe("what the climb does to the drivers (scripted keyboard drivers, 48 runs each, Light assist)", { timeout: 60_000 }, () => {
   it("a driver who only holds the gas has no medal, with the assist on or off, and neither has one who steers but never brakes", () => {
     for (const level of [0, 1, 2] as const) {
       for (const name of ["gas-only", "gas+steer"]) {

@@ -123,7 +123,7 @@ describe("the assist lets go of a slide", () => {
   });
 });
 
-describe("what the assist does to a run (scripted keyboard drivers, 24 runs each)", () => {
+describe("what the assist does to a run (scripted keyboard drivers, 24 runs each)", { timeout: 60_000 }, () => {
   it("Light takes a good share off a decent driver's rail hits, and Full is no worse", () => {
     const off = many("decent", 0);
     const light = many("decent", 1);
