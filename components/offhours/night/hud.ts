@@ -2,6 +2,7 @@ import { ENGINE_CAL } from "../engineRemote";
 import { LIMIT, REDLINE, TOP_GEAR } from "../engineModel";
 import { fontFamilies } from "../font";
 import { getBestScore, mph, type NightGame, type Toast } from "./game";
+import { adviceFor } from "./advice";
 import { MEDALS, medalsAt, nextMedal } from "./medals";
 import { pending } from "./score";
 
@@ -196,7 +197,9 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
   ctx.arc(cx, cy, R, ang(REDLINE), a1);
   ctx.stroke();
   const rpm = live || g.phase === "count" ? car.rpm : 900;
-  ctx.strokeStyle = rpm >= REDLINE ? RED : MINT;
+  // on the rev limiter the whole ring goes red and says so (steady: nothing here blinks)
+  const limiter = live && car.limiter;
+  ctx.strokeStyle = limiter || rpm >= REDLINE ? RED : MINT;
   ctx.beginPath();
   ctx.arc(cx, cy, R, a0, ang(rpm));
   ctx.stroke();
@@ -207,12 +210,18 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     ctx.fillRect(cx + Math.cos(a) * (R - 11 * u) - 1, cy + Math.sin(a) * (R - 11 * u) - 1, 2, 2);
   }
   // the shift light (by hand only): steady, amber on the way and red at the line. It does not flash: a light that blinks faster than three times a second is not safe to look at, and a steady one reads as well
-  if (car.rpm >= ENGINE_CAL.engine.shiftAt - 600 && !car.auto && live) {
+  if (car.rpm >= ENGINE_CAL.engine.shiftAt - 600 && !car.auto && live && !car.limiter) {
     const over = car.rpm >= ENGINE_CAL.engine.shiftAt;
     ctx.fillStyle = over ? RED : AMBER;
     ctx.beginPath();
     ctx.arc(cx, cy - R - 10 * u, (over && !reduce ? 5.5 + 1.5 * Math.sin(now * 12) : 5) * u, 0, Math.PI * 2);
     ctx.fill();
+  }
+  if (limiter) {
+    ctx.textAlign = "center";
+    font(ctx, "m", Math.max(10, 11 * u), 700);
+    ctx.fillStyle = RED;
+    ctx.fillText(car.auto ? "REV LIMIT" : "REV LIMIT: SHIFT UP", cx, cy - R - 24 * u);
   }
   const speed = Math.round(mph(g.speed));
   ctx.textAlign = "center";
@@ -263,6 +272,18 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     font(ctx, "d", 26 * u, 800);
     ctx.fillStyle = MINT;
     ctx.fillText(fmt("bonus", Math.round(g.bonusS * 10), (v) => `+${(v / 10).toFixed(1)}`), (narrow ? ax + tw : ax + tw / 2) + 10 * u, top + 22 * u + 48 * u + rise);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = align;
+  }
+  if (g.penaltyShown > 0 && g.bonusShown <= 0) {
+    // what a rail touch took off the clock, next to it, in red
+    const tw = ctx.measureText(clockTxt).width;
+    const k = Math.min(1, g.penaltyShown / 0.4);
+    ctx.globalAlpha = k;
+    ctx.textAlign = "left";
+    font(ctx, "d", 26 * u, 800);
+    ctx.fillStyle = RED;
+    ctx.fillText(fmt("penalty", Math.round(g.penaltyS * 10), (v) => `−${(v / 10).toFixed(1)}`), (narrow ? ax + tw : ax + tw / 2) + 10 * u, top + 22 * u + 48 * u);
     ctx.globalAlpha = 1;
     ctx.textAlign = align;
   }
@@ -482,7 +503,11 @@ function drawToasts(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
 const COACH: Record<string, [string, string]> = {
   steer: ["← → STEER · ↓ BRAKE · HOLD THE GAS", "STEER WITH THE PADS · BRAKE · HOLD THE GAS"],
   slide: ["SLIDING EARNS POINTS. STRAIGHTEN OUT TO BANK THEM", "SLIDING EARNS POINTS. STRAIGHTEN OUT TO BANK THEM"],
-  wall: ["A RAIL SLOWS YOU. LIFT OR BRAKE BEFORE A CORNER", "A RAIL SLOWS YOU. LIFT OR BRAKE BEFORE A CORNER"],
+  wall: ["A RAIL SLOWS YOU AND COSTS TIME. LIFT OR BRAKE BEFORE A CORNER", "A RAIL SLOWS YOU AND COSTS TIME. LIFT OR BRAKE BEFORE A CORNER"],
+  "wall-fast": ["TOO FAST FOR THAT BEND. BRAKE WHEN THE WARNING SHOWS", "TOO FAST FOR THAT BEND. BRAKE WHEN THE WARNING SHOWS"],
+  "wall-slide": ["THE SLIDE WENT WIDE. STEER INTO IT, EASE THE GAS", "THE SLIDE WENT WIDE. STEER INTO IT, EASE THE GAS"],
+  "wall-line": ["OFF THE LINE. SHORT TAPS ON THE KEYS AT SPEED", "OFF THE LINE. SHORT TAPS ON THE PADS AT SPEED"],
+  hand: ["TAP SHIFT AS YOU TURN IN: THE HANDBRAKE SLIDES THE TAIL", "TAP DRIFT AS YOU TURN IN: THE HANDBRAKE SLIDES THE TAIL"],
   "wall-points": ["A RAIL TAKES THE POINTS YOU HAVE NOT BANKED", "A RAIL TAKES THE POINTS YOU HAVE NOT BANKED"],
 };
 function drawCoach(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, touch: boolean) {
@@ -513,7 +538,7 @@ function drawCoach(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
 function drawCount(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, reduce: boolean) {
   const n = g.count;
   if (!n) return;
-  const phase = (g.phaseT % 0.9) / 0.9;
+  const phase = (g.phaseT % g.countStep) / g.countStep;
   const k = reduce ? 1 : 1.25 - 0.25 * ease(phase * 3);
   ctx.textAlign = "center";
   ctx.save();
@@ -546,7 +571,7 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   const best = getBestScore();
   const text = [
     opt.touch ? "STEER WITH THE PADS. BRAKE, OR TAP DRIFT TO KICK THE TAIL OUT." : "← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX · R RESTART",
-    "SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM.",
+    `SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM AND ${ENGINE_CAL.run.railPenaltyS} S.`,
     best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `${g.road.checks.length} CHECKPOINTS ADD TIME. MEDALS AT ${MEDALS.map((m) => grouped(m.score)).join(" · ")}`,
   ];
   // the how-to sits on a dark card: the road's white lines run right through it otherwise
@@ -564,7 +589,7 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
 }
 
 /** how tall the end card is, in the dash's own units, and where its bottom edge is on the canvas (the button goes under it) */
-const RESULT_H = 428;
+const RESULT_H = 372;
 export function resultBottom(w: number, h: number, opt: { touch: boolean }) {
   void opt;
   const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
@@ -613,8 +638,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     r.finished ? ["FINISH TIME", clock(r.time)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
     vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
-    ["DRIFT BANKED", grouped(r.driftTotal)],
-    ["BEST THIS VISIT", grouped(r.bestScore)],
+    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · −${Math.round(r.railS)} S`],
   ];
   rows.forEach(([k, v], i) => {
     const ry = y + 160 * u + i * 31 * u;
@@ -629,24 +653,18 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   });
   ctx.textAlign = "left";
   font(ctx, "m", 11 * u, 700);
-  // the lines under the rows: the next medal to go for, a new best score (there was one before it to beat), and the ghost
-  const lineY = y + ph - 60 * u;
-  let n = 0;
-  if (r.next) {
-    ctx.fillStyle = MEDAL_COLOR[r.bestMedals];
-    ctx.fillText(`NEXT: ${r.next.name} AT ${grouped(r.next.score)}, ${grouped(r.next.score - r.bestScore)} MORE`, x + 28 * u, lineY - n * 20 * u);
-    n++;
-  }
-  if (r.prevBestScore > 0 && r.score > r.prevBestScore) {
-    ctx.fillStyle = MINT;
-    ctx.fillText(`● NEW BEST SCORE, UP FROM ${grouped(r.prevBestScore)}`, x + 28 * u, lineY - n * 20 * u);
-    n++;
-  }
-  if (r.newBest) {
-    ctx.fillStyle = MINT;
-    ctx.fillText("● NEW BEST RUN: IT RACES YOU NEXT TIME", x + 28 * u, lineY - n * 20 * u);
+  // under the rows, two things at most: one thing to do better, and one line on where this run stands (a new best score, else the next medal)
+  const lineY = y + ph - 30 * u;
+  let status: [string, string] | null = null;
+  if (r.prevBestScore > 0 && r.score > r.prevBestScore) status = [`NEW BEST, UP FROM ${grouped(r.prevBestScore)}`, MINT];
+  else if (r.next) status = [`${r.next.name} AT ${grouped(r.next.score)}`, MEDAL_COLOR[r.bestMedals]];
+  if (status) {
+    ctx.fillStyle = status[1];
+    ctx.fillText(status[0], x + 28 * u, lineY);
   }
   ctx.fillStyle = CREAM;
-  ctx.fillText(opt.touch ? "TAP TO DRIVE AGAIN" : "ENTER OR SPACE TO DRIVE AGAIN", x + 28 * u, y + ph - 26 * u);
+  const tipLines = wrap(ctx, adviceFor(r, opt.touch), pw - 56 * u);
+  const above = status ? 1 : 0;
+  tipLines.forEach((l, i) => ctx.fillText(l, x + 28 * u, lineY - (above + tipLines.length - 1 - i) * 20 * u - (status ? 6 * u : 0)));
   void LIMIT;
 }

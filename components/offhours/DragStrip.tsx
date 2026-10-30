@@ -5,10 +5,11 @@ import { useCanvas, type PieceProps } from "./useCanvas";
 import { burst, getAudio } from "./audio";
 import { display, mono } from "./font";
 import type { Remote, RemoteHandlers } from "@/lib/link/remote";
-import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, rpmRate, type EnginePhase } from "./engineRemote";
-import { IDLE, LIMIT, REDLINE, RATIOS, FINAL, SHIFT_AT, WHEEL, torque, wheelRpm } from "./engineModel";
+import { ENGINE_CAL, engineStateData, parseThrottle, pedalStep, type EnginePhase } from "./engineRemote";
+import { LIMIT, REDLINE, RATIOS, SHIFT_AT } from "./engineModel";
+import { LAUNCH, QUARTER, TREE_STEP_S, dragAdvice, freshCar, parEt, shiftUp, sinceAmber, stepDrag, treeTime, type DragCar } from "./dragModel";
 import { EngineVoice } from "./engineVoice";
-import { DRAG_GHOST_DT, gapToGhost, ghostAt, type DragPath } from "./dragGhost";
+import { gapToGhost, ghostAt, type DragPath } from "./dragGhost";
 import { paintStrip, stripGeom } from "./night/stripScene";
 
 // The drag strip: a race dash and a quarter mile (Cars' second mode; Night run
@@ -24,18 +25,8 @@ import { paintStrip, stripGeom } from "./night/stripScene";
 // rubber on the line), with the start tree beside the line and the distances on
 // boards along the foot.
 
-const QUARTER = 402.3;
-
-/**
- * The launch. The light goes green and the car goes with whatever the revs are
- * then: inside the band it is a launch, outside it is not (too few and it bogs,
- * too many and the tyres spin). Inside the band the best is near the middle:
- * the further from SWEET, the more the tyres slip off the line.
- */
 /** a run can be started again this long after the line (so the finish is not skipped by a key still held), s */
 const AGAIN_AFTER_S = 0.6;
-
-const LAUNCH = { lo: 3200, hi: 6500, sweet: 4900, perfect: 350, great: 900 };
 
 /** the quickest quarter of this visit: memory only, kept while the strip is closed and opened again, gone with the page */
 let bestVisit: number | null = null;
@@ -64,64 +55,6 @@ function layer(prev: Layer | undefined, key: string, w: number, h: number, dpr: 
   return { key, c };
 }
 
-type Car = {
-  phase: "idle" | "tree" | "run" | "done";
-  rpm: number;
-  v: number;
-  x: number;
-  gear: number;
-  throttle: boolean;
-  /** how far down the pedal is, 0..1: 1 for the keys and the button, anything for a phone */
-  pedal: number;
-  shiftT: number;
-  tree: number;
-  t: number;
-  split60: number | null;
-  perfect: number;
-  call: string;
-  callT: number;
-  /** how the launch went (kept for the end card), and the revs at green */
-  launch: string;
-  launchRpm: number;
-  /** seconds since the finish line, and what it did to the best time (null: a first run or a tile) */
-  doneT: number;
-  /** the speed over the line, mph */
-  trap: number;
-  vsBest: number | null;
-  limiter: number;
-  slip: number;
-  best: number | null;
-  stageHeld: number;
-  pop: number;
-};
-
-const freshCar = (best: number | null = null): Car => ({
-  phase: "idle",
-  rpm: IDLE,
-  v: 0,
-  x: 0,
-  gear: 0,
-  throttle: false,
-  pedal: 0,
-  shiftT: 0,
-  tree: 0,
-  t: 0,
-  split60: null,
-  perfect: 0,
-  call: "",
-  callT: 0,
-  launch: "",
-  launchRpm: 0,
-  doneT: 0,
-  trap: 0,
-  vsBest: null,
-  limiter: 0,
-  slip: 0,
-  best,
-  stageHeld: 0,
-  pop: 0,
-});
-
 export type DragProps = PieceProps & {
   /** the phone link (Engine.tsx owns it: both modes share one) */
   remote: Remote;
@@ -131,7 +64,7 @@ export type DragProps = PieceProps & {
 
 export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const play = mode === "play";
-  const car = useRef<Car>(freshCar(play ? bestVisit : null));
+  const car = useRef<DragCar>(freshCar(play ? bestVisit : null));
   const eng = useRef<EngineVoice | null>(null);
   const clock = useRef(0);
   const [done, setDone] = useState<string>("");
@@ -148,7 +81,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
 
   useEffect(() => {
     // with the mock link (tests, local work) a page can read the dash
-    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: Car; ghost: DragPath | null } }).__drag = {
+    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock"))) (window as unknown as { __drag?: { car: DragCar; ghost: DragPath | null } }).__drag = {
         get car() {
           return car.current;
         },
@@ -190,15 +123,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     }
   };
   const shift = () => {
-    const c = car.current;
-    if (c.phase !== "run" || c.gear >= RATIOS.length - 1 || c.shiftT > 0) return;
-    const rpm = c.rpm;
-    c.call = rpm >= SHIFT_AT && rpm <= LIMIT ? "PERFECT" : rpm < SHIFT_AT - 900 ? "EARLY" : "GOOD";
-    if (c.call === "PERFECT") c.perfect++;
-    c.callT = clock.current;
-    c.gear++;
-    c.shiftT = c.call === "PERFECT" ? 0.09 : 0.16;
-    c.pop = 1;
+    if (!shiftUp(car.current, clock.current)) return;
     if (play) {
       const au = getAudio();
       if (au) {
@@ -241,7 +166,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     told.current.key = "";
   }, [remote.linked]);
   /** tell the phone where the dash is: when it changed, and not more than ten times a second */
-  function tellPhone(c: Car, t: number) {
+  function tellPhone(c: DragCar, t: number) {
     const r = linkRef.current;
     if (!r.linked || t * 1000 - told.current.at < ENGINE_CAL.stateEveryMs) return;
     const phase: EnginePhase = c.phase;
@@ -302,7 +227,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     if (play && (!a || a === document.body || a.closest('[aria-label="Mode"]'))) ref.current?.focus();
   }, [play, ref]);
 
-  function autopilot(c: Car, dt: number) {
+  function autopilot(c: DragCar, dt: number) {
     if (c.phase === "idle") c.throttle = Math.sin(clock.current * 3) > 0.3 || c.stageHeld > 0;
     if (c.phase === "idle" && clock.current % 6 > 4.5) c.throttle = true;
     if (c.phase === "tree" || c.phase === "run") c.throttle = true;
@@ -313,92 +238,31 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     }
   }
 
-  function simulate(c: Car, dt: number, t: number) {
-    if (c.phase === "idle") {
-      // free revving: stage by holding the throttle
-      c.rpm += rpmRate(c.pedal, 9000, 6000) * dt;
-      c.stageHeld = c.throttle ? c.stageHeld + dt : 0;
-      if (c.stageHeld > 0.35) {
-        c.phase = "tree";
-        c.tree = 0;
-      }
-    } else if (c.phase === "tree") {
-      c.rpm += rpmRate(c.pedal, 7000, 6000) * dt;
-      c.tree += dt;
-      if (c.tree >= 1.6) {
-        c.phase = "run";
-        c.t = 0;
-        // launch: too few revs bogs, too many spins the tyres, and in between the tyres slip more the further from the sweet spot
-        const off = Math.abs(c.rpm - LAUNCH.sweet);
-        c.slip = c.rpm > LAUNCH.hi ? 0.9 : c.rpm < LAUNCH.lo ? -0.6 : 0.05 + 0.35 * Math.min(1, off / 1600);
-        c.call = c.rpm > LAUNCH.hi ? "WHEELSPIN" : c.rpm < LAUNCH.lo ? "BOGGED" : off <= LAUNCH.perfect ? "PERFECT LAUNCH" : off <= LAUNCH.great ? "GREAT LAUNCH" : "GOOD LAUNCH";
-        c.launch = c.call;
-        c.launchRpm = c.rpm;
-        c.callT = t;
-        rec.current = [0];
-        if (play) {
-          const au = getAudio();
-          if (au && c.slip > 0.3) burst(au, { freq: 1700, q: 6, dur: 0.25, gain: 0.2 * Math.min(1, c.slip) });
+  function simulate(c: DragCar, dt: number, t: number) {
+    stepDrag(c, dt, t, rec.current, {
+      green: (slip) => {
+        if (!play) return;
+        const au = getAudio();
+        if (au && slip > 0.3) burst(au, { freq: 1700, q: 6, dur: 0.25, gain: 0.2 * Math.min(1, slip) });
+      },
+      finish: () => {
+        if (!play) return;
+        const faster = c.vsBest === null || c.vsBest < 0;
+        bestVisit = c.best;
+        if (faster) {
+          rec.current.push(QUARTER);
+          bestPath = Float32Array.from(rec.current);
         }
-      }
-    } else if (c.phase === "run") {
-      c.t += dt;
-      // the run as a path, for the ghost
-      while (c.t >= rec.current.length * DRAG_GHOST_DT && rec.current.length < 1200) rec.current.push(c.x);
-      const coupled = wheelRpm(c.v, c.gear);
-      c.shiftT = Math.max(0, c.shiftT - dt);
-      // engine speed: tied to the wheels, plus launch slip that decays
-      c.slip *= Math.exp(-dt * 2.2);
-      const target = Math.max(IDLE + 1500 * Math.max(0, c.slip), coupled * (1 + Math.max(0, c.slip) * 0.35));
-      c.rpm += (target - c.rpm) * Math.min(1, dt * (c.shiftT > 0 ? 18 : 10));
-      const onLimiter = c.rpm >= LIMIT;
-      c.limiter = onLimiter ? c.limiter + dt : 0;
-      const drive =
-        c.throttle && c.shiftT <= 0 && !(onLimiter && Math.floor(t * 30) % 2)
-          ? Math.min(17500, (torque(c.rpm) * RATIOS[c.gear] * FINAL * 0.9) / WHEEL) * c.pedal // traction-limited
-          : 0;
-      const bog = c.slip < 0 ? 1 + c.slip * 0.9 : 1 - Math.max(0, c.slip) * 0.65;
-      const drag = 0.39 * c.v * c.v + 180;
-      const a = (drive * bog - drag) / 1550;
-      c.v = Math.max(0, c.v + a * dt);
-      c.x += c.v * dt;
-      c.rpm = Math.min(LIMIT + 60, Math.max(IDLE, c.rpm));
-      if (c.split60 === null && c.v * 2.237 >= 60) c.split60 = c.t;
-      if (c.limiter > 0.15 && t - c.callT > 0.6) {
-        c.call = "LIMITER";
-        c.callT = t;
-      }
-      if (c.x >= QUARTER) {
-        c.phase = "done";
-        c.tree = 0;
-        c.doneT = 0;
-        c.trap = c.v * 2.237;
-        c.vsBest = c.best === null ? null : c.t - c.best;
-        const faster = c.best === null || c.t < c.best;
-        c.best = c.best === null ? c.t : Math.min(c.best, c.t);
-        if (play) {
-          bestVisit = c.best;
-          if (faster) {
-            rec.current.push(QUARTER);
-            bestPath = Float32Array.from(rec.current);
-          }
-          const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best.` : ` ${c.vsBest.toFixed(2)} seconds off your best.`;
-          setDone(
-            `Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. ${c.perfect} perfect shifts. Launch: ${c.launch.toLowerCase()}.${vs}`,
-          );
-        }
-      }
-    } else {
-      c.doneT += dt;
-      c.rpm += rpmRate(c.pedal, 7000, 4000) * dt;
-      c.v = Math.max(0, c.v - 6 * dt);
-    }
-    if (c.phase !== "run") c.rpm = Math.min(LIMIT + 60, Math.max(IDLE, c.rpm));
-    if (c.phase !== "run" && c.rpm >= LIMIT && c.throttle) c.rpm = LIMIT - 300 * Math.random(); // bounce off the limiter
-    c.pop = Math.max(0, c.pop - dt * 4);
+        const vs = c.vsBest === null ? "" : c.vsBest < 0 ? ` ${Math.abs(c.vsBest).toFixed(2)} seconds faster than your best.` : ` ${c.vsBest.toFixed(2)} seconds off your best.`;
+        const sh = c.shifts;
+        setDone(
+          `Quarter mile in ${c.t.toFixed(2)} seconds at ${c.trap.toFixed(0)} mph. Reaction ${(c.reaction ?? 0).toFixed(2)} seconds. 60 feet in ${c.sixtyFt?.toFixed(2) ?? "—"}. 0 to 60 in ${c.split60?.toFixed(2) ?? "—"}. Launch: ${c.launch.toLowerCase()}. Shifts: ${sh.perfect} perfect, ${sh.good} good, ${sh.early} early, ${sh.late} late. Par is ${parEt().toFixed(2)}.${vs}`,
+        );
+      },
+    });
   }
 
-  function voice(c: Car) {
+  function voice(c: DragCar) {
     const e = eng.current;
     // off the throttle at high revs in a run: the exhaust crackles
     if (play && wasThrottle.current && !c.throttle && c.phase === "run" && c.rpm > 5200) {
@@ -411,15 +275,15 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     e.update({ rpm: c.rpm, pedal: c.pedal, throttle: c.throttle, cut: c.phase === "run" && c.shiftT > 0 });
   }
 
-  /** the end card: the time, what made it, and whether it beat the best of this visit */
-  function drawResult(ctx: CanvasRenderingContext2D, c: Car, w: number, area: number, t: number) {
+  /** the end card: the time, how the three things went (the reaction, the launch, the shifts), par, and whether it beat the best of this visit */
+  function drawResult(ctx: CanvasRenderingContext2D, c: DragCar, w: number, area: number, t: number) {
     const k = Math.min(1, c.doneT / 0.25);
     ctx.globalAlpha = k;
-    ctx.fillStyle = "rgba(8,10,9,0.72)";
+    ctx.fillStyle = "rgba(8,10,9,0.8)";
     ctx.fillRect(0, 0, w, area);
     const narrow = w < 560;
     const pw = Math.min(440, w - 24);
-    const ph = narrow ? 254 : 268;
+    const ph = narrow ? 252 : 264;
     const x = w / 2 - pw / 2;
     const y = Math.max(10, area / 2 - ph / 2);
     ctx.fillStyle = "rgba(10,13,12,0.94)";
@@ -435,6 +299,12 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     mono(ctx, 11);
     ctx.fillStyle = "#8ad9a8";
     ctx.fillText("QUARTER MILE", px, y + 34);
+    // what a run with the launch, the throttle and the shifts all right takes: the number to chase
+    const p = parEt();
+    ctx.fillStyle = "#b5b6ab";
+    ctx.textAlign = "right";
+    ctx.fillText(`PAR ${p.toFixed(2)}`, x + pw - 24, y + 34);
+    ctx.textAlign = "left";
     ctx.fillStyle = "#f2ead7";
     display(ctx, narrow ? 64 : 76, 800);
     ctx.fillText(c.t.toFixed(2), px, y + (narrow ? 100 : 108));
@@ -442,33 +312,33 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     mono(ctx, 12);
     ctx.fillStyle = "#b5b6ab";
     ctx.fillText("SECONDS", px + tw + 10, y + (narrow ? 100 : 108));
-    const rows: [string, string][] = [
-      ["TRAP SPEED", `${Math.round(c.trap)} MPH`],
-      ["0–60", c.split60 ? `${c.split60.toFixed(2)} S` : "—"],
-      ["LAUNCH", c.launch ? `${c.launch.replace(" LAUNCH", "")} · ${(c.launchRpm / 1000).toFixed(1)}K` : "—"],
-      ["PERFECT SHIFTS", String(c.perfect)],
+    const sh = c.shifts;
+    const shifts = sh.perfect + sh.good + sh.early + sh.late;
+    const rows: [string, string, string?][] = [
+      ["REACTION", `${(c.reaction ?? 0).toFixed(2)} S`, (c.reaction ?? 0) > 0.15 ? "#ffd23f" : undefined],
+      ["LAUNCH", c.launch ? `${c.launch.replace(" LAUNCH", "")} · ${(c.launchRpm / 1000).toFixed(1)}K` : "—", c.launch === "PERFECT LAUNCH" || c.launch === "GREAT LAUNCH" ? "#8ad9a8" : "#ffd23f"],
+      ["SHIFTS", `${sh.perfect} OF ${shifts} PERFECT`, sh.perfect === shifts ? "#8ad9a8" : undefined],
+      ["TRAP", `${Math.round(c.trap)} MPH`],
     ];
     mono(ctx, 11);
-    rows.forEach(([name, val], i) => {
-      const col = i % 2, row = Math.floor(i / 2);
-      const cxp = px + col * (pw - 48) / 2;
+    rows.forEach(([name, val, col], i) => {
+      const colN = i % 2, row = Math.floor(i / 2);
+      const cxp = px + colN * (pw - 48) / 2;
       const cyp = y + (narrow ? 134 : 146) + row * 32;
       ctx.fillStyle = "#b5b6ab";
       ctx.fillText(name, cxp, cyp);
-      ctx.fillStyle = "#f2ead7";
+      ctx.fillStyle = col ?? "#f2ead7";
       ctx.fillText(val, cxp, cyp + 15);
     });
-    // the best of this visit, in one line: first run, or how far off it this one was
+    // one thing to do better, then (after the first run) how this one compares with the best of the visit
     mono(ctx, 11);
     const vs = c.vsBest;
-    ctx.fillStyle = vs === null || vs < 0 ? "#8ad9a8" : "#ffd23f";
-    ctx.fillText(
-      vs === null ? "● FIRST RUN: THIS IS YOUR BEST" : vs < 0 ? `● NEW BEST: ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · THIS RUN ${vs.toFixed(2)} S OFF`,
-      px,
-      y + ph - 44,
-    );
     ctx.fillStyle = "#f2ead7";
-    if (c.doneT > AGAIN_AFTER_S) ctx.fillText(narrow ? "TAP TO RUN AGAIN" : "SPACE, ENTER OR TAP TO RUN AGAIN", px, y + ph - 20);
+    ctx.fillText(dragAdvice(c, p), px, y + ph - (vs === null ? 24 : 46));
+    if (vs !== null) {
+      ctx.fillStyle = vs < 0 ? "#8ad9a8" : "#ffd23f";
+      ctx.fillText(vs < 0 ? `NEW BEST, ${Math.abs(vs).toFixed(2)} S QUICKER` : `BEST ${(c.t - vs).toFixed(2)} · ${vs.toFixed(2)} S OFF`, px, y + ph - 24);
+    }
     ctx.globalAlpha = 1;
     void t;
   }
@@ -521,7 +391,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   }
 
   /** the start tree, on the wall beside the line: the stage lights, three ambers a half second apart, and the green (steady: nothing here flashes) */
-  function startTree(ctx: CanvasRenderingContext2D, c: Car, geo: ReturnType<typeof stripGeom>) {
+  function startTree(ctx: CanvasRenderingContext2D, c: DragCar, geo: ReturnType<typeof stripGeom>) {
     const th = Math.min(118, geo.ry * 0.22);
     const tx = geo.x0 + 30;
     const top = geo.ry - th;
@@ -543,7 +413,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       if (i === 0) {
         on = staged;
         col = "225,240,255";
-      } else if (i <= 3) on = c.phase === "tree" && c.tree >= (i - 1) * 0.5;
+      } else if (i <= 3) on = c.phase === "tree" && sinceAmber(c) >= (i - 1) * TREE_STEP_S;
       else {
         on = run;
         col = "61,220,132";
@@ -583,7 +453,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     }
   }
 
-  function draw(ctx: CanvasRenderingContext2D, c: Car, w: number, h: number, t: number, dt: number, reduce: boolean) {
+  function draw(ctx: CanvasRenderingContext2D, c: DragCar, w: number, h: number, t: number, dt: number, reduce: boolean) {
     const dpr = Math.max(1, ctx.getTransform().a);
     // the lanes at the bottom: two when played (you, and the best run of this visit), one on the tile
     const geo = stripGeom(w, h, play);
@@ -833,6 +703,9 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ctx.textBaseline = "alphabetic";
     const lineMono = play ? 13 : 9;
     let rx: number;
+    // the end card carries the numbers once the run is over: the column is still laid out (the tree uses rx) but not drawn
+    ctx.save();
+    if (play && c.phase === "done") ctx.globalAlpha = 0;
     if (stacked) {
       const top = area - foot + 4;
       const big = 46;
@@ -863,12 +736,13 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         ctx.fillText(l, rx + 4, area * 0.42 + 42 + i * (play ? 20 : 13));
       });
     }
+    ctx.restore();
 
     // the tree again in the corner where there is no room for one on the wall (a phone) or no wall (the tile)
     if ((c.phase === "tree" || c.phase === "idle") && (stacked || !play)) {
       const tx = stacked ? w - 16 : rx + (play ? 210 : 120), ty = stacked ? dialTop + 4 : area * 0.22;
       for (let i = 0; i < 4; i++) {
-        const lit = c.phase === "tree" && (i < 3 ? c.tree >= i * 0.5 : c.tree >= 1.6);
+        const lit = c.phase === "tree" && (i < 3 ? sinceAmber(c) >= i * TREE_STEP_S : c.tree >= treeTime(c));
         ctx.fillStyle = lit ? (i < 3 ? "#ffb300" : "#3ddc84") : "#1c211e";
         ctx.beginPath();
         ctx.arc(tx, ty + i * (play ? 22 : 15), play ? 8 : 5, 0, Math.PI * 2);

@@ -289,7 +289,7 @@ function wall(c: Car, road: Road, dt: number) {
     // bounce a little and lose some speed in proportion to how square it hit
     const e = 0.22;
     const nN = -e * vN;
-    const nT = vT * (1 - clamp(0.012 * into, 0, 0.25));
+    const nT = vT * (1 - clamp(P.wallLossPerMs * into, 0, P.wallLossMax));
     c.u = nT * cp + nN * sp;
     c.w = -nT * sp + nN * cp;
     // the nose is knocked away from the wall

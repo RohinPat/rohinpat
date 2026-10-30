@@ -278,8 +278,12 @@ describe("night run: drift scoring and banking", () => {
     expect(isSliding(5 * D, 40)).toBe(false);
     expect(isSliding(25 * D, 5)).toBe(false);
     expect(isSliding(-25 * D, 40)).toBe(true);
-    expect(driftRate(30 * D, 40)).toBeCloseTo(ENGINE_CAL.drift.pointsPerDegMs * 30 * 40, 3);
-    expect(driftRate(80 * D, 40)).toBeCloseTo(ENGINE_CAL.drift.pointsPerDegMs * ENGINE_CAL.drift.maxAngleDeg * 40, 3);
+    // the pay is the angle times the speed times the speed over the reference: a slide at twice the speed pays four times
+    const k = ENGINE_CAL.drift.pointsPerDegMs;
+    const ref = ENGINE_CAL.drift.refSpeedMs;
+    expect(driftRate(30 * D, 40)).toBeCloseTo(k * 30 * 40 * (40 / ref), 3);
+    expect(driftRate(80 * D, 40)).toBeCloseTo(k * ENGINE_CAL.drift.maxAngleDeg * 40 * (40 / ref), 3);
+    expect(driftRate(30 * D, 40)).toBeCloseTo(4 * driftRate(30 * D, 20), 3);
   });
 
   it("earns points and a multiplier that climbs with the slide, and holds them until the car is straight", () => {
@@ -546,7 +550,10 @@ describe("night run: the game", () => {
     play(g, () => inp(1, 1), 0.5);
     expect(g.hitN).toBeGreaterThan(hits);
     expect(g.drift.total).toBe(0);
-    expect(g.toasts.some((t) => t.text === "COMBO LOST")).toBe(true);
+    // one message: the rail, what it took off the clock, and the combo it cost
+    const rail = g.toasts.find((t) => t.text === "RAIL");
+    expect(rail?.sub).toContain("COMBO −");
+    expect(rail?.sub).toContain(`${ENGINE_CAL.run.railPenaltyS}`);
   });
 
   it("tells the phone the run in a shape it can read back", () => {
@@ -590,12 +597,16 @@ describe("night run: the corner warning and the end card", () => {
   it("is dark on the opening straight and while the car is under the plan's speed", () => {
     const g = new NightGame(true);
     g.start();
-    for (let i = 0; i < 60 * 13; i++) {
+    // flat out and not steering, the first bend is 300 m on and the warning waits for the braking zone (7.5 s in, at 95 mph)
+    for (let i = 0; i < 60 * 30 && g.clock < 6.5; i++) {
       g.update(1 / 60, inp(0, 1));
       expect(g.cue.on).toBe(false);
     }
-    expect(g.car.s).toBeGreaterThan(200);
-    expect(litShare(0.8, 60)).toBeLessThan(0.08);
+    expect(g.clock).toBeGreaterThan(6);
+    expect(g.car.s).toBeGreaterThan(120);
+    // a driver under the target's pace sees it for the braking zones and not the rest
+    expect(litShare(0.6, 80)).toBeLessThan(0.02);
+    expect(litShare(0.8, 80)).toBeLessThan(0.16);
   });
 
   it("lights up for a driver who carries more speed than the road allows, with the way the corner turns", () => {

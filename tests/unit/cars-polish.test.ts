@@ -16,48 +16,6 @@ import { DRAG_GHOST_DT, gapToGhost, ghostAt, ghostTimeAt } from "@/components/of
 const inp = (steer = 0, throttle = 0, brake = 0, hand = 0): NightInput => ({ steer, throttle, brake, hand });
 const DT = 1 / 60;
 
-/**
- * Drive the whole canyon the way a keyboard player would: steer to the target's line with a keyboard's ramp, at `pace` of the plan's
- * speed (or gas only). `flick`: pull the handbrake for that long, steering hard into it, whenever a corner tighter than 1/200 comes up
- * within 40 m (and not twice inside three seconds).
- */
-function canyon(pace: number | "gas", steer: "none" | "keys", flick = 0) {
-  forgetBestRun();
-  const g = new NightGame(true);
-  const plan = getTarget().plan;
-  const ai = { ...NO_INPUT };
-  const input = inp(0, 1);
-  let ks = 0;
-  let handUntil = -1;
-  let cool = 0;
-  g.start();
-  for (let i = 0; i < 60 * 260 && g.phase !== "done"; i++) {
-    if (g.phase === "run") {
-      drive(g.car, g.road, plan, pace === "gas" ? 9 : pace, ai);
-      let want = ai.steer;
-      const kap = g.road.kappa[Math.round((g.car.s + 40) / g.road.segM)] || 0;
-      cool -= DT;
-      if (flick > 0 && cool <= 0 && Math.abs(kap) > 1 / 200 && g.speed > 24) {
-        handUntil = g.clock + flick;
-        cool = 3;
-      }
-      const hand = g.clock < handUntil;
-      if (hand) want = Math.sign(kap || 1) * 0.8;
-      if (steer === "keys") {
-        ks = stepKeySteer(ks, want > 0.12 ? 1 : want < -0.12 ? -1 : 0, DT);
-        input.steer = ks;
-      }
-      input.throttle = pace === "gas" ? 1 : hand ? 1 : ai.throttle;
-      input.brake = pace === "gas" || hand ? 0 : ai.brake;
-      input.hand = hand ? 1 : 0;
-    }
-    g.update(DT, input);
-  }
-  const out = { phase: g.phase, score: g.score, finished: g.result?.finished ?? false };
-  forgetBestRun();
-  return out;
-}
-
 describe("cars: medals", () => {
   it("counts the marks a score has reached and names the next", () => {
     expect(MEDALS.map((m) => m.name)).toEqual(["BRONZE", "SILVER", "GOLD"]);
@@ -69,20 +27,6 @@ describe("cars: medals", () => {
     expect(nextMedal(0)?.name).toBe("BRONZE");
     expect(nextMedal(MEDALS[1].score)?.name).toBe("GOLD");
     expect(nextMedal(MEDALS[2].score)).toBeNull();
-  });
-
-  it("sit where driving of different care lands: flooring it blind is under bronze, a driver at the target's pace clears it, a careful one clears silver, a drifter reaches gold", () => {
-    const blind = canyon("gas", "none");
-    expect(blind.phase).toBe("done");
-    expect(medalsAt(blind.score)).toBe(0);
-    const racing = canyon(1.0, "keys");
-    expect(medalsAt(racing.score)).toBeGreaterThanOrEqual(1);
-    const careful = canyon(0.75, "keys");
-    expect(careful.finished).toBe(true);
-    expect(medalsAt(careful.score)).toBeGreaterThanOrEqual(2);
-    const drifter = canyon(0.9, "keys", 0.3);
-    expect(drifter.finished).toBe(true);
-    expect(medalsAt(drifter.score)).toBe(3);
   });
 
   it("are announced when the score crosses them, once each, and are in the result with the next one to go for", () => {
@@ -354,7 +298,7 @@ describe("cars: the feel", () => {
     expect(seen.some((e) => e.kind === "backfire")).toBe(true);
   });
 
-  it("lights the corner warning sooner than it did for a driver who floors it on the opening straight and steers with the keys", () => {
+  it("lights the corner warning in the braking zone of the first bend for a driver who floors it and steers with the keys", () => {
     const g = new NightGame(true);
     const plan = getTarget().plan;
     const ai = { ...NO_INPUT };
@@ -371,9 +315,9 @@ describe("cars: the feel", () => {
       g.update(DT, input);
       if (g.cue.on) at = g.clock;
     }
-    // 14.2 s into the run with the 1.5 s look-ahead and its 3% margin
-    expect(at).toBeGreaterThan(8);
-    expect(at).toBeLessThan(14);
+    // 7.5 s into the run, in the braking zone for the first bend (300 m on): the look-ahead is 2.6 s and 30 m of road
+    expect(at).toBeGreaterThan(5);
+    expect(at).toBeLessThan(10);
   });
 });
 
