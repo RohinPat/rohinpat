@@ -12,6 +12,10 @@ import { BRIDGE, ROCK_L, ROCK_R, TUNNEL, type Road } from "./road";
 // before the first gate, a radio mast before the second, the cliffs and the
 // tunnel, an open ridge with pylons, the bridge with its towers, a village, rock
 // cuts, and a floodlit finish with stands either side.
+//
+// The climb has its own: pines that thin out and give up above the tree line, boulders in
+// their place, a lodge and floodlit stands on the summit, two radio masts on the way, and
+// walls that stand higher on the inside of a switchback (road.ts says where they are).
 
 export const NONE = 0;
 export const PINE = 1;
@@ -66,6 +70,10 @@ export function stretchAt(road: Road, s: number): number {
 const DENSITY_PINE = [0.1, 0.62, 0.16, 0.04, 0.2, 0.22, 0.1, 0.1];
 const DENSITY_HOUSE = [0.025, 0.005, 0, 0, 0.004, 0.07, 0, 0.02];
 const DENSITY_BOULDER = [0.05, 0.04, 0.03, 0.09, 0.05, 0.03, 0.12, 0.03];
+/** the climb, by stretch: the road starts among pines, leaves them behind it, and ends on bare rock with a lodge */
+const CLIMB_PINE = [0.3, 0.34, 0.2, 0.08, 0.03, 0, 0, 0];
+const CLIMB_HOUSE = [0.02, 0, 0, 0, 0, 0, 0.01, 0.1];
+const CLIMB_BOULDER = [0.06, 0.1, 0.16, 0.2, 0.24, 0.24, 0.12, 0.04];
 
 const made = new WeakMap<Road, Scenery>();
 /** The scenery of a road (made on first use, and kept with it). */
@@ -81,6 +89,10 @@ export function getScenery(road: Road): Scenery {
 export function buildScenery(road: Road): Scenery {
   const n = road.n;
   const seg = road.segM;
+  const climb = road.track === "climb";
+  const dPine = climb ? CLIMB_PINE : DENSITY_PINE;
+  const dHouse = climb ? CLIMB_HOUSE : DENSITY_HOUSE;
+  const dBoulder = climb ? CLIMB_BOULDER : DENSITY_BOULDER;
   const rng = seeded(4_417_001);
   const kind = new Uint8Array(n * 4);
   const out = new Uint8Array(n * 4);
@@ -102,7 +114,9 @@ export function buildScenery(road: Road): Scenery {
   for (let i = 0; i <= n; i++) {
     const s = i * seg;
     const b = stretchAt(road, s);
-    const big = b === 2 || b === 6 ? 1 : b === 3 ? 0.35 : 0.7;
+    // the climb's walls are lower, and fall away over the last stretch so the summit is open to the sky
+    const summit = climb ? 1 - 0.85 * Math.min(1, Math.max(0, (s - (road.finish - 280)) / 220)) : 1;
+    const big = climb ? 0.6 * summit : b === 2 || b === 6 ? 1 : b === 3 ? 0.35 : 0.7;
     const early = Math.min(1, Math.max(0.25, (s - 40) / 420));
     const base = 6 + 15 * vnoise(i, 7, 1) + 7 * vnoise(i, 2.2, 2) + 3 * hash(i, 3);
     rockTop[i] = Math.max(4, base * big * early);
@@ -130,15 +144,15 @@ export function buildScenery(road: Road): Scenery {
         const r = hash(i, 10 + slot);
         const o = hash(i, 20 + slot);
         const v = hash(i, 30 + slot);
-        if (j === 0 && r < DENSITY_PINE[b]) {
+        if (j === 0 && r < dPine[b]) {
           kind[i * 4 + slot] = PINE;
           out[i * 4 + slot] = Math.round((1.4 + o * o * 15) * 4);
           size[i * 4 + slot] = Math.floor(v * 255);
-        } else if (r > 1 - DENSITY_HOUSE[b] && j === 1) {
+        } else if (r > 1 - dHouse[b] && j === 1) {
           kind[i * 4 + slot] = HOUSE;
           out[i * 4 + slot] = Math.round((8 + o * 12) * 4);
           size[i * 4 + slot] = Math.floor(v * 255);
-        } else if (r > 0.5 && r < 0.5 + DENSITY_BOULDER[b]) {
+        } else if (r > 0.5 && r < 0.5 + dBoulder[b]) {
           kind[i * 4 + slot] = BOULDER;
           out[i * 4 + slot] = Math.round((1.3 + o * 4) * 4);
           size[i * 4 + slot] = Math.floor(v * 255);
@@ -161,7 +175,7 @@ export function buildScenery(road: Road): Scenery {
   for (const g of road.checks) lampsEvery(g - 110, g + 70, 6, true);
   lampsEvery(road.checks[road.checks.length - 1] - 160, road.length - 40, 7, true);
   const every = road.checks.length > 1 ? road.checks[1] - road.checks[0] : 720;
-  lampsEvery(every * 5, every * 6, 8, false);
+  if (!climb) lampsEvery(every * 5, every * 6, 8, false);
   if (bri) {
     lampsEvery(bri[0] - 120, bri[0] - 8, 8, false);
     lampsEvery(bri[1] + 8, bri[1] + 120, 8, false);
@@ -194,18 +208,29 @@ export function buildScenery(road: Road): Scenery {
     if (spot) lm.push({ s: spot.s, side: spot.side, kind: kindL, out: out_ });
     else if (kindL === "mast" || kindL === "flood") lm.push({ s: at(k) - back, side, kind: kindL, out: out_ + 6 });
   };
-  place(1, 70, 1, "canopy", 6);
-  place(2, 95, -1, "mast", 13);
-  place(3, 60, 1, "canopy", 8);
-  place(4, 80, -1, "pylons", 12);
-  place(5, 60, -1, "canopy", 6);
-  place(6, 90, 1, "mast", 14);
-  place(7, 60, -1, "flood", 4);
-  place(7, 60, 1, "flood", 4);
-  place(8, 70, -1, "flood", 4);
-  place(8, 70, 1, "flood", 4);
-  place(8, 28, -1, "stand", 7);
-  place(8, 28, 1, "stand", 7);
+  if (climb) {
+    const last = road.checks.length;
+    place(2, 80, -1, "mast", 12);
+    place(4, 70, 1, "mast", 12);
+    place(last - 1, 60, 1, "flood", 4);
+    place(last, 70, -1, "flood", 4);
+    place(last, 70, 1, "flood", 4);
+    place(last, 28, -1, "stand", 7);
+    place(last, 28, 1, "stand", 7);
+  } else {
+    place(1, 70, 1, "canopy", 6);
+    place(2, 95, -1, "mast", 13);
+    place(3, 60, 1, "canopy", 8);
+    place(4, 80, -1, "pylons", 12);
+    place(5, 60, -1, "canopy", 6);
+    place(6, 90, 1, "mast", 14);
+    place(7, 60, -1, "flood", 4);
+    place(7, 60, 1, "flood", 4);
+    place(8, 70, -1, "flood", 4);
+    place(8, 70, 1, "flood", 4);
+    place(8, 28, -1, "stand", 7);
+    place(8, 28, 1, "stand", 7);
+  }
   // the start: a stand, so the opening picture has somewhere to be, and a floodlight either side of the line
   for (const [s0, side, kindL, o] of [[130, 1, "stand", 8], [40, -1, "flood", 4], [110, 1, "flood", 4]] as const) {
     const spot = find(s0, side, 1, 160);

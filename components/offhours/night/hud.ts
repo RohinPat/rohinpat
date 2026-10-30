@@ -3,7 +3,7 @@ import { LIMIT, REDLINE, TOP_GEAR } from "../engineModel";
 import { fontFamilies } from "../font";
 import { getBestScore, mph, type NightGame, type Toast } from "./game";
 import { adviceFor } from "./advice";
-import { MEDALS, medalsAt, nextMedal } from "./medals";
+import { MEDALS, medalsAt, nextMedal, type Medal } from "./medals";
 import { pending } from "./score";
 
 // The dash, drawn on the canvas over the road: clean and small, in the site's
@@ -63,8 +63,8 @@ export const MEDAL_HINT_FROM = 0.65;
 export const GATE_HINT_M = 300;
 
 /** The next medal as the dash shows it, or null while it is too far off to be worth a line: the marks come from MEDALS, so the dash and the code cannot disagree. */
-export function medalHint(score: number): string | null {
-  const nm = nextMedal(score);
+export function medalHint(score: number, table: Medal[] = MEDALS): string | null {
+  const nm = nextMedal(score, table);
   if (!nm || score < nm.score * MEDAL_HINT_FROM) return null;
   return `${nm.name} ${grouped(nm.score)}`;
 }
@@ -346,15 +346,15 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     below += 16 * u;
   }
   // the next medal to go for, with the colour it will be
-  const hint = medalHint(g.score);
+  const hint = medalHint(g.score, g.track.medals);
   if (hint) {
     font(ctx, "m", Math.max(9, 10 * u), 700);
-    ctx.fillStyle = MEDAL_COLOR[medalsAt(g.score)];
-    ctx.fillText(fmt("medal", medalsAt(g.score), () => hint), lx, ly + below);
+    ctx.fillStyle = MEDAL_COLOR[medalsAt(g.score, g.track.medals)];
+    ctx.fillText(hint, lx, ly + below);
     below += 16 * u;
   }
   // and the best of this visit, to beat (a phone's left column is the clock's: no room there)
-  const bv = getBestScore();
+  const bv = getBestScore(g.track.id);
   if (bv > 0 && !narrow) {
     font(ctx, "m", Math.max(9, 10 * u), 500);
     ctx.fillStyle = MUTED;
@@ -568,7 +568,7 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   const cy = h * 0.27 + (narrow ? 20 : 0);
   font(ctx, "m", 12 * u, 700);
   ctx.fillStyle = MINT;
-  ctx.fillText("A CANYON ROAD, AFTER MIDNIGHT", w / 2, cy - 62 * u);
+  ctx.fillText(g.track.strap, w / 2, cy - 62 * u);
   font(ctx, "d", Math.min(84 * u, w * 0.16), 800);
   ctx.fillStyle = CREAM;
   ctx.fillText("NIGHT RUN", w / 2, cy + 22 * u);
@@ -576,11 +576,11 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.fillStyle = MINT;
   const go = opt.touch ? "HOLD GAS TO START" : opt.linked ? "HOLD ↑ OR SPACE, OR GAS ON YOUR PHONE" : "HOLD ↑ OR SPACE TO START";
   ctx.fillText(go, w / 2, cy + 62 * u);
-  const best = getBestScore();
+  const best = getBestScore(g.track.id);
   const text = [
     opt.touch ? "STEER WITH THE PADS. BRAKE, OR TAP DRIFT TO KICK THE TAIL OUT." : "← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX · R RESTART",
     `SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM AND ${ENGINE_CAL.run.railPenaltyS} S.`,
-    best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `${g.road.checks.length} CHECKPOINTS ADD TIME. MEDALS AT ${MEDALS.map((m) => grouped(m.score)).join(" · ")}`,
+    best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `${g.road.checks.length} CHECKPOINTS ADD TIME. MEDALS AT ${g.track.medals.map((m) => grouped(m.score)).join(" · ")}`,
   ];
   // the how-to sits on a dark card: the road's white lines run right through it otherwise
   font(ctx, "m", 11 * u, 500);
@@ -626,7 +626,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   ctx.textAlign = "left";
   font(ctx, "m", 11 * u, 700);
   ctx.fillStyle = r.finished ? MINT : AMBER;
-  ctx.fillText(r.finished ? "CANYON CLEARED" : "OUT OF TIME", x + 28 * u, y + 38 * u);
+  ctx.fillText(r.finished ? g.track.cleared : "OUT OF TIME", x + 28 * u, y + 38 * u);
   font(ctx, "d", 64 * u, 800);
   ctx.fillStyle = CREAM;
   ctx.fillText(grouped(r.score), x + 28 * u, y + 100 * u);
@@ -635,7 +635,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     ctx.textAlign = "right";
     font(ctx, "d", 30 * u, 800);
     ctx.fillStyle = MEDAL_COLOR[r.medals - 1];
-    ctx.fillText(MEDALS[r.medals - 1].name, x + pw - 28 * u, y + 96 * u);
+    ctx.fillText(g.track.medals[r.medals - 1].name, x + pw - 28 * u, y + 96 * u);
     ctx.textAlign = "left";
   }
   font(ctx, "m", 10 * u, 500);

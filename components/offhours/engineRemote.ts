@@ -164,6 +164,38 @@ export const ENGINE_CAL = {
     startStraightM: 200,
   },
 
+  // ------------------------------------------------- night run: the climb (the second track)
+  /**
+   * A short, hairpin-heavy road up a mountain, built by the same generator as the canyon (night/road.ts) from its own seed and
+   * corner mix: `mix` is the odds of a gentle, medium, tight and hairpin corner (cumulative shares of one). It rises `riseM`
+   * metres over its length, is a little narrower, and a gate sits on a shorter straight than the canyon's. The clock and the
+   * target driver come out of the road the way they do on the canyon (ENGINE_CAL.run); its medals are in night/medals.ts. The seed is
+   * the best of the first forty for the mix it gave: nine corners, none wider than a 105 m radius, 64 s for the target driver.
+   */
+  climb: {
+    road: {
+      seed: 21,
+      segM: 4,
+      halfWidthM: 4.9,
+      railOffsetM: 0.9,
+      checkEveryM: 240,
+      checkpoints: 7,
+      runOutM: 340,
+      straightMinM: 10,
+      straightVarM: 30,
+      startStraightM: 130,
+      gateStraightM: 20,
+      mix: [0, 0.1, 0.32, 0.58],
+      flip: 0.94,
+      riseM: 230,
+      /** a hairpin's outer rail is a berm to a driver who never brakes: it takes this many times what the canyon's takes of the speed (a hit and the grinding along it) */
+      railK: 2,
+    },
+    /** what is different about the climb's run (the rest is ENGINE_CAL.run): a tighter clock, since a leg is a few seconds */
+    run: { startShare: 1.3, startFlatS: 3, legShare: 1.25, legFlatS: 1.5, finishSecondPoints: 100 },
+    driftPay: 2,
+  },
+
   // ----------------------------------------------------- night run: the steering assist
   /**
    * The assist blends the player's steering toward the wheel that would hold the line (the racing line, or the middle of the

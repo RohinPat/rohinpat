@@ -9,14 +9,15 @@ import { buildAssets, type Assets } from "./night/assets";
 import { Attract } from "./night/attract";
 import { drawScene } from "./night/draw";
 import { NightGame, type GameEvent } from "./night/game";
-import { drawAttractHud, drawHud, grouped, resultBottom, type HudOptions } from "./night/hud";
+import { drawAttractHud, drawHud, grouped, isNarrow, resultBottom, type HudOptions } from "./night/hud";
 import { keySteerFeel, newKeyAxes, newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeyPedal, stepKeys, stepKeySteer, type Sources } from "./night/nightInput";
 import { adviceFor } from "./night/advice";
 import { ASSIST_DEFAULT, ASSIST_NAMES, type AssistLevel } from "./night/assist";
-import { MEDALS } from "./night/medals";
 import { NightSound } from "./night/sound";
+import { TRACKS, TRACK_IDS, type TrackId } from "./night/tracks";
 
-// Night run: a canyon road at night that you drift through. A pseudo-3D road
+// Night run: a canyon road at night that you drift through (and a second road, the
+// climb, picked on the ready screen: a track config for the same game and renderer). A pseudo-3D road
 // (night/road.ts, draw.ts) on a 2D canvas, with a car that really slides
 // (night/car.ts: a single-track model with saturating tyres, on the shared
 // engine and gearbox) and a score for it: slide to earn, straighten out to bank,
@@ -66,10 +67,12 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const lastData = useRef(0);
   const mineRef = useRef<RemoteHandlers | null>(null);
   const againRef = useRef<HTMLButtonElement>(null);
+  const pickRef = useRef<HTMLDivElement>(null);
 
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<string>("ready");
   const [auto, setAuto] = useState(true);
+  const [track, setTrack] = useState<TrackId>("canyon");
   const [assist, setAssist] = useState<AssistLevel>(ASSIST_DEFAULT);
   const assistRef = useRef<AssistLevel>(ASSIST_DEFAULT);
   const [touch, setTouch] = useState(false);
@@ -113,6 +116,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
 
   function onEvent(e: GameEvent) {
     const s = soundRef.current;
+    const tr = gameRef.current?.track ?? TRACKS.canyon;
     switch (e.kind) {
       case "count":
         s?.count(false);
@@ -156,12 +160,12 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         break;
       case "medal":
         s?.medal(e.n);
-        setStatus(`Medal: ${MEDALS[e.n - 1].name.toLowerCase()}.`);
+        setStatus(`Medal: ${tr.medals[e.n - 1].name.toLowerCase()}.`);
         break;
       case "end": {
         const r = e.result;
         setStatus(
-          `${r.finished ? "You made it out of the canyon." : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${Math.round(r.railS)} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${MEDALS[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
+          `${r.finished ? tr.clearedSpoken : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${Math.round(r.railS)} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${tr.medals[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
         );
         s?.silence();
         tellPhone(true);
@@ -235,7 +239,9 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
   const ref = useCanvas(
     ({ ctx, w, h, t, dt, reduce }) => {
       let a = assetsRef.current;
-      if (!a || a.w !== w || a.h !== h || a.dpr !== Math.max(1, ctx.getTransform().a)) a = assetsRef.current = buildAssets(ctx, w, h);
+      // the sky and the light are the track's (the tile is always the canyon)
+      const theme: TrackId = play ? game().track.id : "canyon";
+      if (!a || a.w !== w || a.h !== h || a.theme !== theme || a.dpr !== Math.max(1, ctx.getTransform().a)) a = assetsRef.current = buildAssets(ctx, w, h, theme);
       // the quality governor: a slow second and a half drops a step (0: everything; 1: no beams, wear or ledges; 2: a shorter road and no far ranges; 3: the bare road with its lamps); a long smooth spell climbs back
       const q = gov.current;
       if (dt > 0) {
@@ -346,6 +352,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           el.dataset.dist = String(Math.round(g.car.s));
           el.dataset.quality = String(q.level);
           el.dataset.assist = String(g.assist);
+          el.dataset.track = g.track.id;
         }
       }
       drawScene(ctx, a, g.scene, Math.min(q.level, 2), q.level);
@@ -354,6 +361,13 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       // the end card is drawn on the canvas, the button is under it wherever its bottom edge falls
       const again = againRef.current;
       if (again && g.phase === "done") again.style.top = `${Math.round(resultBottom(w, h, opt) + 14)}px`;
+      // the track picker: above the title on the ready card, under the button on the end card
+      const pick = pickRef.current;
+      if (pick) {
+        const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
+        const cy = h * 0.27 + (isNarrow(w) ? 20 : 0);
+        pick.style.top = `${Math.round(g.phase === "done" ? resultBottom(w, h, opt) + 14 + 56 : cy - 75 * u - 40)}px`;
+      }
     },
     {
       interactive: play,
@@ -367,12 +381,17 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         switch (key) {
           case "ArrowLeft":
           case "a":
-            k.left = down;
-            break;
           case "ArrowRight":
-          case "d":
-            k.right = down;
+          case "d": {
+            const dir = key === "ArrowLeft" || key === "a" ? -1 : 1;
+            if (g.phase === "ready" || g.phase === "done") {
+              // not on the road yet: the arrows choose which road
+              if (down && !e.repeat) pickTrack(TRACK_IDS[(TRACK_IDS.indexOf(g.track.id) + dir + TRACK_IDS.length) % TRACK_IDS.length]);
+              k.left = k.right = false;
+            } else if (dir < 0) k.left = down;
+            else k.right = down;
             break;
+          }
           case "ArrowUp":
           case "w":
             k.gas = down;
@@ -426,6 +445,16 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
     const next = !g.car.auto;
     g.setAuto(next);
     setAuto(next);
+  }
+
+  /** choose the road for the next run (between runs only): the game changes road, and the page its sky */
+  function pickTrack(id: TrackId, announce = true) {
+    const g = game();
+    if (!g.setTrack(id)) return;
+    setTrack(id);
+    setPhase(g.phase);
+    lastPhase.current = g.phase;
+    if (announce) setStatus(`${TRACKS[id].name}.`);
   }
 
   const cycleAssist = (e: React.MouseEvent) => {
@@ -497,7 +526,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         data-testid="night-canvas"
         data-phase={phase}
         role="img"
-        aria-label="Night run: a canyon road after midnight. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start."
+        aria-label={`Night run: ${TRACKS[track].label}. Left and right choose the road before a run. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start.`}
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
       <div className="absolute right-3 top-14 z-10 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em]">
@@ -529,6 +558,47 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           ))}
         </div>
       </div>
+      {(phase === "ready" || phase === "done") && (
+        <div
+          ref={pickRef}
+          role="group"
+          aria-label="Road"
+          className="absolute left-1/2 z-10 flex -translate-x-1/2 overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70 font-mono text-[11px] uppercase tracking-[0.14em]"
+          style={{ top: 120 }}
+          onKeyDown={(e) => {
+            const i = TRACK_IDS.indexOf(track);
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              // as in a set of radio buttons: the arrows move the choice, and the focus with it
+              e.preventDefault();
+              const next = TRACK_IDS[(i + (e.key === "ArrowLeft" ? -1 : 1) + TRACK_IDS.length) % TRACK_IDS.length];
+              pickTrack(next);
+              pickRef.current?.querySelector<HTMLButtonElement>(`[data-testid="night-track-${next}"]`)?.focus();
+            } else if (e.key === "Enter" && (e.target as HTMLElement).getAttribute("aria-pressed") === "true") {
+              // Enter on the road that is chosen starts the run
+              e.preventDefault();
+              ref.current?.focus();
+              startOrAgain();
+            }
+          }}
+        >
+          {TRACK_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={track === id}
+              data-testid={`night-track-${id}`}
+              onClick={(e) => {
+                pickTrack(id);
+                // the keys listen on the canvas: a click must not leave them without a listener (a press of Enter or Space stays where it is)
+                if (e.detail > 0) ref.current?.focus();
+              }}
+              className={`h-8 px-3.5 ${track === id ? "bg-[var(--paper)] text-[var(--ink)]" : "text-[#f2ead7] hover:bg-white/10"}`}
+            >
+              {TRACKS[id].name}
+            </button>
+          ))}
+        </div>
+      )}
       {phase === "done" && (
         <button
           type="button"

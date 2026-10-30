@@ -331,7 +331,7 @@ function wall(c: Car, road: Road, dt: number) {
     // bounce a little and lose some speed in proportion to how square it hit
     const e = 0.22;
     const nN = -e * vN;
-    const nT = vT * (1 - clamp(P.wallLossPerMs * into, 0, P.wallLossMax));
+    const nT = vT * (1 - clamp(P.wallLossPerMs * road.railK * into, 0, Math.min(0.9, P.wallLossMax * road.railK)));
     c.u = nT * cp + nN * sp;
     c.w = -nT * sp + nN * cp;
     // the nose is knocked away from the wall
@@ -339,6 +339,6 @@ function wall(c: Car, road: Road, dt: number) {
     if (into > c.hit) c.hit = into;
   }
   // and while it is grinding along the rail it keeps losing speed
-  c.u = Math.max(0, c.u - P.scrapeDecel * dt * clamp(c.u / 20, 0.3, 1));
+  c.u = Math.max(0, c.u - P.scrapeDecel * road.railK * dt * clamp(c.u / 20, 0.3, 1));
   c.u = Math.max(0, c.u);
 }

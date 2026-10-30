@@ -61,8 +61,8 @@ export function cornerPay(kappa: number): number {
   return C.straightPay + (1 - C.straightPay) * k;
 }
 
-/** Advance the scoring `dt` seconds on road of curvature `kappa` (omitted: a corner). The returned event is reused: read it before the next call. */
-export function stepDrift(d: Drift, slip: number, speed: number, dt: number, kappa?: number): DriftEvent {
+/** Advance the scoring `dt` seconds on road of curvature `kappa` (omitted: a corner), with the slide paying `pay` times the usual (a track of slower corners pays more). The returned event is reused: read it before the next call. */
+export function stepDrift(d: Drift, slip: number, speed: number, dt: number, kappa?: number, pay = 1): DriftEvent {
   if (isSliding(slip, speed)) {
     let kind: DriftEvent["kind"] = "none";
     if (!d.sliding) {
@@ -83,7 +83,7 @@ export function stepDrift(d: Drift, slip: number, speed: number, dt: number, kap
       d.combo = Math.min(C.comboMax, d.combo + 1);
       kind = "chain";
     }
-    d.base += driftRate(slip, speed) * (kappa === undefined ? 1 : cornerPay(kappa)) * dt;
+    d.base += driftRate(slip, speed) * (kappa === undefined ? 1 : cornerPay(kappa)) * pay * dt;
     return kind === "chain" ? out("chain", pending(d), d.combo) : NONE;
   }
   d.sliding = false;

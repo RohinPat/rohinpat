@@ -1,10 +1,13 @@
 import { ENGINE_CAL } from "../engineRemote";
 import { seeded } from "../useCanvas";
+import type { TrackId } from "./tracks";
 
 // The canyon road: built once, from a seed, so every visitor drives the same
 // road and the ghosts line up. The road is a centre line sampled every segM
 // metres: its curvature (rad per metre, + turns right), the heading, the
 // position on the ground (x right, z ahead at the start), and the height.
+// The same generator builds the climb (a track config: its own seed, corner mix, width,
+// gate spacing and a road that rises, ENGINE_CAL.climb.road); the canyon is as it was.
 // Everything that drives on it works in road coordinates (s along it, lat
 // across it, + right); the renderer turns those into world points with pointAt.
 //
@@ -25,6 +28,8 @@ export const ROCK_R = 8;
 export type Sign = { s: number; /** which side of the road it stands: -1 left, 1 right */ side: -1 | 1; /** which way the corner turns: -1 left, 1 right */ dir: -1 | 1 };
 
 export type Road = {
+  /** which track this is */
+  track: TrackId;
   seed: number;
   /** segments, and the road's length in metres */
   n: number;
@@ -33,6 +38,8 @@ export type Road = {
   /** paved half-width and the guardrail's, m */
   half: number;
   railHalf: number;
+  /** how hard the rail brakes a car that hits or grinds along it, as a multiple of the canyon's (1) */
+  railK: number;
   /** nodes 0..n */
   kappa: Float32Array;
   phi: Float32Array;
@@ -61,9 +68,19 @@ const KINDS: Record<Kind, { r: [number, number]; a: [number, number] }> = {
   hairpin: { r: [48, 68], a: [120, 165] },
 };
 
-/** which corner comes next, given how far along (0..1) the road is: it gets harder */
-function pickKind(rng: () => number, progress: number, first: boolean): Kind {
+/** which corner comes next, given how far along (0..1) the road is: it gets harder (a track with its own mix: that mix throughout, and a tight one first) */
+function pickKind(rng: () => number, progress: number, first: boolean, mix?: number[]): Kind {
   const r = rng();
+  if (mix) {
+    if (first) return "tight";
+    const kinds: Kind[] = ["gentle", "medium", "tight", "hairpin"];
+    let acc = 0;
+    for (let i = 0; i < kinds.length; i++) {
+      acc += mix[i];
+      if (r < acc) return kinds[i];
+    }
+    return "hairpin";
+  }
   const hard = Math.min(1, progress * 1.25);
   // the first corner is one that has to be braked for: the run's opening teaches the brake, the warning and the steering
   if (first) return "medium";
@@ -74,21 +91,24 @@ function pickKind(rng: () => number, progress: number, first: boolean): Kind {
   return "hairpin";
 }
 
-export function buildRoad(seed = C.seed): Road {
-  const rng = seeded(seed);
-  const seg = C.segM;
-  const finish = C.checkpoints * C.checkEveryM;
-  const length = finish + C.runOutM;
+export function buildRoad(seed?: number, track: TrackId = "canyon"): Road {
+  const climb = track === "climb";
+  // what differs from track to track (the canyon's numbers are ENGINE_CAL.road, as they were)
+  const K = climb ? ENGINE_CAL.climb.road : { ...C, gateStraightM: 38, mix: undefined, flip: 0.72, riseM: 0, railK: 1 };
+  const rng = seeded(seed ?? K.seed);
+  const seg = K.segM;
+  const finish = K.checkpoints * K.checkEveryM;
+  const length = finish + K.runOutM;
   const n = Math.ceil(length / seg);
   const kappa = new Float32Array(n + 1);
 
-  // zones where the road must be straight: the start, each gate, and the tunnel and bridge
-  const tunnelAt = C.checkEveryM * (2.35 + rng() * 0.3);
+  // zones where the road must be straight: the start, each gate, and (on the canyon) the tunnel and bridge
   const tunnelLen = 190;
-  const bridgeAt = C.checkEveryM * (4.45 + rng() * 0.3);
   const bridgeLen = 150;
-  const straights: [number, number][] = [[0, C.startStraightM], [tunnelAt - 50, tunnelAt + tunnelLen + 50], [bridgeAt - 50, bridgeAt + bridgeLen + 50]];
-  for (let k = 1; k <= C.checkpoints; k++) straights.push([k * C.checkEveryM - 38, k * C.checkEveryM + 38]);
+  const tunnelAt = climb ? 0 : K.checkEveryM * (2.35 + rng() * 0.3);
+  const bridgeAt = climb ? 0 : K.checkEveryM * (4.45 + rng() * 0.3);
+  const straights: [number, number][] = climb ? [[0, K.startStraightM]] : [[0, K.startStraightM], [tunnelAt - 50, tunnelAt + tunnelLen + 50], [bridgeAt - 50, bridgeAt + bridgeLen + 50]];
+  for (let k = 1; k <= K.checkpoints; k++) straights.push([k * K.checkEveryM - K.gateStraightM, k * K.checkEveryM + K.gateStraightM]);
   straights.push([finish - 60, length]);
   const keep = (s: number) => {
     let m = 1;
@@ -101,21 +121,21 @@ export function buildRoad(seed = C.seed): Road {
   };
 
   // the corners
-  let i = Math.round(C.startStraightM / seg);
+  let i = Math.round(K.startStraightM / seg);
   let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
   let count = 0;
   while (i < n) {
     // a short straight, shorter as the road goes on: there is always a corner within a few seconds
-    const straight = Math.round((C.straightMinM + rng() * C.straightVarM * (1 - 0.4 * Math.min(1, (i * seg) / finish))) / seg);
+    const straight = Math.round((K.straightMinM + rng() * K.straightVarM * (1 - 0.4 * Math.min(1, (i * seg) / finish))) / seg);
     i += straight;
-    const kind = pickKind(rng, (i * seg) / finish, count++ === 0);
+    const kind = pickKind(rng, (i * seg) / finish, count++ === 0, K.mix);
     const k = KINDS[kind];
     const radius = k.r[0] + rng() * (k.r[1] - k.r[0]);
     const angle = ((k.a[0] + rng() * (k.a[1] - k.a[0])) * Math.PI) / 180;
     const arcM = angle * radius;
     const ramp = Math.max(8, Math.min(Math.round(arcM / seg / 3), Math.round(90 / seg)));
     const len = Math.max(ramp * 2 + 2, Math.round(arcM / seg));
-    if (rng() < 0.72) dir = (dir * -1) as 1 | -1;
+    if (rng() < K.flip) dir = (dir * -1) as 1 | -1;
     const peak = (1 / radius) * dir;
     for (let j = 0; j < len && i + j <= n; j++) {
       const e = Math.min(smooth(j / ramp), smooth((len - 1 - j) / ramp));
@@ -137,7 +157,8 @@ export function buildRoad(seed = C.seed): Road {
   }
 
   // the hills: three waves, read at a warped distance that stands still on the
-  // straights that must be level (so the height holds, with no cliff at the edge)
+  // straights that must be level (so the height holds, with no cliff at the edge); the climb is
+  // a slope instead, steeper in the middle, with a ripple on it
   const p1 = rng() * 6.28, p2 = rng() * 6.28, p3 = rng() * 6.28;
   const y = new Float32Array(n + 1);
   const pace = (s: number) => {
@@ -152,7 +173,10 @@ export function buildRoad(seed = C.seed): Road {
   let warped = 0;
   for (let j = 0; j <= n; j++) {
     warped += pace(j * seg) * seg;
-    y[j] = 9 * Math.sin(warped / 430 + p1) + 5 * Math.sin(warped / 210 + p2) + 1.6 * Math.sin(warped / 95 + p3);
+    if (climb) {
+      const u = Math.min(1, (j * seg) / (finish + 60));
+      y[j] = K.riseM * (0.5 * u + 0.5 * smooth(u)) + smooth((j * seg) / 240) * (2.2 * Math.sin((j * seg) / 120 + p1) + 1.1 * Math.sin((j * seg) / 47 + p3));
+    } else y[j] = 9 * Math.sin(warped / 430 + p1) + 5 * Math.sin(warped / 210 + p2) + 1.6 * Math.sin(warped / 95 + p3);
   }
   const y0 = y[0];
   for (let j = 0; j <= n; j++) y[j] -= y0;
@@ -162,14 +186,25 @@ export function buildRoad(seed = C.seed): Road {
   const mark = (a: number, len: number, f: number) => {
     for (let j = Math.floor(a / seg); j < Math.min(n, Math.ceil((a + len) / seg)); j++) flags[j] |= f;
   };
-  mark(tunnelAt, tunnelLen, TUNNEL);
-  mark(bridgeAt, bridgeLen, BRIDGE);
+  if (!climb) {
+    mark(tunnelAt, tunnelLen, TUNNEL);
+    mark(bridgeAt, bridgeLen, BRIDGE);
+  }
   for (let j = 0; j < n; ) {
     const len = 30 + Math.floor(rng() * 80);
     const r = rng();
-    const f = r < 0.34 ? ROCK_L : r < 0.62 ? ROCK_R : r < 0.76 ? ROCK_L | ROCK_R : 0;
+    const f = climb ? (r < 0.14 ? ROCK_L : r < 0.28 ? ROCK_R : r < 0.36 ? ROCK_L | ROCK_R : 0) : r < 0.34 ? ROCK_L : r < 0.62 ? ROCK_R : r < 0.76 ? ROCK_L | ROCK_R : 0;
     for (let q = 0; q < len && j + q < n; q++) flags[j + q] |= f;
     j += len;
+  }
+  // the climb's switchback walls: the hill stands on the inside of every corner that bites, and the other side falls away to the valley
+  if (climb) {
+    for (let j = 0; j < n; j++) {
+      const k = kappa[j];
+      if (Math.abs(k) > 1 / 420) flags[j] = (flags[j] & ~(ROCK_L | ROCK_R)) | (k > 0 ? ROCK_R : ROCK_L);
+      // and the last stretch is the open top of the mountain: no walls, the lodge and the stands stand in the clear
+      if (j * seg > finish - 140) flags[j] &= ~(ROCK_L | ROCK_R);
+    }
   }
   for (let j = 0; j < n; j++) if (flags[j] & (BRIDGE | TUNNEL)) flags[j] &= ~(ROCK_L | ROCK_R);
 
@@ -189,15 +224,15 @@ export function buildRoad(seed = C.seed): Road {
   }
 
   const checks: number[] = [];
-  for (let k = 1; k <= C.checkpoints; k++) checks.push(k * C.checkEveryM);
+  for (let k = 1; k <= K.checkpoints; k++) checks.push(k * K.checkEveryM);
 
-  return { seed, n, length, segM: seg, half: C.halfWidthM, railHalf: C.halfWidthM + C.railOffsetM, kappa, phi, x, y, z, flags, signs, checks, finish };
+  return { track, seed: seed ?? K.seed, n, length, segM: seg, half: K.halfWidthM, railHalf: K.halfWidthM + K.railOffsetM, railK: K.railK, kappa, phi, x, y, z, flags, signs, checks, finish };
 }
 
-let cached: Road | null = null;
-/** The one road (built on first use). */
-export function getRoad(): Road {
-  return (cached ??= buildRoad());
+const cached: Partial<Record<TrackId, Road>> = {};
+/** A track's road (built on first use; the canyon unless told). */
+export function getRoad(track: TrackId = "canyon"): Road {
+  return (cached[track] ??= buildRoad(undefined, track));
 }
 
 /** Curvature (rad/m) at `s` metres along the road. */

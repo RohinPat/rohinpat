@@ -1,4 +1,5 @@
 import { seeded } from "../useCanvas";
+import type { TrackId } from "./tracks";
 
 // The pictures that never change while the page is open, made once per canvas
 // size and then only drawn: the sky with its stars, wisps and moon, four ridges
@@ -11,6 +12,11 @@ import { seeded } from "../useCanvas";
 // camera's heading, each a little differently, so the far ranges swing slower
 // than the near ridge. The palette is the site's: ink-green blacks, a mint glow
 // on the horizon, cream paint, the warm of sodium lamps for contrast.
+//
+// A track config (THEMES) changes the place without a second renderer: the climb is higher
+// and colder, with a taller sky, steel-blue haze and snow-white ridges, a sea of cloud
+// below the horizon where the canyon has a town, and cool asphalt and rock. The canyon's
+// own numbers are the ones it always had.
 
 export type Pano = { c: HTMLCanvasElement; W: number; H: number };
 
@@ -69,6 +75,8 @@ export type Sprites = {
 };
 
 export type Assets = {
+  /** which track's light these were made for */
+  theme: TrackId;
   w: number;
   h: number;
   /** device pixels per CSS pixel when these were made: the backdrop and the vignette are built at device size and drawn 1:1 */
@@ -102,12 +110,73 @@ const smooth = (t: number) => {
   return x * x * (3 - 2 * x);
 };
 
-/** the far end of the road melts into this: the colour of the haze on the horizon */
-const FOG: RGB = [16, 36, 31];
-/** the glow a ridge's edge catches from the moon */
-const RIM = "rgba(170,226,196,";
+type Theme = {
+  seed: number;
+  /** the far end of the road melts into this: the colour of the haze on the horizon */
+  fog: RGB;
+  /** the glow a ridge's edge catches from the moon (an rgba prefix) */
+  rim: string;
+  /** the horizon with the camera level, as a share of the screen's height (more sky is a bigger share) */
+  hy: number;
+  /** the sky from the top down: stops of the gradient, the wash of light above the horizon, the haze at it, and the ground below */
+  sky: [number, string][];
+  wash: string;
+  haze: [string, string, string];
+  ground: [number, string][];
+  /** 0 the canyon's warm greys, 1 the climb's cold ones: how far the asphalt and the rock are tinted */
+  cool: number;
+  /** the stars' density against the canyon's, and the size of the moon against it */
+  stars: number;
+  moon: number;
+  /** the three ridges: top and bottom colour, how tall (share of the screen), and the edge's glow */
+  far: { top: RGB; bottom: RGB; rim: number; h: number; floor: number; peaky: number; haze: number };
+  mid: { top: RGB; bottom: RGB; rim: number };
+  near: { top: RGB; bottom: RGB; rim: number; teeth: boolean };
+  /** a sea of cloud below the horizon instead of the town */
+  clouds: boolean;
+};
 
-function makePalette(): Palette {
+const THEMES: Record<TrackId, Theme> = {
+  canyon: {
+    seed: 90210,
+    fog: [16, 36, 31],
+    rim: "rgba(170,226,196,",
+    hy: 0.4,
+    sky: [[0, "#020504"], [0.42, "#06110e"], [0.74, "#0c241c"], [0.92, "#163a2f"], [1, "#1f4a3b"]],
+    wash: "rgba(138,217,168,",
+    haze: ["rgba(255,170,110,0)", "rgba(255,160,100,0.11)", "rgba(255,150,90,0)"],
+    ground: [[0, "#0a1411"], [0.35, "#060d0b"], [1, "#030605"]],
+    cool: 0,
+    stars: 1,
+    moon: 1,
+    far: { top: [26, 52, 48], bottom: [16, 34, 31], rim: 0.34, h: 0.22, floor: 0.16, peaky: 0.7, haze: 0.55 },
+    mid: { top: [14, 28, 25], bottom: [9, 18, 16], rim: 0.16 },
+    near: { top: [8, 15, 13], bottom: [5, 10, 9], rim: 0.07, teeth: true },
+    clouds: false,
+  },
+  climb: {
+    seed: 31_337,
+    fog: [26, 42, 64],
+    rim: "rgba(214,232,255,",
+    hy: 0.5,
+    sky: [[0, "#01030a"], [0.42, "#040b1c"], [0.74, "#0b1d34"], [0.92, "#183653"], [1, "#27506f"]],
+    wash: "rgba(150,196,240,",
+    haze: ["rgba(190,214,255,0)", "rgba(190,214,255,0.1)", "rgba(190,214,255,0)"],
+    ground: [[0, "#0a111a"], [0.35, "#060b12"], [1, "#03060b"]],
+    cool: 1,
+    stars: 1.6,
+    moon: 0.8,
+    far: { top: [92, 116, 152], bottom: [34, 52, 80], rim: 0.62, h: 0.27, floor: 0.2, peaky: 0.88, haze: 0.5 },
+    mid: { top: [34, 50, 76], bottom: [16, 26, 44], rim: 0.3 },
+    near: { top: [11, 17, 29], bottom: [6, 10, 18], rim: 0.12, teeth: false },
+    clouds: true,
+  },
+};
+
+function makePalette(th: Theme): Palette {
+  const FOG = th.fog;
+  // the climb's colder tone for a colour: the canyon's (a) at 0, the climb's (b) at 1
+  const cool = (a: RGB, b: RGB): RGB => mix(a, b, th.cool);
   const pal: Palette = { road: [], roadAlt: [], edge: [], rail: [], railHi: [], post: [], reflL: [], reflR: [], rock: [], rockHi: [], rockLo: [], tunnel: [], ceiling: [], lamp: [], parapet: [], board: [], wear: [] };
   for (let b = 0; b < BUCKETS; b++) {
     const z = bucketZ(b);
@@ -115,21 +184,21 @@ function makePalette(): Palette {
     const refl = 0.1 + 0.9 * Math.exp(-Math.max(0, z - 6) / 190);
     const fog = smooth((z - 90) / 620) * 0.78;
     const tone = (dark: RGB, lit: RGB, k: number): RGB => mix(mix(dark, lit, k), FOG, fog);
-    pal.road.push(css(tone([10, 14, 13], [66, 64, 54], beam)));
-    pal.roadAlt.push(css(tone([12, 16, 15], [77, 74, 62], beam)));
-    pal.wear.push(css(tone([6, 9, 8], [38, 37, 32], beam)));
+    pal.road.push(css(tone(cool([10, 14, 13], [10, 13, 17]), cool([66, 64, 54], [60, 64, 74]), beam)));
+    pal.roadAlt.push(css(tone(cool([12, 16, 15], [12, 15, 20]), cool([77, 74, 62], [70, 75, 87]), beam)));
+    pal.wear.push(css(tone(cool([6, 9, 8], [6, 8, 12]), cool([38, 37, 32], [34, 38, 46]), beam)));
     pal.edge.push(css(mix(mix([46, 46, 40], [242, 234, 215], refl), FOG, fog * 0.6)));
-    pal.rail.push(css(tone([17, 23, 22], [122, 132, 132], beam * 0.92)));
+    pal.rail.push(css(tone(cool([17, 23, 22], [17, 22, 27]), cool([122, 132, 132], [120, 132, 146]), beam * 0.92)));
     pal.railHi.push(css(tone([30, 38, 37], [214, 224, 222], Math.min(1, beam * 1.1))));
     pal.post.push(css(tone([26, 31, 30], [150, 156, 154], beam)));
     pal.reflR.push(css([236, 246, 255], Math.min(1, 0.22 + 0.78 * refl)));
     pal.reflL.push(css([255, 176, 66], Math.min(1, 0.22 + 0.78 * refl)));
     const rockBeam = Math.exp(-Math.max(0, z - 6) / 22);
     // four shades a distance, so neighbouring segments of the cliff are not the same grey
-    for (let q = 0; q < 4; q++) pal.rock.push(css(tone([7 + q * 1.3, 11 + q * 1.4, 10 + q * 1.3], [44 + q * 5, 48 + q * 5, 44 + q * 4], rockBeam)));
-    // the upper face of the cliff is further from the lamps and leans away: darker; a ledge catches more
-    pal.rockLo.push(css(tone([6, 9, 8], [30, 34, 31], rockBeam * 0.8)));
-    pal.rockHi.push(css(tone([14, 20, 18], [92, 98, 88], rockBeam * 0.9)));
+    for (let q = 0; q < 4; q++) pal.rock.push(css(tone(cool([7 + q * 1.3, 11 + q * 1.4, 10 + q * 1.3], [7 + q * 1.3, 10 + q * 1.4, 14 + q * 1.5]), cool([44 + q * 5, 48 + q * 5, 44 + q * 4], [46 + q * 5, 52 + q * 5, 64 + q * 5]), rockBeam)));
+    // the upper face of the cliff is further from the lamps and leans away: darker; a ledge catches more (the climb's ledges carry snow)
+    pal.rockLo.push(css(tone(cool([6, 9, 8], [6, 8, 12]), cool([30, 34, 31], [30, 35, 46]), rockBeam * 0.8)));
+    pal.rockHi.push(css(tone(cool([14, 20, 18], [16, 22, 30]), cool([92, 98, 88], [170, 192, 220]), rockBeam * 0.9)));
     const lampLit = 0.3 + 0.7 * Math.exp(-z / 70);
     // cool concrete tile under warm lamps: the lamps' glow supplies the warmth
     pal.tunnel.push(css(tone([14, 21, 20], [92, 106, 98], lampLit)));
@@ -495,7 +564,7 @@ function ridge(rng: () => number, W: number, base: number, octaves: number, peak
 
 type Skyline = Pano & { heights: number[] };
 
-function mountains(rng: () => number, W: number, H: number, top: RGB, bottom: RGB, rim: number, floorFrac: number, o: { base: number; octaves: number; peaky: number; haze: number; teeth?: boolean }): Skyline {
+function mountains(th: Theme, rng: () => number, W: number, H: number, top: RGB, bottom: RGB, rim: number, floorFrac: number, o: { base: number; octaves: number; peaky: number; haze: number; teeth?: boolean }): Skyline {
   const c = canvas(W, H);
   const x = c.getContext("2d")!;
   const r = ridge(rng, W, o.base, o.octaves, o.peaky);
@@ -521,15 +590,15 @@ function mountains(rng: () => number, W: number, H: number, top: RGB, bottom: RG
   if (o.haze > 0) {
     x.globalCompositeOperation = "source-atop";
     const hz = x.createLinearGradient(0, H * 0.35, 0, H);
-    hz.addColorStop(0, css(FOG, 0));
-    hz.addColorStop(1, css(FOG, o.haze));
+    hz.addColorStop(0, css(th.fog, 0));
+    hz.addColorStop(1, css(th.fog, o.haze));
     x.fillStyle = hz;
     x.fillRect(0, 0, W, H);
     x.globalCompositeOperation = "source-over";
   }
   if (rim > 0) {
     // the edge the moon catches
-    x.strokeStyle = `${RIM}${rim})`;
+    x.strokeStyle = `${th.rim}${rim})`;
     x.lineWidth = 1.3;
     x.beginPath();
     heights.forEach((hgt, i) => (i ? x.lineTo(i * step, H - hgt + 0.7) : x.moveTo(0, H - hgt + 0.7)));
@@ -538,10 +607,10 @@ function mountains(rng: () => number, W: number, H: number, top: RGB, bottom: RG
   return { c, W, H, heights };
 }
 
-function stars(rng: () => number, W: number, H: number, moonAt: number, moonR: number): Pano {
+function stars(rng: () => number, W: number, H: number, moonAt: number, moonR: number, density = 1): Pano {
   const c = canvas(W, H);
   const x = c.getContext("2d")!;
-  const n = Math.round((W * H) / 1700);
+  const n = Math.round(((W * H) / 1700) * density);
   for (let i = 0; i < n; i++) {
     const px = rng() * W;
     // thicker toward the top of the sky, thinner into the haze
@@ -656,6 +725,46 @@ function city(rng: () => number, W: number, H: number, scale: number): Pano {
   return { c, W, H };
 }
 
+/** a sea of cloud below the horizon, lit from above by the moon: soft long banks, a few brighter, thinning to nothing at the top and the foot */
+function cloudSea(rng: () => number, W: number, H: number, scale: number, fog: RGB): Pano {
+  const c = canvas(W, H);
+  const x = c.getContext("2d")!;
+  for (let layer = 0; layer < 3; layer++) {
+    const n = Math.round(W / (90 * scale)) + 6;
+    for (let i = 0; i < n; i++) {
+      const cx = rng() * W;
+      const cy = H * (0.32 + 0.5 * rng() + layer * 0.06);
+      const rx = (110 + rng() * 300) * scale;
+      const ry = rx * (0.07 + rng() * 0.08);
+      const lit = 0.25 + 0.75 * rng() * (1 - layer * 0.25);
+      x.save();
+      x.translate(cx, cy);
+      x.scale(1, ry / rx);
+      const g = x.createRadialGradient(0, 0, 0, 0, 0, rx);
+      g.addColorStop(0, css(mix(fog, [150, 180, 214], lit), 0.5 - layer * 0.08));
+      g.addColorStop(1, css(mix(fog, [150, 180, 214], lit), 0));
+      x.fillStyle = g;
+      for (const wrap of [-W, 0, W]) {
+        if (cx + wrap + rx < 0 || cx + wrap - rx > W) continue;
+        x.save();
+        x.translate(wrap, 0);
+        x.fillRect(-rx, -rx, rx * 2, rx * 2);
+        x.restore();
+      }
+      x.restore();
+    }
+  }
+  x.globalCompositeOperation = "destination-in";
+  const fade = x.createLinearGradient(0, 0, 0, H);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(0.3, "rgba(0,0,0,1)");
+  fade.addColorStop(0.85, "rgba(0,0,0,0.95)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = fade;
+  x.fillRect(0, 0, W, H);
+  return { c, W, H };
+}
+
 /** landmarks drawn into a ridge's panorama: radio masts with their red lamps, and lines of pylons with their cables */
 function landmarks(rng: () => number, p: Skyline, s: number, o: { mast: number; pylons: number }) {
   const x = p.c.getContext("2d")!;
@@ -730,9 +839,10 @@ function landmarks(rng: () => number, p: Skyline, s: number, o: { mast: number; 
   }
 }
 
-export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number): Assets {
-  const rng = seeded(90210);
-  const hy0 = Math.round(h * 0.4);
+export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number, theme: TrackId = "canyon"): Assets {
+  const th = THEMES[theme];
+  const rng = seeded(th.seed);
+  const hy0 = Math.round(h * th.hy);
   const fRef = Math.max(w * 0.74, h * 0.7);
   const W = Math.round(Math.min(7200, Math.max(w * 2.2, Math.PI * 2 * fRef)));
   const px = W / (Math.PI * 2);
@@ -747,32 +857,26 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
   bx.scale(dpr, dpr);
   const bw = w + pad * 2;
   const sky = bx.createLinearGradient(0, 0, 0, margin + hy0 + h * 0.1);
-  sky.addColorStop(0, "#020504");
-  sky.addColorStop(0.42, "#06110e");
-  sky.addColorStop(0.74, "#0c241c");
-  sky.addColorStop(0.92, "#163a2f");
-  sky.addColorStop(1, "#1f4a3b");
+  for (const [at, col] of th.sky) sky.addColorStop(at, col);
   bx.fillStyle = sky;
   bx.fillRect(0, 0, bw, margin + hy0 + h * 0.14);
-  // the glow of a town below the horizon: warm at the foot, a mint wash above it
+  // the glow of a town below the horizon: warm at the foot, a wash above it (the climb has no town: the haze is the moon on the snow and the cloud)
   bx.globalCompositeOperation = "lighter";
   const wash = bx.createLinearGradient(0, margin + hy0 - h * 0.22, 0, margin + hy0 + h * 0.1);
-  wash.addColorStop(0, "rgba(138,217,168,0)");
-  wash.addColorStop(0.7, "rgba(138,217,168,0.07)");
-  wash.addColorStop(1, "rgba(138,217,168,0)");
+  wash.addColorStop(0, `${th.wash}0)`);
+  wash.addColorStop(0.7, `${th.wash}0.07)`);
+  wash.addColorStop(1, `${th.wash}0)`);
   bx.fillStyle = wash;
   bx.fillRect(0, margin + hy0 - h * 0.22, bw, h * 0.32);
   const haze = bx.createLinearGradient(0, margin + hy0 - h * 0.1, 0, margin + hy0 + h * 0.16);
-  haze.addColorStop(0, "rgba(255,170,110,0)");
-  haze.addColorStop(0.55, "rgba(255,160,100,0.11)");
-  haze.addColorStop(1, "rgba(255,150,90,0)");
+  haze.addColorStop(0, th.haze[0]);
+  haze.addColorStop(0.55, th.haze[1]);
+  haze.addColorStop(1, th.haze[2]);
   bx.fillStyle = haze;
   bx.fillRect(0, margin + hy0 - h * 0.1, bw, h * 0.26);
   bx.globalCompositeOperation = "source-over";
   const ground = bx.createLinearGradient(0, margin + hy0 + h * 0.08, 0, margin * 2 + h);
-  ground.addColorStop(0, "#0a1411");
-  ground.addColorStop(0.35, "#060d0b");
-  ground.addColorStop(1, "#030605");
+  for (const [at, col] of th.ground) ground.addColorStop(at, col);
   bx.fillStyle = ground;
   bx.fillRect(0, margin + hy0 + h * 0.1, bw, margin * 2 + h);
 
@@ -790,13 +894,14 @@ export function buildAssets(ctx: CanvasRenderingContext2D, w: number, h: number)
 
   const starsH = Math.round(hy0 + h * 0.25);
   // the moon sits ahead and to the right of the start, where the opening picture has room for it
-  const starPano = stars(rng, W, starsH, w * 0.7, Math.max(14, 20 * s));
-  const far = mountains(rng, W, Math.round(h * 0.22), [26, 52, 48], [16, 34, 31], 0.34, 0.16, { base: 5, octaves: 6, peaky: 0.7, haze: 0.55 });
-  landmarks(rng, far, s, { mast: 3, pylons: 0 });
-  const cityPano = city(rng, W, Math.round(h * 0.17), s);
-  const mid = mountains(rng, W, Math.round(h * 0.18), [14, 28, 25], [9, 18, 16], 0.16, 0.12, { base: 6, octaves: 5, peaky: 0.5, haze: 0.3 });
-  landmarks(rng, mid, s, { mast: 0, pylons: 2 });
-  const near = mountains(rng, W, Math.round(h * 0.12), [8, 15, 13], [5, 10, 9], 0.07, 0.1, { base: 7, octaves: 4, peaky: 0.3, haze: 0, teeth: true });
+  const starPano = stars(rng, W, starsH, w * 0.7, Math.max(14, 20 * s * th.moon), th.stars);
+  const f = th.far;
+  const far = mountains(th, rng, W, Math.round(h * f.h), f.top, f.bottom, f.rim, f.floor, { base: 5, octaves: 6, peaky: f.peaky, haze: f.haze });
+  landmarks(rng, far, s, { mast: theme === "climb" ? 2 : 3, pylons: 0 });
+  const cityPano = th.clouds ? cloudSea(rng, W, Math.round(h * 0.17), s, th.fog) : city(rng, W, Math.round(h * 0.17), s);
+  const mid = mountains(th, rng, W, Math.round(h * 0.18), th.mid.top, th.mid.bottom, th.mid.rim, 0.12, { base: 6, octaves: 5, peaky: 0.5, haze: 0.3 });
+  landmarks(rng, mid, s, { mast: 0, pylons: theme === "climb" ? 0 : 2 });
+  const near = mountains(th, rng, W, Math.round(h * 0.12), th.near.top, th.near.bottom, th.near.rim, 0.1, { base: 7, octaves: 4, peaky: 0.3, haze: 0, teeth: th.near.teeth });
 
-  return { w, h, dpr, backdropPad: pad, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(rng), pal: makePalette() };
+  return { theme, w, h, dpr, backdropPad: pad, hy0, px, backdrop: bd, backdropTop: margin, vignette: vig, stars: starPano, far, city: cityPano, mid, near, sprites: makeSprites(rng), pal: makePalette(th) };
 }

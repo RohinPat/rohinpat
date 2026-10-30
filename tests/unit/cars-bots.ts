@@ -1,6 +1,5 @@
 import { NO_INPUT, type NightInput } from "@/components/offhours/engineRemote";
 import { NightGame, forgetBestRun } from "@/components/offhours/night/game";
-import { getTarget } from "@/components/offhours/night/target";
 import { drive, planSpeed } from "@/components/offhours/night/ai";
 import { newKeyAxes, stepKeys } from "@/components/offhours/night/nightInput";
 
@@ -39,6 +38,8 @@ export type Bot = {
   /** by hand, no handbrake: downshift into corners tighter than this curvature at this speed or more, steering into them (a clutch kick) */
   kickK?: number;
   kickS?: number;
+  /** what changes on the climb: the same driver with the same character, at the speeds and the corners of a hairpin road */
+  climb?: Partial<Bot>;
 };
 
 function rng(seed: number) {
@@ -77,12 +78,13 @@ export type RunStat = {
 
 const DT = 1 / 60;
 
-export function playRun(bot: Bot, seed = 1, setup?: (g: NightGame) => void): RunStat {
+export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): RunStat {
   forgetBestRun();
   const R = rng(seed * 7919 + 13);
   const g = new NightGame(true);
   setup?.(g);
-  const plan = getTarget().plan;
+  const bot: Bot = g.track.id === "climb" && base.climb ? { ...base, ...base.climb } : base;
+  const plan = g.target.plan;
   const ai: NightInput = { ...NO_INPUT };
   const inp: NightInput = { steer: 0, throttle: 1, brake: 0, hand: 0 };
   const axes = newKeyAxes();
@@ -250,9 +252,10 @@ export const BOTS: Bot[] = [
   { name: "gas+steer", pace: 9, gasOnly: true, steer: true, react: 0.15, noise: 0.2 },
   { name: "cue-only", pace: 9, steer: true, cueOnly: true, react: 0.25, noise: 0.2 },
   { name: "cautious", pace: 0.78, steer: true, cueBrake: true, react: 0.2, noise: 0.2 },
-  { name: "decent", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2 },
-  { name: "precise", pace: 0.95, steer: true, flickK: 1 / 330, flickCool: 0.8, flickS: 18, react: 0, noise: 0, pwm: 0.07 },
-  { name: "drifter", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2 },
+  // on the climb every corner is tighter than the canyon's flick marks, so the drivers flick by the same character at the road's own marks: the decent one the hairpins only, the drifter every bend
+  { name: "decent", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, climb: { flickK: 1 / 75, flickS: 16 } },
+  { name: "precise", pace: 0.95, steer: true, flickK: 1 / 330, flickCool: 0.8, flickS: 18, react: 0, noise: 0, pwm: 0.07, climb: { flickK: 1 / 120, flickS: 14 } },
+  { name: "drifter", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2, climb: { flickK: 1 / 130, flickS: 14, flickCool: 1.0 } },
   // the same drivers by hand: up in the green window (7,300 to the limiter), a good shift; early and late are not
   { name: "decent-manual", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, manualUp: 7350 },
   { name: "decent-early", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, manualUp: 6400 },
