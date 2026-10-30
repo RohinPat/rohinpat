@@ -8,9 +8,10 @@ import { getRoad } from "@/components/offhours/night/road";
 import { getTarget } from "@/components/offhours/night/target";
 import { MEDALS, medalsAt } from "@/components/offhours/night/medals";
 import { BOTS, playRun, type Bot, type RunStat } from "./cars-bots";
+import { newKeyAxes, stepKeys } from "@/components/offhours/night/nightInput";
 
 // The steering assist (Off, Light, Full): a lane-keep for the keys and the touch pads that blends the player's wheel toward
-// the racing line, and lets go while the car slides.
+// the racing line, gives way to a key held against it, and lets go while the car slides.
 
 const A = ENGINE_CAL.assist;
 const bot = (name: string): Bot => BOTS.find((b) => b.name === name)!;
@@ -113,6 +114,34 @@ describe("the assist lets go of a slide", () => {
     expect(assistSteer(st, 2, c, road, plan, input(0.4, 1), 1 / 120)).toBe(0.4);
   });
 
+  it("a key press wins: on every level a held key moves the car the way it says, and Full keeps most of the response", () => {
+    // hold a key for 0.4 s at speed, in a straight and in corners, and see how far across the road the car goes
+    const DT = 1 / 60;
+    const press = (level: AssistLevel, dir: 1 | -1, s: number, speed: number) => {
+      const g = new NightGame(true);
+      g.assist = level;
+      g.start();
+      while (g.phase !== "run") g.update(DT, { ...NO_INPUT });
+      Object.assign(g.car, { s, u: speed, w: 0, r: 0, psi: 0, lat: 0 });
+      const axes = newKeyAxes();
+      for (let i = 0; i < 24; i++) {
+        stepKeys(axes, { dir, gas: true, brake: false }, speed, DT);
+        g.update(DT, { steer: axes.steer, throttle: 0.4, brake: 0, hand: 0 });
+      }
+      return g.car.lat;
+    };
+    for (const speed of [20, 35])
+      for (const s of [260, 1500, 2600])
+        for (const dir of [-1, 1] as const) {
+          const off = press(0, dir, s, speed);
+          for (const level of [1, 2] as AssistLevel[]) {
+            const on = press(level, dir, s, speed);
+            expect(Math.sign(on)).toBe(dir);
+            expect(Math.abs(on)).toBeGreaterThan(Math.abs(off) * 0.4);
+          }
+        }
+  });
+
   it("a new run starts with all of it on", () => {
     const g = new NightGame(true);
     g.assistState.fade = 0;
@@ -129,8 +158,9 @@ describe("what the assist does to a run (scripted keyboard drivers, 24 runs each
     const light = many("decent", 1);
     const full = many("decent", 2);
     const r = (rs: RunStat[]) => avg(rs, (x) => x.rails);
-    expect(r(light)).toBeLessThan(r(off) * 0.7);
-    expect(r(full)).toBeLessThan(r(off) * 0.7);
+    // it gives way to the keys now (see "a key press wins"), so it saves fewer rail hits than a wheel pulled to the line would
+    expect(r(light)).toBeLessThan(r(off) * 0.85);
+    expect(r(full)).toBeLessThan(r(off) * 0.8);
     // they still finish, and a leg driven clean is more common
     expect(light.every((x) => x.finished)).toBe(true);
     expect(avg(light, (x) => x.clean)).toBeGreaterThan(avg(off, (x) => x.clean));

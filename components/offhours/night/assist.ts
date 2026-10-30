@@ -5,7 +5,7 @@ import type { Road } from "./road";
 
 // The steering assist: a lane-keep for the keys and the touch pads. It blends the player's steering toward the wheel that
 // would hold the car on the racing line (night/ai.ts steers the target driver with the same function), Off, Light or Full.
-// It fades out while the car slides (a big body angle) or the handbrake is held, so a drift is still the player's own and still
+// It gives way to the player's own steering (a key held is mostly theirs; let go and it holds the line), and fades out while the car slides (a big body angle) or the handbrake is held, so a drift is still the player's own and still
 // what scores, and comes back as the car straightens. Pure, so it is unit-tested; the numbers are ENGINE_CAL.assist.
 
 const A = ENGINE_CAL.assist;
@@ -49,8 +49,16 @@ export function assistSteer(st: AssistState, level: AssistLevel, c: Car, road: R
   // near the rail the pull grows (from `guardFromM` off the middle to the rail's foot), and it lets go of the slide later than the rest of the assist does
   const near = smooth((Math.abs(c.lat) - A.guardFromM) / Math.max(0.1, road.railHalf - A.guardFromM));
   const edge = near * (1 - smooth((Math.abs(c.slip) - A.edgeFrom) / (A.edgeTo - A.edgeFrom)));
-  const g = Math.min(1, base * fade + base * A.guard * edge);
-  if (g <= 0) return inp.steer;
   const line = steerToLine(c, road, A.centre ? null : plan.line);
-  return inp.steer + g * (line - inp.steer);
+  const pull = line - inp.steer;
+  // the player's hands come first: where the assist would take steering away from what they ask for, it gives way the more
+  // they ask (pulling the whole wheel to the line made a key press do little, or even turn the car the other way); where it
+  // only adds to a turn they are already making, it helps in full
+  const against = pull * inp.steer < 0;
+  const yieldTo = against ? 1 - A.yield * Math.min(1, Math.abs(inp.steer)) : 1;
+  // by the rail it only ever pulls away from it (steering right moves the car to +lat), and gives way to the hands less
+  const away = pull * c.lat < 0 ? 1 : 0;
+  const g = Math.min(1, base * fade * yieldTo + base * A.guard * edge * away * (1 - 0.5 * Math.min(1, Math.abs(inp.steer))));
+  if (g <= 0) return inp.steer;
+  return inp.steer + g * pull;
 }
