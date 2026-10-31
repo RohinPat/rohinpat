@@ -204,7 +204,7 @@ export const ENGINE_CAL = {
    * comes back over `upS` seconds once the car has straightened (and `holdS` after the handbrake is let go). It never touches the
    * score and a phone held like a wheel ignores it.
    */
-  assist: { light: 0.55, full: 0.8, centre: false, slipFrom: 0.15, slipTo: 0.5, downPerS: 9, upS: 0.7, holdS: 0.35, guard: 2, guardFromM: 1, edgeFrom: 0.9, edgeTo: 1.6 },
+  assist: { light: 0.55, full: 0.8, yield: 0.8, centre: false, slipFrom: 0.15, slipTo: 0.5, downPerS: 9, upS: 0.7, holdS: 0.35, guard: 2, guardFromM: 1, edgeFrom: 0.9, edgeTo: 1.6 },
 
   // ------------------------------------------------------ night run: the run itself
   run: {
