@@ -127,15 +127,20 @@ test.describe("phone controllers: the maze", () => {
     await expect(phone.getByTestId("maze-controller")).toBeVisible();
     await stage(host).getByRole("button", { name: "You", exact: true }).click();
     const canvas = stage(host).locator("canvas");
+    // the view above the HUD (the HUD's clock ticks while you walk it yourself)
+    const view = async () => {
+      const b = (await canvas.boundingBox())!;
+      return host.screenshot({ clip: { x: b.x, y: b.y, width: b.width, height: b.height * 0.6 } });
+    };
     await host.waitForTimeout(500);
-    const a = await canvas.screenshot();
+    const a = await view();
     await host.waitForTimeout(400);
-    expect((await canvas.screenshot()).equals(a)).toBe(true); // a still maze, nothing moving it
+    expect((await view()).equals(a)).toBe(true); // a still maze, nothing moving it
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "axis", name: "y", v: 1 }));
     await host.waitForTimeout(1200);
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "axis", name: "y", v: 0 }));
     await host.waitForTimeout(300);
-    expect((await canvas.screenshot()).equals(a)).toBe(false);
+    expect((await view()).equals(a)).toBe(false);
     await context.close();
   });
 

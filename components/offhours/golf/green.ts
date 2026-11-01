@@ -187,6 +187,8 @@ export type Putt = {
   aiming: boolean;
   aimFrom: { x: number; y: number };
   aimTo: { x: number; y: number };
+  /** where the press landed: the pull is measured from here, so a tap (no pull) does not putt, wherever it lands */
+  aimPress: { x: number; y: number };
   kAngle: number;
   kPower: number;
   kCharging: boolean;
@@ -224,6 +226,7 @@ export function newPutt(): Putt {
     aiming: false,
     aimFrom: { x: 0, y: 0 },
     aimTo: { x: 0, y: 0 },
+    aimPress: { x: 0, y: 0 },
     kAngle: 0,
     kPower: 0,
     kCharging: false,
@@ -340,11 +343,13 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
   if (kind === "down") {
     if (p.ball.moving || p.ball.sunk || p.putter) return;
     p.aiming = true;
-    p.aimFrom = { x, y };
-    p.aimTo = { x, y };
+    // the pull is the drag from where the press landed, laid on the ball: a press anywhere can pull back, and a tap
+    // (a click to focus, a look at the cup) is no pull at all, so it does not putt
+    p.aimPress = { x, y };
     p.aimFrom = { x: sx(v, p.ball.x, p.ball.y), y: sy(v, p.ball.x, p.ball.y) };
+    p.aimTo = { ...p.aimFrom };
   } else if (kind === "move") {
-    if (p.aiming) p.aimTo = { x, y };
+    if (p.aiming) p.aimTo = { x: p.aimFrom.x + x - p.aimPress.x, y: p.aimFrom.y + y - p.aimPress.y };
   } else {
     if (!p.aiming) return;
     p.aiming = false;
@@ -881,7 +886,7 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   if (p.reading) {
     chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"], "#a0dcff");
   } else if (H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
-    chip(["PULL BACK FROM THE BALL AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK FROM THE BALL, LET GO", "PULL BACK, LET GO"], "#f2ead7");
+    chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK, LET GO"], "#f2ead7");
   }
 
   // power meter while charging by key

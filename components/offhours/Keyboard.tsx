@@ -171,20 +171,41 @@ export default function Keyboard({ mode, paused }: PieceProps) {
     if (!el) return;
     const onDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Tab") return;
+      // shortcuts (copy, reload, back) belong to the browser
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "BUTTON") return;
+      // a focused control keeps the keys it uses (Enter and Space press a button, arrows move the slider); every other key types
+      if (t.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ")) return;
+      if (t.tagName === "INPUT" && /^(Arrow|Home|End|Page)/.test(e.key)) return;
       e.preventDefault();
       if (!e.repeat) press(e.code, e.key.length === 1 ? e.key.toUpperCase() : undefined);
     };
     const onUp = (e: KeyboardEvent) => release(e.code);
-    const onBlur = () => Array.from(held.current).forEach(release);
+    const onBlur = (e: FocusEvent) => {
+      // focus moving to a control inside is not leaving the board
+      if (e.relatedTarget instanceof Node && el.contains(e.relatedTarget)) return;
+      Array.from(held.current).forEach(release);
+    };
+    // A mouse click on Take apart, a part or the slider hands focus back to the board, so typing carries on (the stage's own
+    // hand-back skips controls inside the focused element, and this whole piece is that element). Keyboard users keep theirs.
+    const refocus = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest("button, input") || t === el) return;
+      window.setTimeout(() => el.focus({ preventScroll: true }), 0);
+    };
+    const onClick = (e: MouseEvent) => e.detail > 0 && refocus(e);
+    const onPointerUp = (e: PointerEvent) => (e.target as HTMLElement).matches?.("input[type=range]") && refocus(e);
     el.addEventListener("keydown", onDown);
     el.addEventListener("keyup", onUp);
-    el.addEventListener("blur", onBlur);
+    el.addEventListener("focusout", onBlur);
+    el.addEventListener("click", onClick);
+    el.addEventListener("pointerup", onPointerUp);
     return () => {
       el.removeEventListener("keydown", onDown);
       el.removeEventListener("keyup", onUp);
-      el.removeEventListener("blur", onBlur);
+      el.removeEventListener("focusout", onBlur);
+      el.removeEventListener("click", onClick);
+      el.removeEventListener("pointerup", onPointerUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play]);
