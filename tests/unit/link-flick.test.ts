@@ -13,9 +13,9 @@ const HOOP_Z = 4.4;
 
 describe("hoops: swipe -> shot", () => {
   it("is the mouse swipe's own formula (screen heights per second)", () => {
-    // the old inline maths, for a swipe of vx, vy px/s on a canvas h px tall
+    // the inline maths, for a swipe of vx, vy px/s on a canvas h px tall (faster than perfect, so the gentler slope)
     const h = 600, vx = 120, vy = -1500, ballX = 0.2, ballZ = 0.6;
-    const old = { power: 1 + 0.45 * Math.log2(-vy / (h * 1.6)), aim: ballX + (vx / -vy) * (HOOP_Z - ballZ) };
+    const old = { power: 1 + HOOPS_CAL.swipeSlopeFast * Math.log2(-vy / (h * HOOPS_CAL.swipePerfect)), aim: ballX + (vx / -vy) * (HOOP_Z - ballZ) };
     const got = swipeShot(vx / h, vy / h, ballX, ballZ, HOOP_Z)!;
     expect(got.power).toBeCloseTo(old.power, 10);
     expect(got.aimX).toBeCloseTo(old.aim, 10);
@@ -38,7 +38,7 @@ describe("hoops: swipe -> shot", () => {
     expect(s.power).toBeGreaterThan(0.85);
     expect(s.power).toBeLessThan(1.25);
     // without the gain it would be a hard overshoot
-    expect(swipeShot(0, -2000 / 300, 0, 0.6, HOOP_Z)!.power).toBeGreaterThan(1.5);
+    expect(swipeShot(0, -2000 / 300, 0, 0.6, HOOP_Z)!.power).toBeGreaterThan(1.35);
   });
 });
 
