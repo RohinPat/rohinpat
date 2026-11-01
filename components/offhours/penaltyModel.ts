@@ -642,3 +642,17 @@ export function poseEnd(k: KeeperState) {
 }
 
 export { clamp, easeOut, easeOut3 };
+
+/**
+ * Why a kick that missed the frame missed: hit too hard (it climbed, or the
+ * power was past the kick's band), too soft, or just not where it was aimed.
+ * `aim` is where the player pointed; `end` is where the ball crossed the line.
+ */
+export function missWhy(st: Strike, end: Vec): "TOO HARD" | "TOO SOFT" | "OFF TARGET" {
+  const { shot, power, aim } = st;
+  // pointed outside the frame: the ball went where it was sent
+  if (Math.abs(aim.x) > GW - 0.05 || aim.y > GH - 0.05) return "OFF TARGET";
+  if (power > shot.sweet + shot.width || (shot.id !== "panenka" && power > 0.88 && end.y > GH)) return "TOO HARD";
+  if (power < shot.sweet - shot.width) return "TOO SOFT";
+  return "OFF TARGET";
+}

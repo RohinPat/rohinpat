@@ -9,7 +9,7 @@ import { isPhoneShot, kickFromSwipe, parseKick, type PhoneShot } from "./penalty
 import {
   BALL_R, GH, GOAL_Z, GW, KEEPER_Z, NET_Z, RUNUP, SHOTS, SPOT_Z,
   clamp, contact, glovePos, keeperIdle, keeperRun, keeperStartPlan, launch, makeStrike, newBall, newKeeper,
-  shotById, spinBall, stepBall, think,
+  missWhy, shotById, spinBall, stepBall, think,
   type Ball, type Brain, type Contact, type Joints, type ShotId, type Strike,
 } from "./penaltyModel";
 
@@ -19,13 +19,23 @@ import {
 // pointer, hold to power up, let go. The keeper is a small mind of his own
 // (see penaltyModel.ts): he watches, reads what he can of the ball, commits,
 // and dives with a real body you can beat, or that can get a glove to it.
-// Goals ripple a spring-grid net. Best of five; five from five and it goes on.
+// Goals ripple a spring-grid net. Five kicks; five from five and it goes on
+// until you miss.
 // A linked phone kicks too (penaltyRemote.ts): swipe its screen, and the swipe's
 // heading, length, speed and bend become the aim, power and curl of the same
 // strike(). It is told how each kick went.
 
 const CAM = { y: 1.45, z: -4.6 };
 const COLS = 17, ROWS = 7;
+/** a touch aims with the reticle this far above the finger, and charges only once the finger has rested a moment */
+const TOUCH_LIFT = 70;
+const TOUCH_HOLD = 0.2;
+/** the over screen takes no input at first; after a result, a click skips to the next aim once it has been seen */
+const OVER_GUARD = 0.8;
+const SKIP_AFTER = 0.8;
+
+// the most goals in the first five kicks of a shootout, this visit (kept across closing and reopening the piece; no storage)
+let bestFive = 0;
 
 type Kick = "goal" | "save" | "miss" | "post";
 type Phase = "aim" | "run" | "fly" | "after" | "over" | "replay";
@@ -89,6 +99,12 @@ export default function Penalty({ mode, paused }: PieceProps) {
     now: 0,
     overT: 0,
     told: "",
+    touch: false,
+    pending: false,
+    downAt: 0,
+    look: 0,
+    squashT: -9,
+    reduce: false,
   });
   const choice = useRef<PhoneShot>("auto"); // the phone's shot picker
   const crowd = useRef(
@@ -111,14 +127,15 @@ export default function Penalty({ mode, paused }: PieceProps) {
     return { x: ((sx - cx) * d) / f, y: CAM.y - ((sy - cy) * d) / f };
   };
 
-  const sfx = (k: "kick" | "swish" | "net" | "roar" | "save" | "glove" | "post" | "ooh" | "groan") => {
+  const sfx = (k: "kick" | "thud" | "swish" | "net" | "roar" | "save" | "glove" | "post" | "ooh" | "groan") => {
     if (!play) return;
     const au = getAudio();
     if (!au) return;
     if (k === "kick") {
       tone(au, { freq: 140, to: 60, dur: 0.12, gain: 0.5 });
       burst(au, { freq: 900, type: "lowpass", dur: 0.04, gain: 0.3 });
-    } else if (k === "swish") {
+    } else if (k === "thud") tone(au, { freq: 95, to: 42, dur: 0.1, gain: 0.45 });
+    else if (k === "swish") {
       burst(au, { freq: 4200, q: 0.8, type: "highpass", dur: 0.5, gain: 0.07, at: 0.04 });
     } else if (k === "net") burst(au, { freq: 2500, q: 0.7, type: "bandpass", dur: 0.25, gain: 0.25 });
     else if (k === "roar") {
@@ -151,9 +168,9 @@ export default function Penalty({ mode, paused }: PieceProps) {
     else tone(au, { freq: 330, to: 180, dur: 0.7, gain: 0.08, type: "triangle" });
   };
 
+  // a shot picked while a kick is still playing is the next kick's: the kick in flight keeps its own strike
   const pickShot = (id: ShotId) => {
     const s = S.current;
-    if (s.phase !== "aim" && s.phase !== "over") return;
     s.shot = id;
     setShotState(id);
   };
@@ -185,6 +202,10 @@ export default function Penalty({ mode, paused }: PieceProps) {
     s.phase = "run";
     s.timer = 0;
     s.acc = 0;
+    // the kick starts at release: the thud, the squash and the sound, then the run-up
+    s.squashT = s.now;
+    sfx("thud");
+    sfx("kick");
   };
 
   const record = (s: typeof S.current, sc: Scene) => {
@@ -217,6 +238,8 @@ export default function Penalty({ mode, paused }: PieceProps) {
   function end(s: typeof S.current, r: Kick, t: number, detail: string, bounce = true) {
     s.result = r;
     s.resultT = t;
+    // a save his read decided says so
+    if (r === "save" && s.keeper.plan?.style === "read") detail = "HE READ IT";
     s.detail = detail;
     s.kicks.push(r);
     s.phase = "after";
@@ -310,7 +333,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
     const st = s.strike!;
     const onFrame = (Math.abs(Math.abs(b.x) - GW) < 0.16 && b.y < GH + 0.1) || (Math.abs(b.y - GH) < 0.14 && Math.abs(b.x) < GW + 0.1);
     if (onFrame) end(s, "post", t, Math.abs(b.y - GH) < 0.14 ? "OFF THE BAR" : "OFF THE POST");
-    else if (Math.abs(b.x) > GW || b.y > GH) end(s, "miss", t, st.shot.id === "panenka" && b.y > GH ? "TOO MUCH LOFT" : "", false);
+    else if (Math.abs(b.x) > GW || b.y > GH) end(s, "miss", t, st.shot.id === "panenka" && b.y > GH ? "TOO MUCH LOFT" : missWhy(st, { x: b.x, y: b.y }), false);
     else {
       const plan = s.keeper.plan;
       let d = "";
@@ -377,9 +400,10 @@ export default function Penalty({ mode, paused }: PieceProps) {
   }, [linked]);
 
   const ref = useCanvas(
-    ({ ctx, w, h, t, dt, p }) => {
+    ({ ctx, w, h, t, dt, p, reduce }) => {
       const s = S.current;
       s.now = t;
+      s.reduce = reduce;
       // the phone is told when the kick is over and it can swipe again
       const ph = s.phase === "aim" ? "aim" : s.phase === "over" ? "over" : "busy";
       if (ph !== s.told) {
@@ -387,7 +411,8 @@ export default function Penalty({ mode, paused }: PieceProps) {
         if (ph === "over") s.overT = t;
         tellRef.current();
       }
-      const f = Math.min(w * 1.12, h * 1.7);
+      // a phone is narrow and tall: fit the goal to the width, so it is big and sits mid-screen
+      const f = play && w < 520 ? Math.min(w * 1.9, h * 1.7) : Math.min(w * 1.12, h * 1.7);
       const cz = CAM.z + s.dolly;
       cam.current = { f, cx: w / 2, cy: h * 0.86 - (f * (CAM.y - BALL_R)) / (SPOT_Z - cz), cz };
 
@@ -399,12 +424,22 @@ export default function Penalty({ mode, paused }: PieceProps) {
       s.slowT = Math.max(0, s.slowT - dt);
       const sdt = s.phase === "replay" ? dt : dt * s.ts;
 
+      const k0 = s.keeper;
       // --- input and the keeper's gaze
       if (play && p.inside && s.phase === "aim") {
-        const g = unproj(p.x, p.y);
+        const g = unproj(p.x, p.y - (s.touch ? TOUCH_LIFT : 0));
         s.aim = { x: Math.max(-GW - 1, Math.min(GW + 1, g.x)), y: Math.max(0.1, Math.min(GH + 1, g.y)) };
       }
+      // a touch: the finger places the reticle first, and charging starts once it has rested
+      if (s.pending && t - s.downAt >= TOUCH_HOLD && s.phase === "aim") {
+        s.pending = false;
+        s.charging = true;
+        s.power = 0;
+      }
       if (s.charging) s.power = Math.min(1, s.power + dt * 0.9);
+      // the keeper's head follows the cursor while you aim, then the ball
+      const lookAt = s.phase === "aim" && play ? clamp((s.aim.x - k0.x) / 2.5, -1, 1) : clamp((b.x - k0.x) / 2.5, -1, 1);
+      s.look += (lookAt - s.look) * Math.min(1, dt * 6);
       if (!play && s.phase === "aim") {
         s.auto -= dt;
         if (s.auto <= 0) {
@@ -448,7 +483,6 @@ export default function Penalty({ mode, paused }: PieceProps) {
           launch(s.ball, st);
           s.acc = k.tk - RUNUP;
           s.phase = "fly";
-          sfx("kick");
           if (st.shot.id === "curlL" || st.shot.id === "curlR" || st.shot.id === "dipper") sfx("swish");
           const q = proj(0, 0, SPOT_Z);
           puff(s, q.x, q.y, 16, ["#2f8a43", "#1f6b33", "#f2ead7"]);
@@ -519,8 +553,10 @@ export default function Penalty({ mode, paused }: PieceProps) {
           const n = s.kicks.length;
           const done = !play ? n >= 5 : n >= 5 && (n === 5 ? g < 5 : s.result !== "goal");
           if (done) {
-            if (play) s.phase = "over";
-            else {
+            if (play) {
+              s.phase = "over";
+              bestFive = Math.max(bestFive, s.kicks.slice(0, 5).filter((x) => x === "goal").length);
+            } else {
               s.kicks = [];
               s.phase = "aim";
             }
@@ -583,6 +619,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
       paused,
       animateAlways: play,
       keys: (e, down) => {
+        S.current.touch = false;
         if (!down || !play || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return false;
         const i = "1234567".indexOf(e.key);
         if (i >= 0) {
@@ -607,18 +644,36 @@ export default function Penalty({ mode, paused }: PieceProps) {
           return;
         }
         if (s.phase === "over") {
+          // the screen has to have been seen: a late tap from the last kick doesn't skip it
+          if (s.now - s.overT <= OVER_GUARD) return;
           s.kicks = [];
           s.phase = "aim";
           setStatus("New shootout.");
           return;
         }
+        if (s.phase === "after") {
+          // seen the result: on to the next aim
+          if (s.now - s.resultT > SKIP_AFTER) {
+            s.timer = 99;
+            s.slowT = 0;
+            s.ts = 1;
+            s.shake = 0;
+          }
+          return;
+        }
         if (s.phase === "aim") {
-          s.charging = true;
-          s.power = 0;
+          if (s.touch) {
+            s.pending = true;
+            s.downAt = s.now;
+          } else {
+            s.charging = true;
+            s.power = 0;
+          }
         }
       },
       onUp: () => {
         const s = S.current;
+        s.pending = false;
         if (!s.charging) return;
         s.charging = false;
         strike(s.power);
@@ -633,7 +688,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
     const s = S.current;
     const replay = s.phase === "replay";
     ctx.save();
-    if (s.shake > 0 && !replay) ctx.translate((Math.random() - 0.5) * s.shake * 9, (Math.random() - 0.5) * s.shake * 7);
+    if (s.shake > 0 && !replay && !s.reduce) ctx.translate((Math.random() - 0.5) * s.shake * 9, (Math.random() - 0.5) * s.shake * 7);
 
     // sky + stands
     ctx.fillStyle = "#081226";
@@ -649,10 +704,10 @@ export default function Penalty({ mode, paused }: PieceProps) {
     const gasp = s.result && s.result !== "goal" && s.phase === "after" ? 0.2 : 1;
     for (const c of crowd.current) {
       const x = c.x * w, y = top + c.y * (standBot - top);
-      const flash = s.flash > 0 && c.c > 0.985;
+      const flash = s.flash > 0 && c.c > 0.985 && !s.reduce;
       ctx.fillStyle = flash ? "#ffffff" : c.c < 0.45 ? "#a50044" : c.c < 0.9 ? "#004d98" : "#edbb00";
       ctx.globalAlpha = 0.35 + c.y * 0.4;
-      ctx.fillRect(x, y + Math.sin(t * 6 + c.x * 40) * (s.flash > 0 ? 2.2 : 0.3 * gasp), 2, 2);
+      ctx.fillRect(x, y + (s.reduce ? 0 : Math.sin(t * 6 + c.x * 40) * (s.flash > 0 ? 2.2 : 0.3 * gasp)), 2, 2);
     }
     ctx.globalAlpha = 1;
     // pitch
@@ -696,9 +751,9 @@ export default function Penalty({ mode, paused }: PieceProps) {
     display(ctx, (bb.y - bt.y) * 0.58);
     const msg = "MÉS QUE UN CLUB  ·  ";
     const tw = ctx.measureText(msg).width;
-    let bx0 = -((t * 50) % (tw * 2));
+    let bx0 = -(((s.reduce ? 0 : t) * 50) % (tw * 2));
     for (let i = 0; bx0 < w; i++, bx0 += tw) {
-      ctx.fillStyle = s.flash > 0 ? (Math.floor(t * 8) % 2 ? "#edbb00" : "#f2ead7") : i % 2 ? "#0b4a8c" : "#8c0b45";
+      ctx.fillStyle = s.flash > 0 && !s.reduce ? (Math.floor(t * 8) % 2 ? "#edbb00" : "#f2ead7") : i % 2 ? "#0b4a8c" : "#8c0b45";
       ctx.fillText(msg, bx0, bb.y - (bb.y - bt.y) * 0.2);
     }
     ctx.restore();
@@ -755,7 +810,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
     post(pw * 0.22, pw * 0.12, "rgba(120,135,160,0.9)", pw);
     post(0, 0, "#ffffff", pw * 0.82);
     if (bz > KEEPER_Z && bz <= GOAL_Z) drawBall(ctx, sc, t);
-    drawKeeper(ctx, sc.j);
+    drawKeeper(ctx, sc.j, s.look);
     if (bz <= KEEPER_Z || sc.held) drawBall(ctx, sc, t);
 
     // particles
@@ -810,6 +865,26 @@ export default function Penalty({ mode, paused }: PieceProps) {
       ctx.moveTo(a.x + 6, a.y);
       ctx.lineTo(a.x + 18, a.y);
       ctx.stroke();
+      // power as a dial round the reticle: the kick's sweet spot in green, the charge filling from the top
+      const R = 30, a0 = -Math.PI / 2, ang = (v: number) => a0 + Math.min(1, Math.max(0, v)) * Math.PI * 2;
+      const inRing = Math.abs(s.power - def.sweet) <= def.width;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = s.charging ? "rgba(138,217,168,0.85)" : "rgba(138,217,168,0.45)";
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, R, ang(def.sweet - def.width), ang(def.sweet + def.width));
+      ctx.stroke();
+      if (s.power > 0.01) {
+        ctx.strokeStyle = inRing ? "#ffffff" : s.power > 0.9 ? "#ff6b4a" : "#edbb00";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, R, a0, ang(s.power));
+        ctx.stroke();
+      }
+      ctx.lineWidth = 2;
       const bw = Math.min(240, w * 0.5), bx = w / 2 - bw / 2, by = h - 24;
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(bx, by, bw, 8);
@@ -832,8 +907,9 @@ export default function Penalty({ mode, paused }: PieceProps) {
     // a narrow canvas gets a smaller board (it was over half a phone's width),
     // with "sudden death" on a line of its own
     const cp = play && w < 520;
+    const sudden = s.kicks.length > 5 || (s.kicks.length === 5 && goals === 5);
     const sw = play ? (cp ? 128 : 220) : 150;
-    const sh = play ? (cp ? (s.kicks.length > 5 ? 62 : 46) : 54) : 38;
+    const sh = play ? (cp ? (sudden ? 62 : 46) : 54) : 38;
     ctx.fillStyle = "rgba(8,18,38,0.75)";
     ctx.fillRect(12, 12, sw, sh);
     ctx.fillStyle = "#a50044";
@@ -862,7 +938,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
         ctx.stroke();
       }
     }
-    if (play && s.kicks.length > 5) {
+    if (play && sudden) {
       mono(ctx, 10);
       ctx.fillStyle = "#edbb00";
       ctx.fillText("SUDDEN DEATH", cp ? 32 : 130, cp ? 66 : 38);
@@ -877,11 +953,13 @@ export default function Penalty({ mode, paused }: PieceProps) {
       ctx.fillStyle = s.result === "goal" ? "#edbb00" : "#f2ead7";
       display(ctx, Math.round(Math.min(w, h) * (play ? 0.16 : 0.2)), 800);
       ctx.textAlign = "center";
-      ctx.fillText(word(s), w / 2, h * 0.45);
+      // low on the pitch, under the goal and clear of the keeper
+      const wy = h * (play ? 0.7 : 0.56);
+      ctx.fillText(word(s), w / 2, wy);
       if (play && s.detail) {
         mono(ctx, Math.max(11, Math.min(w, h) * 0.022));
         ctx.fillStyle = "#f2ead7";
-        ctx.fillText(s.detail, w / 2 + 1, h * 0.45 + Math.min(w, h) * 0.06);
+        ctx.fillText(s.detail, w / 2 + 1, wy + Math.min(w, h) * 0.06);
       }
       ctx.textAlign = "left";
       ctx.shadowBlur = 0;
@@ -898,18 +976,28 @@ export default function Penalty({ mode, paused }: PieceProps) {
       ctx.fillStyle = "#f2ead7";
       ctx.textAlign = "center";
       display(ctx, Math.round(Math.min(w, h) * 0.13), 800);
-      ctx.fillText(goals >= 5 ? "UNBEATABLE" : goals >= 4 ? "CAMPIONS" : goals >= 3 ? "WON IT" : "NEXT TIME", w / 2, h * 0.45);
+      ctx.fillText(`${goals} FROM ${s.kicks.length}`, w / 2, h * 0.45);
       mono(ctx, 12);
-      ctx.fillText(`${goals} FROM ${s.kicks.length} · CLICK TO GO AGAIN`, w / 2, h * 0.45 + 30);
+      ctx.fillText(`BEST ${bestFive} FROM 5`, w / 2, h * 0.45 + 30);
+      // the prompt waits out the input guard, so it never invites a click that would be ignored
+      if (t - s.overT > OVER_GUARD) ctx.fillText(w < 520 ? "TAP TO GO AGAIN" : "CLICK TO GO AGAIN", w / 2, h * 0.45 + 52);
       ctx.textAlign = "left";
     }
   }
 
   function drawBall(ctx: CanvasRenderingContext2D, sc: Scene, t: number) {
-    void t;
     const b = sc.ball;
     const q = proj(b.x, b.y, b.z);
     const r = Math.max(2, q.s * BALL_R);
+    // squashed for a moment at release, flattened onto the grass
+    const s0 = S.current;
+    const sq = s0.phase === "run" && !s0.reduce ? Math.max(0, 1 - (t - s0.squashT) / 0.2) : 0;
+    ctx.save();
+    if (sq > 0) {
+      ctx.translate(q.x, q.y + r);
+      ctx.scale(1 + 0.24 * sq, 1 - 0.3 * sq);
+      ctx.translate(-q.x, -(q.y + r));
+    }
     // streak behind a ball in flight
     const tr = sc.trail;
     if (tr.length > 2 && !sc.held) {
@@ -960,9 +1048,10 @@ export default function Penalty({ mode, paused }: PieceProps) {
       ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
   }
 
-  function drawKeeper(ctx: CanvasRenderingContext2D, j: Joints) {
+  function drawKeeper(ctx: CanvasRenderingContext2D, j: Joints, look: number) {
     const P = (a: [number, number]) => proj(a[0], a[1], KEEPER_Z);
     const sc = proj(0, 0, KEEPER_Z).s;
     const limb = (a: [number, number], b: [number, number], wd: number, col: string) => {
@@ -1043,7 +1132,29 @@ export default function Penalty({ mode, paused }: PieceProps) {
     ctx.beginPath();
     ctx.arc(Hd.x, Hd.y - sc * 0.03, sc * 0.125, Math.PI * 1.05, Math.PI * 1.95);
     ctx.fill();
+    // eyes: he turns his head toward the cursor, so you can see what he is looking at
+    ctx.fillStyle = "#f2ead7";
+    for (const e of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(Hd.x + look * sc * 0.07 + e * sc * 0.04 * (1 - Math.abs(look) * 0.35), Hd.y + sc * 0.015, Math.max(1, sc * 0.016), 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
+
+  // a finger or a mouse: useCanvas hands the piece a position only, so the pointer type is read here
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || !play) return;
+    const kind = (e: PointerEvent) => {
+      S.current.touch = e.pointerType === "touch";
+    };
+    c.addEventListener("pointerdown", kind, true);
+    c.addEventListener("pointermove", kind, true);
+    return () => {
+      c.removeEventListener("pointerdown", kind, true);
+      c.removeEventListener("pointermove", kind, true);
+    };
+  }, [ref, play]);
 
   // keep the picked shot in view when the row scrolls (keys 1-7, or X / Z)
   useEffect(() => {
