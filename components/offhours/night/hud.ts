@@ -2,7 +2,7 @@ import { ENGINE_CAL } from "../engineRemote";
 import { LIMIT, REDLINE, TOP_GEAR } from "../engineModel";
 import { fontFamilies } from "../font";
 import { getBestScore, mph, type NightGame, type Toast } from "./game";
-import { adviceFor } from "./advice";
+import { adviceFor, secs } from "./advice";
 import { MEDALS, medalsAt, nextMedal, type Medal } from "./medals";
 import { pending } from "./score";
 
@@ -579,7 +579,7 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   const best = getBestScore(g.track.id);
   const text = [
     opt.touch ? "STEER WITH THE PADS. BRAKE, OR TAP DRIFT TO KICK THE TAIL OUT." : "← → STEER · ↓ BRAKE · SHIFT HANDBRAKE · T GEARBOX · R RESTART",
-    `SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM AND ${ENGINE_CAL.run.railPenaltyS} S.`,
+    `SLIDE TO SCORE. STRAIGHTEN OUT TO BANK THE POINTS. A RAIL TAKES THEM, AND TIME.`,
     best > 0 ? `YOUR BEST THIS VISIT: ${grouped(best)}. IT RACES YOU.` : `${g.road.checks.length} CHECKPOINTS ADD TIME. MEDALS AT ${g.track.medals.map((m) => grouped(m.score)).join(" · ")}`,
   ];
   // the how-to sits on a dark card: the road's white lines run right through it otherwise
@@ -643,10 +643,10 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   ctx.fillText("TOTAL SCORE", x + 28 * u, y + 120 * u);
   const vs = r.vsTargetS;
   const rows: [string, string][] = [
-    r.finished ? ["FINISH TIME", clock(r.time)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
+    r.finished ? ["FINISH TIME", clock(r.netTime)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
     vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
-    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · −${Math.round(r.railS)} S`],
+    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · ${secs(r.railS)}`],
   ];
   rows.forEach(([k, v], i) => {
     const ry = y + 160 * u + i * 31 * u;

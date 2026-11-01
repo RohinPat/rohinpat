@@ -16,7 +16,8 @@ export type AdviceInput = {
 /** this many rail incidents in a run is what the advice is about */
 export const MANY_RAILS = 5;
 
-const secs = (s: number) => `${Math.round(s)} S`;
+/** seconds, to a tenth when it is not whole ("4 S", "3.5 S") */
+export const secs = (s: number) => `${Math.round(s * 10) / 10} S`;
 
 /** The advice for a run, in capitals, short enough for one line of the card. `touch` names the drift button and not the key. */
 export function adviceFor(r: AdviceInput, touch: boolean): string {

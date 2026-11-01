@@ -59,18 +59,21 @@ test.describe("Night run: the climb", () => {
     await context.close();
   });
 
-  test("left and right choose the road before a run, Enter starts it, and on the road the arrows steer", async ({ browser, baseURL }) => {
+  test("the arrows on the road never change it (they are the wheel), a click chooses it, Enter starts the run", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await openCars(page);
+    // a driver who presses left on the ready card is steering, not choosing: the road stays
+    await expect(canvas(page)).toHaveAttribute("data-track", "canyon", SLOW);
     await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowRight");
+    await expect(canvas(page)).toHaveAttribute("data-track", "canyon");
+    await expect(pick(page, "canyon")).toHaveAttribute("aria-pressed", "true");
+    await pick(page, "climb").click();
     await expect(canvas(page)).toHaveAttribute("data-track", "climb", SLOW);
     await expect(pick(page, "climb")).toHaveAttribute("aria-pressed", "true");
-    await page.keyboard.press("ArrowRight");
-    await expect(canvas(page)).toHaveAttribute("data-track", "canyon", SLOW);
-    await page.keyboard.press("ArrowLeft");
-    await expect(canvas(page)).toHaveAttribute("data-track", "climb", SLOW);
     // Enter starts the run on the chosen road
     await page.keyboard.press("Enter");
     await expect(canvas(page)).toHaveAttribute("data-phase", "count", SLOW);

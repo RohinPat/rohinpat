@@ -1,5 +1,5 @@
 import { GATE_HALF, HALF_W, L, PENALTY, centerX } from "./course";
-import { MEDALS, TD, fmt, type Game } from "./game";
+import { MEDALS, MISS_CAP, TD, fmt, type Game } from "./game";
 import { drawSkier } from "./skier";
 import { PAL, css, mix, ridgeAt, ridges, rgb, treeSprite, type RGB } from "./scenery";
 import { display, mono } from "../font";
@@ -290,6 +290,10 @@ export function render(ctx: CanvasRenderingContext2D, w: number, h: number, g: G
     }
     if (o.k === K_ARCH) {
       const z = o.i ? L : START_Z;
+      // fades out as the camera passes under it, so a banner never fills the view
+      const ga = clamp01((z - Zc - 4) / 6);
+      if (ga <= 0.02) return;
+      ctx.globalAlpha = ga;
       const half = o.i ? 8 : 5.5;
       const b0 = proj(centerX(z) - half, T.h(z), z);
       const b1 = proj(centerX(z) + half, T.h(z), z);
@@ -334,6 +338,7 @@ export function render(ctx: CanvasRenderingContext2D, w: number, h: number, g: G
         ctx.textBaseline = "middle";
         ctx.fillText("START", (b0.x + b1.x) / 2, (topY + botY) / 2);
       }
+      ctx.globalAlpha = 1;
       return;
     }
     if (o.k === K_FAN) {
@@ -983,7 +988,10 @@ function resultCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game
   ctx.textAlign = "center";
   mono(ctx, sm);
   ctx.fillStyle = "#cfd0c6";
-  const nextMsg = nextT ? `${(nextT[0] as string).toUpperCase()} IS ${fmt(nextT[1] as number)}` : r.tricks ? "GOLD. CAN YOU SHAVE ANOTHER SECOND?" : "GOLD. NOW TRY A 360 OFF THE JUMP.";
+  const held = r.timeMedal !== 0 && (r.medal === 0 || r.timeMedal < r.medal);
+  const nextMsg = held
+    ? `MISS ${MISS_CAP[r.timeMedal - 1]} GATES OR FEWER FOR ${MEDALS[r.timeMedal].toUpperCase()}`
+    : nextT ? `${(nextT[0] as string).toUpperCase()} IS ${fmt(nextT[1] as number)}` : r.tricks ? "GOLD. CAN YOU SHAVE ANOTHER SECOND?" : "GOLD. NOW TRY A 360 OFF THE JUMP.";
   ctx.fillText(fit(ctx, nextMsg, nextMsg.replace("CAN YOU ", "").replace("NOW ", ""), cw - 24), w / 2, y + ch - 36 * u);
   ctx.fillStyle = "#f2ead7";
   ctx.globalAlpha = a * (0.65 + 0.35 * Math.sin(g.time * 4));

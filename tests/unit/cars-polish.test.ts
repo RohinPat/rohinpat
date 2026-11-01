@@ -101,8 +101,8 @@ describe("cars: what the screen says", () => {
     expect(medalHint(0)).toBeNull();
     expect(medalHint(bronze * MEDAL_HINT_FROM - 1)).toBeNull();
     expect(medalHint(bronze * MEDAL_HINT_FROM)).toBe(`BRONZE ${grouped(bronze)}`);
-    // past bronze the next one is silver, far off again until it is near
-    expect(medalHint(bronze + 1)).toBeNull();
+    // past bronze the next one is silver, which is near already
+    expect(medalHint(bronze + 1)).toBe(`SILVER ${grouped(MEDALS[1].score)}`);
     expect(medalHint(MEDALS[1].score - 1)).toBe(`SILVER ${grouped(MEDALS[1].score)}`);
     expect(medalHint(MEDALS[2].score)).toBeNull();
     // what the dash prints is what awards one

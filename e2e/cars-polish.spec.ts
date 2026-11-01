@@ -130,7 +130,7 @@ test.describe("Night run: medals and reduced motion", () => {
     await openCars(page);
     await page.keyboard.down("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
-    await nightEval(page, (g) => ((g.bonusPoints = 21_000), 0));
+    await nightEval(page, (g) => ((g.bonusPoints = 12_000), 0));
     await expect(page.locator('[role="dialog"] p[aria-live="polite"]')).toContainText(/medal: bronze/i, SLOW);
     expect(await nightEval(page, (g) => g.medals)).toBe(1);
     await page.keyboard.up("ArrowUp");

@@ -17,6 +17,8 @@ const A = ENGINE_CAL.assist;
 const bot = (name: string): Bot => BOTS.find((b) => b.name === name)!;
 const many = (name: string, level: AssistLevel, n = 24): RunStat[] => Array.from({ length: n }, (_, i) => playRun(bot(name), i + 1, (g) => (g.assist = level)));
 const avg = (rs: RunStat[], f: (r: RunStat) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
+// rail hits per km driven: a run that runs out of clock early has had less road to hit rails on
+const perKm = (rs: RunStat[]) => avg(rs, (x) => (x.rails / Math.max(1, x.metres)) * 1000);
 const input = (steer = 0, hand = 0): NightInput => ({ ...NO_INPUT, steer, throttle: 1, hand });
 
 describe("the assist's levels", () => {
@@ -157,11 +159,11 @@ describe("what the assist does to a run (scripted keyboard drivers, 24 runs each
     const off = many("decent", 0);
     const light = many("decent", 1);
     const full = many("decent", 2);
-    const r = (rs: RunStat[]) => avg(rs, (x) => x.rails);
+    const r = perKm;
     // it gives way to the keys now (see "a key press wins"), so it saves fewer rail hits than a wheel pulled to the line would
     expect(r(light)).toBeLessThan(r(off) * 0.85);
     expect(r(full)).toBeLessThan(r(off) * 0.8);
-    // they still finish, and a leg driven clean is more common
+    // they all get to the end, and a leg driven clean is more common
     expect(light.every((x) => x.finished)).toBe(true);
     expect(avg(light, (x) => x.clean)).toBeGreaterThan(avg(off, (x) => x.clean));
   });
@@ -169,7 +171,7 @@ describe("what the assist does to a run (scripted keyboard drivers, 24 runs each
   it("a careful driver is helped most, and everyone still finishes", () => {
     const off = many("cautious", 0, 12);
     const light = many("cautious", 1, 12);
-    expect(avg(light, (x) => x.rails)).toBeLessThan(avg(off, (x) => x.rails) * 0.7);
+    expect(perKm(light)).toBeLessThan(perKm(off) * 0.7);
     expect(light.every((x) => x.finished)).toBe(true);
   });
 

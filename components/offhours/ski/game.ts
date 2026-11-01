@@ -20,6 +20,8 @@ export type Result = {
   air: number;
   tricks: number;
   medal: 0 | 1 | 2 | 3;
+  /** the medal the time alone earned (better than `medal` when missed gates held it back) */
+  timeMedal: 0 | 1 | 2 | 3;
   newBest: boolean;
   best: number;
 };
@@ -29,13 +31,33 @@ export const MEDALS = ["", "Gold", "Silver", "Bronze"];
 
 type Par = { gold: number; silver: number; bronze: number; ref: number[] };
 let par: Par | null = null;
+/**
+ * The medal times are multiples of a clean run by a bot that tucks on every
+ * straight (a hold-tuck run is faster but misses gates, so it can't set par).
+ */
 export function getPar(): Par {
   if (!par) {
-    const s = simulate(getCourse(), 1);
+    const s = simulate(getCourse(), 1, "smart");
     const r = (v: number) => Math.round(v * 10) / 10;
-    par = { gold: r(s.finishT * 1.1), silver: r(s.finishT * 1.25), bronze: r(s.finishT * 1.5), ref: s.gateT.map((t) => t * 1.1) };
+    par = { gold: r(s.finishT * 1.1), silver: r(s.finishT * 1.25), bronze: r(s.finishT * 1.35), ref: s.gateT.map((t) => t * 1.1) };
   }
   return par;
+}
+
+/** most gates a run may miss and still take each medal: gold, silver, bronze */
+export const MISS_CAP = [2, 8, 14] as const;
+
+type Marks = Pick<Par, "gold" | "silver" | "bronze">;
+/** the medal the time alone would earn */
+export const medalByTime = (total: number, p: Marks = getPar()) => (total <= p.gold ? 1 : total <= p.silver ? 2 : total <= p.bronze ? 3 : 0) as Result["medal"];
+
+/** The medal for a finish: the time sets it, and missing too many gates caps it. */
+export function medalFor(total: number, missed: number, p: Marks = getPar()): Result["medal"] {
+  const byTime = medalByTime(total, p);
+  if (!byTime) return 0;
+  // too many misses: no better than the medal whose cap the run still fits
+  for (let m = byTime; m <= 3; m++) if (missed <= MISS_CAP[m - 1]) return m as Result["medal"];
+  return 0;
 }
 
 export function fmt(t: number) {
@@ -84,6 +106,7 @@ export class Game {
   sound: SkiSound | null = null;
   say: (m: string) => void = () => {};
   private pend = 0;
+  private skidCool = 0;
   private countN = 4;
   private ev: SimEvent[] = [];
 
@@ -203,13 +226,13 @@ export class Game {
       case "finish": {
         const total = e.t + s.pen;
         const p = this.par;
-        const medal = (total <= p.gold ? 1 : total <= p.silver ? 2 : total <= p.bronze ? 3 : 0) as Result["medal"];
+        const medal = medalFor(total, s.missed, p);
         const newBest = total < this.best;
         const prev = this.best;
         if (newBest) this.best = total;
         this.result = {
           total, raw: e.t, pen: s.pen, missed: s.missed, gates: this.C.gates.length, crashes: s.crashes,
-          top: s.top, air: s.bestAir, tricks: s.tricks, medal, newBest, best: newBest ? total : prev,
+          top: s.top, air: s.bestAir, tricks: s.tricks, medal, timeMedal: medalByTime(total, p), newBest, best: newBest ? total : prev,
         };
         this.runs++;
         this.phase = "finish";
@@ -265,7 +288,14 @@ export class Game {
         this.record();
       }
       if (this.acc > DT * 12) this.acc = 0;
-      if (this.phase === "finish" && this.phaseT > 1.7 && s.v < 1) {
+      // a short cue when the edges let go, at most every 1.5 s
+      this.skidCool = Math.max(0, this.skidCool - dt);
+      if (!this.autoplay && this.phase === "run" && s.grounded && s.skid > 0.5 && this.skidCool <= 0) {
+        this.skidCool = 1.5;
+        this.toast("SKID", "bad", undefined, 0.9);
+      }
+      // the card is up 1 s after the line and the run can be restarted at 1.5 s; the skier keeps sliding to a stop
+      if (this.phase === "finish" && this.phaseT > 1.5) {
         this.phase = "result";
         this.phaseT = 0;
       }

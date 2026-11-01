@@ -300,14 +300,22 @@ export function step(s: Run, C: Course, dt: number, inp: Input, out: SimEvent[])
 
 // ---- the autopilot: previews, and the medal calibration
 
+const SMART_TUCK = 0.1; // steer command under which the smart bot tucks
 export type Bot = { spinDir: number; wobble: number };
 export const newBot = (): Bot => ({ spinDir: 0, wobble: 0 });
 
-export function botInput(s: Run, C: Course, b: Bot, skill = 1): Input {
+/**
+ * `tuck` is how the bot uses the tuck key: "auto" never touches it (the skier's own
+ * straight-line tuck still happens), "smart" tucks whenever the line is nearly straight
+ * (what a good player does), "hold" keeps it down the whole run.
+ */
+export type BotTuck = "auto" | "smart" | "hold";
+
+export function botInput(s: Run, C: Course, b: Bot, skill = 1, tuck: BotTuck = "auto"): Input {
   if (!s.grounded) {
     if (b.spinDir === 0) b.spinDir = s.airT < 0.05 ? (Math.sin(s.z * 7.3) > 0 ? 1 : -1) * (s.vy > 2.6 ? 1 : 0) : 0;
     const done = Math.abs(s.spin) > Math.PI * 2 - 0.55;
-    return { steer: b.spinDir && !done ? b.spinDir : 0, tuck: s.airT > 0.3 };
+    return { steer: b.spinDir && !done ? b.spinDir : 0, tuck: s.airT > 0.3 || tuck === "hold" };
   }
   b.spinDir = 0;
   const g = C.gates[s.next];
@@ -330,18 +338,19 @@ export function botInput(s: Run, C: Course, b: Bot, skill = 1): Input {
   const err = want - s.hd;
   const wCmd = clamp(err * 2.2, -1, 1) * (0.9 * skill);
   const steer = clamp((wCmd * Math.max(0.55, skill)) / (omegaMax(s.v) * (1 - 0.35 * s.tuck)), -0.6, 0.6);
-  return { steer: Math.abs(err) < 0.03 ? 0 : steer, tuck: false };
+  const out = Math.abs(err) < 0.03 ? 0 : steer;
+  return { steer: out, tuck: tuck === "hold" || (tuck === "smart" && Math.abs(out) < SMART_TUCK) };
 }
 
 /** Run the whole course with the autopilot; returns the final time and per-gate times. */
-export function simulate(C: Course, skill = 1): Run {
+export function simulate(C: Course, skill = 1, tuck: BotTuck = "auto"): Run {
   const s = newRun();
   const bot = newBot();
   const out: SimEvent[] = [];
   let n = 0;
   while (!(s.finished && s.v < 0.2) && n++ < 120 * 400) {
     out.length = 0;
-    step(s, C, DT, botInput(s, C, bot, skill), out);
+    step(s, C, DT, botInput(s, C, bot, skill, tuck), out);
   }
   return s;
 }

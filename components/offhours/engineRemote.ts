@@ -192,7 +192,7 @@ export const ENGINE_CAL = {
       railK: 2,
     },
     /** what is different about the climb's run (the rest is ENGINE_CAL.run): a tighter clock, since a leg is a few seconds */
-    run: { startShare: 1.3, startFlatS: 3, legShare: 1.25, legFlatS: 1.5, finishSecondPoints: 100 },
+    run: { startShare: 1.0, startFlatS: 2, legShare: 0.8, legFlatS: 0.5, finishSecondPoints: 100, targetPace: 0.55 },
     driftPay: 2,
   },
 
@@ -211,10 +211,10 @@ export const ENGINE_CAL = {
     /** the countdown before GO, s */
     countS: 2.7,
     /** time on the clock at the start and added at each checkpoint, as a share of what the target driver needs for the leg, plus a flat amount, s */
-    startShare: 1.35,
-    startFlatS: 3.5,
-    legShare: 1.2,
-    legFlatS: 1.5,
+    startShare: 1.1,
+    startFlatS: 3,
+    legShare: 0.85,
+    legFlatS: 1.9,
     /** the clock does not run in the first moments after GO (the launch), s */
     graceS: 0.6,
     /** after the clock hits zero (or the finish) the car coasts this long before the end screen, s */
@@ -222,13 +222,18 @@ export const ENGINE_CAL = {
     /** points: a checkpoint, a leg driven without touching the rail or spinning, a second left over at the finish */
     checkpointPoints: 500,
     cleanLegPoints: 400,
-    finishSecondPoints: 250,
+    finishSecondPoints: 30,
     /** a touch of the rail (one contact: grinding along it is one) takes this off the clock, s */
-    railPenaltyS: 1.5,
+    railPenaltyS: 0.5,
+    /** ... and this much more for each (m/s)^2 of speed into the rail at the first touch, up to railPenaltyMaxS: a brush is cheap, a flat-out hit is not (5 m/s costs 1.5 s, 10 m/s 4.5 s, 17 m/s 12 s) */
+    railPerMs2: 0.04,
+    railPenaltyMaxS: 12,
+    /** the share of that the clock loses at once (all of it counts against the target at the finish): a run of a dozen touches would otherwise be out of time before it was out of road */
+    railClockShare: 0.5,
     /** the corner warning looks this many seconds (and metres) of road ahead and lights when the car is over the plan's speed there by this share */
     cue: { leadS: 2.6, leadM: 30, margin: 1.0 },
     /** the target driver's pace as a share of the grip limit (under 1: it can be beaten) */
-    targetPace: 0.9,
+    targetPace: 0.63,
   },
 
   // ------------------------------------------------------------- night run: drifting

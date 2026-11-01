@@ -81,7 +81,7 @@ test.describe("Night run: the rail costs", () => {
     // out of time: the card hands the page the count, and the screen reader hears it with a line of advice
     await nightEval(page, (g) => ((g.timeLeft = 0.05), 0));
     await expect(canvas(page)).toHaveAttribute("data-phase", "done", { timeout: 20_000 });
-    await expect(live(page)).toContainText(/rail hits?, \d+ seconds|no rail hits/i, SLOW);
+    await expect(live(page)).toContainText(/rail hits?, \d+(\.\d)? seconds|no rail hits/i, SLOW);
     await expect(live(page)).toContainText(/clean legs of/i);
     expect((await nightEval(page, (g) => g.result))?.rails).toBeGreaterThanOrEqual(1);
     await page.keyboard.up("ArrowUp");

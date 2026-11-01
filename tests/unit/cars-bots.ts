@@ -73,6 +73,10 @@ export type RunStat = {
   cues: number;
   bestDrift: number;
   timeLeftEnd: number;
+  /** the speed into the rail at the first touch of each incident, m/s */
+  railInto: number[];
+  /** seconds behind (+) or ahead (-) of the target at the finish, rail penalties counted; null if it did not finish */
+  vsTarget: number | null;
   firstHitS: number | null;
 };
 
@@ -241,6 +245,8 @@ export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): Ru
     cues,
     bestDrift: r?.bestDrift ?? 0,
     timeLeftEnd: +g.timeLeft.toFixed(1),
+    vsTarget: r?.vsTargetS ?? null,
+    railInto: [...g.railInto],
     firstHitS: crashes[0] ?? null,
   };
   forgetBestRun();
@@ -253,6 +259,8 @@ export const BOTS: Bot[] = [
   { name: "cue-only", pace: 9, steer: true, cueOnly: true, react: 0.25, noise: 0.2 },
   { name: "cautious", pace: 0.78, steer: true, cueBrake: true, react: 0.2, noise: 0.2 },
   // on the climb every corner is tighter than the canyon's flick marks, so the drivers flick by the same character at the road's own marks: the decent one the hairpins only, the drifter every bend
+  // a drifter who slides the hairpins and nothing else, keeps off the rail and brakes for the corners: the one who should beat the target
+  { name: "careful-drifter", pace: 0.9, steer: true, flickK: 1 / 150, flickS: 28, flickCool: 4, react: 0.05, noise: 0.05, pwm: 0.08, climb: { flickK: 1 / 50, flickS: 16, flickCool: 5 } },
   { name: "decent", pace: 0.88, steer: true, flickK: 1 / 150, flickCool: 2.5, react: 0.15, noise: 0.2, climb: { flickK: 1 / 75, flickS: 16 } },
   { name: "precise", pace: 0.95, steer: true, flickK: 1 / 330, flickCool: 0.8, flickS: 18, react: 0, noise: 0, pwm: 0.07, climb: { flickK: 1 / 120, flickS: 14 } },
   { name: "drifter", pace: 1.0, steer: true, flickK: 1 / 300, flickCool: 1.2, flickS: 20, react: 0.1, noise: 0.2, climb: { flickK: 1 / 130, flickS: 14, flickCool: 1.0 } },
