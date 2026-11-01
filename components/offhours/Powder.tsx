@@ -28,11 +28,19 @@ import { createAxisSmoother, hysteresis, shape } from "./remoteAxis";
 export default function Powder({ mode, paused }: PieceProps) {
   const play = mode === "play";
   const G = useRef<Game | null>(null);
-  const keys = useRef({ left: false, right: false, tuck: false, keyMode: false, touch: false, warmed: false, phone: false, phoneTuck: false });
+  const keys = useRef({
+    left: false, right: false, tuck: false, keyMode: false, touch: false, warmed: false, phone: false, phoneTuck: false,
+    // a second finger held down tucks; the press that starts a run doesn't
+    touchTuck: false, noTuck: false,
+    // the pointer, and where it was when a key or the phone last steered, so jitter doesn't take the steering back
+    px: 0, py: 0, ax: 0, ay: 0, keyAt: 0,
+  });
   const steerPad = useRef(createAxisSmoother(POWDER_CAL.smoothingS));
   const tuckPad = useRef(createAxisSmoother(POWDER_CAL.smoothingS / 2));
   const told = useRef("");
   const [status, setStatus] = useState("");
+  const [again, setAgain] = useState(false); // touch: the restart chip shows after a crash and on the result card
+  const againRef = useRef(false);
   const statusRef = useRef(setStatus);
   statusRef.current = setStatus;
 
@@ -51,6 +59,19 @@ export default function Powder({ mode, paused }: PieceProps) {
     const au = getAudio();
     if (au) g.sound = new SkiSound(au);
   };
+
+  useEffect(() => {
+    // with the mock link (tests, local work) a page can read the game and the input
+    if (play && (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock")))
+      (window as unknown as { __powder?: unknown }).__powder = {
+        get game() {
+          return G.current;
+        },
+        get keys() {
+          return keys.current;
+        },
+      };
+  }, [play]);
 
   // sound follows the run; it stops when you pause, switch tabs or leave
   useEffect(() => {
@@ -80,6 +101,8 @@ export default function Powder({ mode, paused }: PieceProps) {
       if (name === "steer") {
         steerPad.current.set(v);
         k.phone = true;
+        k.ax = k.px;
+        k.ay = k.py;
       } else if (name === "tuck") tuckPad.current.set(v);
     },
     gesture: (name) => {
@@ -118,7 +141,11 @@ export default function Powder({ mode, paused }: PieceProps) {
         k.phoneTuck = hysteresis(k.phoneTuck, tuckPad.current.update(dt), POWDER_CAL.tuckOn, POWDER_CAL.tuckOff);
         if (k.phone) steer = shape(phoneSteer, POWDER_CAL.deadZone, POWDER_CAL.curve);
         else if (k.keyMode) steer = kb;
-        else if (p.inside) {
+        else if (!p.inside) {
+          // the pointer has left: the skis ease back toward the fall line
+          const run = g.run;
+          if (run.grounded) steer = Math.abs(run.hd) < 0.02 ? 0 : Math.max(-1, Math.min(1, (-run.hd * 2.4) / (omegaMax(run.v) * (1 - 0.35 * run.tuck))));
+        } else {
           const run = g.run;
           const raw = (p.x - g.skierSX) / (w * 0.2);
           if (!run.grounded) steer = Math.abs(raw) < 0.05 ? 0 : Math.max(-1, Math.min(1, raw));
@@ -130,7 +157,13 @@ export default function Powder({ mode, paused }: PieceProps) {
           }
         }
         g.steerIn = steer;
-        g.tuckIn = k.tuck || k.phoneTuck || (p.down && !k.touch);
+        if (!p.down) k.noTuck = false;
+        g.tuckIn = k.tuck || k.phoneTuck || k.touchTuck || (p.down && !k.touch && !k.noTuck);
+        const wantAgain = k.touch && (g.phase === "result" || g.run.crash > 0);
+        if (wantAgain !== againRef.current) {
+          againRef.current = wantAgain;
+          setAgain(wantAgain);
+        }
         if (remote.linked) {
           const key = g.phase === "result" && g.result ? `result|${g.result.total.toFixed(1)}|${g.result.medal}` : g.phase === "finish" ? "result" : g.phase;
           if (key !== told.current) {
@@ -147,16 +180,29 @@ export default function Powder({ mode, paused }: PieceProps) {
       interactive: play,
       paused,
       animateAlways: play,
-      onMove: () => {
-        keys.current.keyMode = false;
-        keys.current.phone = false;
+      onMove: (p) => {
+        const k = keys.current;
+        k.px = p.x;
+        k.py = p.y;
+        // keys hold the steering until they have been quiet for 300 ms, and a pointer that only jitters doesn't take it
+        if (k.keyMode && (k.left || k.right || performance.now() - k.keyAt < 300)) return;
+        if (Math.hypot(p.x - k.ax, p.y - k.ay) < 6) return;
+        k.keyMode = false;
+        k.phone = false;
       },
       onDown: () => {
+        const g = game();
+        if (g.phase === "ready" || g.phase === "result") keys.current.noTuck = true;
         drop();
       },
       keys: (e, down) => {
         const k = keys.current;
         const key = e.key;
+        if (key === "ArrowLeft" || key === "a" || key === "A" || key === "ArrowRight" || key === "d" || key === "D") {
+          k.keyAt = performance.now();
+          k.ax = k.px;
+          k.ay = k.py;
+        }
         if (key === "ArrowLeft" || key === "a" || key === "A") {
           k.left = down;
           if (down) {
@@ -189,16 +235,50 @@ export default function Powder({ mode, paused }: PieceProps) {
     },
   );
 
-  // touch drags steer; they don't also tuck (the skier tucks by itself on the straights)
+  // One finger steers and doesn't also tuck (the skier tucks by itself on the straights).
+  // A second finger held down tucks. It never steers: its events are stopped before the
+  // shared pointer handling sees them, so the first finger keeps the pointer.
   useEffect(() => {
     const c = ref.current;
     if (!c || !play) return;
-    const t = (e: PointerEvent) => {
-      keys.current.touch = e.pointerType === "touch" || e.pointerType === "pen";
+    const fingers = new Set<number>();
+    const touchy = (e: PointerEvent) => e.pointerType === "touch" || e.pointerType === "pen";
+    const down = (e: PointerEvent) => {
+      const k = keys.current;
+      k.touch = touchy(e);
+      if (!k.touch || e.isPrimary) return;
+      fingers.add(e.pointerId);
+      k.touchTuck = true;
+      e.stopImmediatePropagation();
     };
-    c.addEventListener("pointerdown", t);
-    return () => c.removeEventListener("pointerdown", t);
+    const move = (e: PointerEvent) => {
+      if (touchy(e) && !e.isPrimary) e.stopImmediatePropagation();
+    };
+    const up = (e: PointerEvent) => {
+      if (!touchy(e) || e.isPrimary) return;
+      fingers.delete(e.pointerId);
+      keys.current.touchTuck = fingers.size > 0;
+      e.stopImmediatePropagation();
+    };
+    const opts = { capture: true } as const;
+    c.addEventListener("pointerdown", down, opts);
+    c.addEventListener("pointermove", move, opts);
+    c.addEventListener("pointerup", up, opts);
+    c.addEventListener("pointercancel", up, opts);
+    return () => {
+      c.removeEventListener("pointerdown", down, opts);
+      c.removeEventListener("pointermove", move, opts);
+      c.removeEventListener("pointerup", up, opts);
+      c.removeEventListener("pointercancel", up, opts);
+    };
   }, [play, ref]);
+
+  const restart = () => {
+    const g = game();
+    ensureAudio();
+    if (g.phase !== "count" && !(g.phase === "result" && g.phaseT <= 0.5)) g.begin();
+    ref.current?.focus();
+  };
 
   if (!play) return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
   return (
@@ -219,6 +299,16 @@ export default function Powder({ mode, paused }: PieceProps) {
         aria-label="Giant slalom. Thirty gates down the hill. Arrow keys or the pointer carve, down arrow or Space tucks, left and right spin in the air. Press Enter to start, R to restart."
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
+      {again && (
+        <button
+          type="button"
+          onClick={restart}
+          data-testid="powder-restart"
+          className="absolute right-3 bottom-3 z-10 min-h-[44px] rounded-full bg-[#0d100e]/80 px-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8ad9a8]"
+        >
+          Restart
+        </button>
+      )}
       <p aria-live="polite" className="sr-only">
         {status}
       </p>
