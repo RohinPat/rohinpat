@@ -2,7 +2,7 @@ import { ENGINE_CAL } from "../engineRemote";
 import { LIMIT, REDLINE, TOP_GEAR } from "../engineModel";
 import { fontFamilies } from "../font";
 import { getBestScore, mph, type NightGame, type Toast } from "./game";
-import { adviceFor } from "./advice";
+import { adviceFor, secs } from "./advice";
 import { MEDALS, medalsAt, nextMedal, type Medal } from "./medals";
 import { pending } from "./score";
 
@@ -643,10 +643,10 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   ctx.fillText("TOTAL SCORE", x + 28 * u, y + 120 * u);
   const vs = r.vsTargetS;
   const rows: [string, string][] = [
-    r.finished ? ["FINISH TIME", clock(r.time)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
+    r.finished ? ["FINISH TIME", clock(r.netTime)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
     vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
-    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · −${Math.round(r.railS)} S`],
+    ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · ${secs(r.railS)}`],
   ];
   rows.forEach(([k, v], i) => {
     const ry = y + 160 * u + i * 31 * u;

@@ -87,9 +87,21 @@ export const tractionN = (cd: DragConds) => TRACTION_N * (1 + cd.shift * 0.0004)
 /** the launch band under these conditions: the ends of the window and the sweet spot, rpm */
 export const launchBand = (cd: DragConds) => ({ lo: LAUNCH.lo + cd.shift, hi: LAUNCH.hi + cd.shift, sweet: LAUNCH.sweet + cd.shift });
 export const TREE_STEP_S = 0.5;
-export const TREE_GREEN_S = 1.6;
-/** the green is this long after staging: the wait, then the amber sequence */
-export const treeTime = (c: { wait: number }) => c.wait + TREE_GREEN_S;
+/** the three ambers are TREE_STEP_S apart, and the green follows the last one by about this long, give or take TREE_GAP_JITTER_S, so it cannot be counted from the ambers */
+export const TREE_GAP_S = 0.6;
+export const TREE_GAP_JITTER_S = 0.15;
+export const TREE_GREEN_S = 2 * TREE_STEP_S + TREE_GAP_S;
+/** the green is this long after staging: the wait, then the amber sequence and this run's gap */
+export const treeTime = (c: { wait: number; gap?: number }) => c.wait + 2 * TREE_STEP_S + (c.gap ?? TREE_GAP_S);
+/**
+ * A start the foot gave away: the throttle lifted for at least JUMP_LIFT_S and stabbed again in the JUMP_WINDOW_S before the green
+ * is a jump (a tap to hold the revs is shorter than that). It is a reaction of FALSE_START_S. Held down into the green with the revs
+ * past the launch band is a SLOW_START_S: the foot was never taken off the pin.
+ */
+export const JUMP_LIFT_S = 0.25;
+export const JUMP_WINDOW_S = 0.3;
+export const FALSE_START_S = 0.3;
+export const SLOW_START_S = 0.25;
 /** seconds since the first amber (negative while the tree is still waiting) */
 export const sinceAmber = (c: { tree: number; wait: number }) => c.tree - c.wait;
 
@@ -112,6 +124,12 @@ export type DragCar = {
   /** seconds since staging, and how long the tree waited before the first amber */
   tree: number;
   wait: number;
+  /** this run's gap between the last amber and the green, s */
+  gap: number;
+  /** in the tree: how long the throttle has been up, and when (tree clock) it last came down after a lift of JUMP_LIFT_S or more; and whether that was a jump */
+  upT: number;
+  jumpAt: number | null;
+  jumped: boolean;
   t: number;
   split60: number | null;
   /** the time to sixty feet from the green */
@@ -151,6 +169,10 @@ export const freshCar = (best: number | null = null, cond: DragConds = DEFAULT_C
   shiftT: 0,
   tree: 0,
   wait: 0,
+  gap: TREE_GAP_S,
+  upT: 0,
+  jumpAt: null,
+  jumped: false,
   t: 0,
   split60: null,
   sixtyFt: null,
@@ -202,10 +224,18 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
       c.phase = "tree";
       c.tree = 0;
       c.wait = c.cond.treeMin + rand() * c.cond.treeSpread;
+      c.gap = TREE_GAP_S + (rand() * 2 - 1) * TREE_GAP_JITTER_S;
+      c.upT = 0;
+      c.jumpAt = null;
+      c.jumped = false;
     }
   } else if (c.phase === "tree") {
     c.rpm += rpmRate(c.pedal, 7000, 6000) * dt;
     c.tree += dt;
+    if (c.throttle) {
+      if (c.upT >= JUMP_LIFT_S) c.jumpAt = c.tree;
+      c.upT = 0;
+    } else c.upT += dt;
     if (c.tree >= treeTime(c)) {
       c.phase = "run";
       c.t = 0;
@@ -217,8 +247,10 @@ export function stepDrag(c: DragCar, dt: number, t: number, path: number[], ev: 
       c.launch = c.call;
       c.launchRpm = c.rpm;
       c.callT = t;
-      // on the throttle at the green is a reaction of nothing; off it, the clock is already running until the foot comes down
-      c.reaction = c.throttle ? 0 : null;
+      // on the throttle at the green is a reaction of nothing, unless it was a jump or the revs were pinned past the band; off it, the
+      // clock is already running until the foot comes down
+      c.jumped = c.throttle && c.jumpAt !== null && c.tree - c.jumpAt <= JUMP_WINDOW_S;
+      c.reaction = !c.throttle ? null : c.jumped ? FALSE_START_S : c.rpm > band.hi ? SLOW_START_S : 0;
       path.length = 0;
       path.push(0);
       ev.green?.(c.slip);
@@ -300,15 +332,16 @@ export function parEt(cond: DragConds = DEFAULT_CONDS): number {
 }
 
 /** What a run leaves behind for its advice and for the set card: its time, and how the launch, the throttle and the shifts went. */
-export type RunRecord = Pick<DragCar, "launch" | "launchRpm" | "reaction" | "shifts" | "t"> & { cond?: DragConds };
-export const noteRun = (c: DragCar): RunRecord => ({ launch: c.launch, launchRpm: c.launchRpm, reaction: c.reaction, shifts: { ...c.shifts }, t: c.t, cond: c.cond });
+export type RunRecord = Pick<DragCar, "launch" | "launchRpm" | "reaction" | "shifts" | "t"> & { cond?: DragConds; jumped?: boolean };
+export const noteRun = (c: DragCar): RunRecord => ({ launch: c.launch, launchRpm: c.launchRpm, reaction: c.reaction, shifts: { ...c.shifts }, t: c.t, cond: c.cond, jumped: c.jumped });
 
 /** The first thing a run did wrong, in capitals, or null when the launch, the throttle and the shifts were all clean. */
 export function dragFault(c: RunRecord): string | null {
   const s = c.shifts;
   const plural = (n: number) => (n > 1 ? "S" : "");
-  if (c.reaction !== null && c.reaction > 0.15) return `${c.reaction.toFixed(2)} S TO GET ON THE THROTTLE AT GREEN`;
+  if (c.jumped) return "JUMPED THE LIGHT. HOLD THROUGH THE AMBERS";
   if (c.launch === "WHEELSPIN") return "TOO MANY REVS AT GREEN. TAP TO HOLD";
+  if (c.reaction !== null && c.reaction > 0.15) return `${c.reaction.toFixed(2)} S TO GET ON THE THROTTLE AT GREEN`;
   if (c.launch === "BOGGED") return "TOO FEW REVS AT GREEN. HOLD THE MARK";
   if (s.early > 0) return `${s.early} EARLY SHIFT${plural(s.early)}. WAIT FOR BLUE`;
   if (s.late > 0) return `${s.late} LATE SHIFT${plural(s.late)}. SHIFT ON BLUE`;

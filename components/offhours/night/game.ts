@@ -62,6 +62,8 @@ export type GameEvent =
 export type Result = {
   finished: boolean;
   time: number;
+  /** the time with the rail penalties added (what is measured against the target), s */
+  netTime: number;
   /** distance driven, in miles and metres */
   miles: number;
   metres: number;
@@ -79,7 +81,7 @@ export type Result = {
   /** the best score of this visit including this run, and the best before it (0 on the first run) */
   bestScore: number;
   prevBestScore: number;
-  /** seconds behind (+) or ahead (-) of the target driver at the finish, or null if the run did not finish */
+  /** seconds behind (+) or ahead (-) of the target driver at the finish, rail penalties counted, or null if the run did not finish */
   vsTargetS: number | null;
   /** medals this run earned (0 to 3), the most any run of this visit has, and the next one to go for from the visit's best (null at the top) */
   medals: number;
@@ -678,6 +680,7 @@ export class NightGame {
     this.result = {
       finished,
       time: run.time,
+      netTime: run.time + this.railS,
       metres: Math.max(0, c.s - START_S),
       miles: milesOf(Math.max(0, c.s - START_S)),
       bestDrift: this.drift.best,
@@ -691,7 +694,7 @@ export class NightGame {
       newBest,
       bestScore,
       prevBestScore,
-      vsTargetS: finished ? run.time - this.target.ghost.time : null,
+      vsTargetS: finished ? run.time + this.railS - this.target.ghost.time : null,
       medals: medalsAt(score, this.track.medals),
       bestMedals: medalsAt(bestScore, this.track.medals),
       next: nextMedal(bestScore, this.track.medals),
@@ -743,7 +746,7 @@ export class NightGame {
       const tt = timeAt(this.target.ghost, c.s);
       this.deltaOn = tt !== null && c.s > START_S + 30;
       if (tt !== null) {
-        this.deltaS = this.clock - tt;
+        this.deltaS = this.clock + this.railS - tt;
         this.gapM = tg.pose.s - c.s;
       }
     }

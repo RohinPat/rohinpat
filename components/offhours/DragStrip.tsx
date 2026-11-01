@@ -87,6 +87,10 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const [setCard, setSetCard] = useState(false);
   // the keys / pedal button (held) and a linked phone (target, then smoothed)
   const held = useRef(false);
+  // a mouse has one button: a click on the dash holds the throttle until the next click, so the other hand can shift (a touch screen or a key still holds it only while down)
+  const latch = useRef(false);
+  const [latched, setLatched] = useState(false);
+  const mouse = useRef(false);
   const phone = useRef({ target: 0, smooth: 0 });
   const told = useRef({ at: -Infinity, key: "" });
   const mineRef = useRef<RemoteHandlers | null>(null);
@@ -128,6 +132,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       if (document.hidden) eng.current?.silence();
       held.current = false;
       car.current.throttle = false;
+      latch.current = false;
+      setLatched(false);
     };
     document.addEventListener("visibilitychange", away);
     window.addEventListener("blur", away);
@@ -146,6 +152,20 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       const au = getAudio();
       if (au) eng.current = new EngineVoice(au);
     }
+  };
+  /** a mouse click on the dash or the throttle button: on until the next click (after the finish it is the way to go again) */
+  const clickThrottle = () => {
+    const on = !latch.current;
+    latch.current = false;
+    setLatched(false);
+    if (car.current.phase === "done") {
+      throttle(true);
+      throttle(false);
+      return;
+    }
+    latch.current = on;
+    setLatched(on);
+    throttle(on);
   };
   const shift = () => {
     if (!shiftUp(car.current, clock.current)) return;
@@ -168,6 +188,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     } else car.current = freshCar(car.current.best, s.cond);
     setDone("");
     setSetCard(false);
+    latch.current = false;
+    setLatched(false);
   }
 
   // A linked phone: its throttle axis is a pedal, its shift gesture is the up
@@ -235,6 +257,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       paused,
       animateAlways: play,
       keys: (e, down) => {
+        mouse.current = false;
         if (e.key === " ") {
           if (!e.repeat) throttle(down);
           return true;
@@ -249,10 +272,23 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         }
         return false;
       },
-      onDown: () => throttle(true),
-      onUp: () => throttle(false),
+      onDown: () => (mouse.current ? clickThrottle() : throttle(true)),
+      onUp: () => {
+        if (!mouse.current) throttle(false);
+      },
     },
   );
+
+  // which kind of pointer pressed the dash (the shared pointer handling does not say)
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || !play) return;
+    const kind = (e: PointerEvent) => {
+      mouse.current = e.pointerType === "mouse";
+    };
+    c.addEventListener("pointerdown", kind, true);
+    return () => c.removeEventListener("pointerdown", kind, true);
+  }, [play, ref]);
 
   // arriving from the mode switch with it still focused: the keys listen on the dash, so hand them over
   useEffect(() => {
@@ -906,7 +942,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
           ref={ref}
           data-autofocus={play || undefined}
           role={play ? "img" : undefined}
-          aria-label={play ? "A race dashboard. Hold Space for throttle, press the up arrow to shift." : undefined}
+          aria-label={play ? "A race dashboard. Hold Space for throttle, press the up arrow to shift. With a mouse, click to hold the throttle and right-click to shift." : undefined}
+          onContextMenu={play ? (e) => (e.preventDefault(), shift()) : undefined}
           className="absolute inset-0 w-full h-full outline-none touch-none"
         />
       </div>
@@ -914,9 +951,20 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         <div className="flex items-stretch gap-2 p-3">
           <button
             type="button"
-            onPointerDown={() => throttle(true)}
-            onPointerUp={() => throttle(false)}
-            onPointerLeave={() => throttle(false)}
+            aria-pressed={done ? undefined : latched}
+            onPointerDown={(e) => (e.pointerType === "mouse" ? clickThrottle() : throttle(true))}
+            onPointerUp={(e) => e.pointerType !== "mouse" && throttle(false)}
+            onPointerLeave={(e) => e.pointerType !== "mouse" && throttle(false)}
+            onKeyDown={(e) => {
+              if (e.key !== " " && e.key !== "Enter") return;
+              e.preventDefault();
+              if (!e.repeat) throttle(true);
+            }}
+            onKeyUp={(e) => {
+              if (e.key !== " " && e.key !== "Enter") return;
+              e.preventDefault();
+              throttle(false);
+            }}
             onClick={() => done && again()}
             className="flex-1 h-16 rounded-xl bg-[#1d5e3f] text-[#f2ead7] font-mono text-xs uppercase tracking-[0.2em] active:scale-[0.98] select-none touch-none"
           >
@@ -925,6 +973,11 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
           <button
             type="button"
             onPointerDown={shift}
+            onKeyDown={(e) => {
+              if (e.key !== " " && e.key !== "Enter") return;
+              e.preventDefault();
+              if (!e.repeat) shift();
+            }}
             className="w-40 h-16 rounded-xl bg-[#f2ead7] text-[#0d100e] font-mono text-xs uppercase tracking-[0.2em] active:scale-[0.98] select-none touch-none"
           >
             Shift ↑

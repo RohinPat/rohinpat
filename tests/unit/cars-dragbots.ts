@@ -1,4 +1,4 @@
-import { DEFAULT_CONDS, freshCar, launchBand, shiftUp, stepDrag, type DragCar, type DragConds } from "@/components/offhours/dragModel";
+import { DEFAULT_CONDS, freshCar, launchBand, shiftUp, stepDrag, treeTime, type DragCar, type DragConds } from "@/components/offhours/dragModel";
 import { SHIFT_AT } from "@/components/offhours/engineModel";
 
 export type DragBot = {
@@ -52,7 +52,11 @@ export function runDrag(bot: DragBot, seed: number, mk: () => DragCar = freshCar
   for (let i = 0; i < 120 * 40 && c.phase !== "done"; i++) {
     let want = true;
     if (c.phase === "idle") want = true;
-    else if (c.phase === "tree") want = bot.holdRpm === "hold" ? true : c.rpm < aim;
+    else if (c.phase === "tree") {
+      want = bot.holdRpm === "hold" ? true : c.rpm < aim;
+      // a bot that is late for the green is off the pedal when it comes (it has stopped looking at the tree)
+      if (bot.lateS && treeTime(c) - c.tree < 0.05) want = false;
+    }
     else if (c.phase === "run") {
       want = true;
       if (bot.lateS && greenAt >= 0 && t < lateUntil) want = false;

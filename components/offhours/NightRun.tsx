@@ -11,7 +11,7 @@ import { drawScene } from "./night/draw";
 import { NightGame, type GameEvent } from "./night/game";
 import { drawAttractHud, drawHud, grouped, isNarrow, resultBottom, type HudOptions } from "./night/hud";
 import { keySteerFeel, newKeyAxes, newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeyPedal, stepKeys, stepKeySteer, type Sources } from "./night/nightInput";
-import { adviceFor } from "./night/advice";
+import { adviceFor, secs } from "./night/advice";
 import { ASSIST_DEFAULT, ASSIST_NAMES, type AssistLevel } from "./night/assist";
 import { NightSound } from "./night/sound";
 import { TRACKS, TRACK_IDS, type TrackId } from "./night/tracks";
@@ -165,7 +165,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       case "end": {
         const r = e.result;
         setStatus(
-          `${r.finished ? tr.clearedSpoken : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${Math.round(r.railS)} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${tr.medals[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
+          `${r.finished ? tr.clearedSpoken : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${secs(r.railS).replace(" S", "")} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${tr.medals[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
         );
         s?.silence();
         tellPhone(true);
@@ -383,12 +383,8 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           case "a":
           case "ArrowRight":
           case "d": {
-            const dir = key === "ArrowLeft" || key === "a" ? -1 : 1;
-            if (g.phase === "ready" || g.phase === "done") {
-              // not on the road yet: the arrows choose which road
-              if (down && !e.repeat) pickTrack(TRACK_IDS[(TRACK_IDS.indexOf(g.track.id) + dir + TRACK_IDS.length) % TRACK_IDS.length]);
-              k.left = k.right = false;
-            } else if (dir < 0) k.left = down;
+            // the arrows are the wheel, ready or not: the road is chosen with the Road buttons (and the arrows once one has focus)
+            if (key === "ArrowLeft" || key === "a") k.left = down;
             else k.right = down;
             break;
           }
@@ -418,10 +414,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
             break;
           case "r":
             // a run that is going badly is not worth the two minutes: start over (the abandoned one is not kept)
-            if (down && !e.repeat && (g.phase === "run" || g.phase === "count")) {
-              g.reset();
-              startOrAgain();
-            }
+            if (down && !e.repeat) restart();
             break;
           case "Enter":
             if (down && !e.repeat) startOrAgain();
@@ -439,6 +432,15 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       },
     },
   );
+
+  /** start the run over (the abandoned one is not kept) */
+  function restart() {
+    const g = game();
+    if (g.phase !== "run" && g.phase !== "count") return;
+    g.reset();
+    startOrAgain();
+    ref.current?.focus();
+  }
 
   function toggleAuto() {
     const g = game();
@@ -526,7 +528,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         data-testid="night-canvas"
         data-phase={phase}
         role="img"
-        aria-label={`Night run: ${TRACKS[track].label}. Left and right choose the road before a run. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start.`}
+        aria-label={`Night run: ${TRACKS[track].label}. The Road buttons choose the road. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start.`}
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
       <div className="absolute right-3 top-14 z-10 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em]">
@@ -539,6 +541,12 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
         >
           Assist: {ASSIST_NAMES[assist]}
         </button>
+        {touch && (phase === "run" || phase === "count") && (
+          // a phone has no R key
+          <button type="button" data-testid="night-restart" onClick={restart} className="h-8 rounded-full border border-white/15 bg-[#0d100e]/70 px-3.5 text-[#f2ead7] active:bg-white/25">
+            Restart
+          </button>
+        )}
         <div role="group" aria-label="Gearbox" className="flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70">
           {[true, false].map((on) => (
             <button
@@ -624,10 +632,10 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
           </div>
           <div className="flex shrink-0 items-end gap-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <button type="button" aria-label="Brake" data-testid="night-pad-brake" className={`${padClass} h-10 w-[72px] sm:h-16 sm:w-20`} {...pad("brake")}>
+              <button type="button" aria-label="Brake" data-testid="night-pad-brake" className={`${padClass} h-14 w-[72px] sm:h-16 sm:w-20`} {...pad("brake")}>
                 Brake
               </button>
-              <button type="button" aria-label="Handbrake" data-testid="night-pad-hand" className={`${padClass} h-10 w-[72px] sm:h-16 sm:w-20`} {...pad("hand")}>
+              <button type="button" aria-label="Handbrake" data-testid="night-pad-hand" className={`${padClass} h-14 w-[72px] sm:h-16 sm:w-20`} {...pad("hand")}>
                 Drift
               </button>
             </div>

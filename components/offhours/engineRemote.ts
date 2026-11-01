@@ -112,10 +112,10 @@ export const ENGINE_CAL = {
     /** in a slide the lock opens up to this (rad), so there is room to counter-steer */
     steerSlideRad: 0.3,
     /** grinding along the guardrail slows the car this much, m/s^2 (and a hit costs speed on top) */
-    scrapeDecel: 9,
+    scrapeDecel: 12,
     /** a hit takes this share of the speed along the rail for each m/s it came in at the wall, at most wallLossMax */
-    wallLossPerMs: 0.03,
-    wallLossMax: 0.45,
+    wallLossPerMs: 0.05,
+    wallLossMax: 0.6,
     /** body size for the guardrail, m */
     halfWidthM: 0.92,
     halfLenM: 2.2,
@@ -192,7 +192,7 @@ export const ENGINE_CAL = {
       railK: 2,
     },
     /** what is different about the climb's run (the rest is ENGINE_CAL.run): a tighter clock, since a leg is a few seconds */
-    run: { startShare: 1.3, startFlatS: 3, legShare: 1.25, legFlatS: 1.5, finishSecondPoints: 100 },
+    run: { startShare: 1.25, startFlatS: 3.5, legShare: 1.0, legFlatS: 1, finishSecondPoints: 100 },
     driftPay: 2,
   },
 
@@ -211,10 +211,10 @@ export const ENGINE_CAL = {
     /** the countdown before GO, s */
     countS: 2.7,
     /** time on the clock at the start and added at each checkpoint, as a share of what the target driver needs for the leg, plus a flat amount, s */
-    startShare: 1.35,
-    startFlatS: 3.5,
-    legShare: 1.2,
-    legFlatS: 1.5,
+    startShare: 1.2,
+    startFlatS: 3,
+    legShare: 1.0,
+    legFlatS: 1,
     /** the clock does not run in the first moments after GO (the launch), s */
     graceS: 0.6,
     /** after the clock hits zero (or the finish) the car coasts this long before the end screen, s */
@@ -224,11 +224,11 @@ export const ENGINE_CAL = {
     cleanLegPoints: 400,
     finishSecondPoints: 250,
     /** a touch of the rail (one contact: grinding along it is one) takes this off the clock, s */
-    railPenaltyS: 1.5,
+    railPenaltyS: 3.5,
     /** the corner warning looks this many seconds (and metres) of road ahead and lights when the car is over the plan's speed there by this share */
     cue: { leadS: 2.6, leadM: 30, margin: 1.0 },
     /** the target driver's pace as a share of the grip limit (under 1: it can be beaten) */
-    targetPace: 0.9,
+    targetPace: 0.7,
   },
 
   // ------------------------------------------------------------- night run: drifting

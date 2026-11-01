@@ -5,11 +5,11 @@ import { MEDALS, medalsAt } from "@/components/offhours/night/medals";
 import { getRoad } from "@/components/offhours/night/road";
 import { getTarget } from "@/components/offhours/night/target";
 import { drive, planSpeed } from "@/components/offhours/night/ai";
-import { adviceFor, MANY_RAILS, type AdviceInput } from "@/components/offhours/night/advice";
+import { adviceFor, secs, MANY_RAILS, type AdviceInput } from "@/components/offhours/night/advice";
 import { cornerPay, driftRate, newDrift, stepDrift } from "@/components/offhours/night/score";
 import { keySteerFeel, newKeyAxes, resolveInput, noSources, stepKeyPedal, stepKeys } from "@/components/offhours/night/nightInput";
 import { attractWindow } from "@/components/offhours/night/attract";
-import { freshCar, parEt, dragAdvice, shiftUp, stepDrag, sinceAmber, treeTime, SIXTY_FT, TREE_WAIT, QUARTER, type DragCar } from "@/components/offhours/dragModel";
+import { freshCar, parEt, dragAdvice, noteRun, shiftUp, stepDrag, sinceAmber, treeTime, FALSE_START_S, LAUNCH, SIXTY_FT, SLOW_START_S, TREE_GAP_JITTER_S, TREE_GAP_S, TREE_GREEN_S, TREE_WAIT, QUARTER, type DragCar } from "@/components/offhours/dragModel";
 import { SHIFT_AT, LIMIT } from "@/components/offhours/engineModel";
 import { BOTS, playRun, type Bot, type RunStat } from "./cars-bots";
 import { DRAG_BOTS, runDrag } from "./cars-dragbots";
@@ -19,7 +19,7 @@ import { DRAG_BOTS, runDrag } from "./cars-dragbots";
 
 const DT = 1 / 60;
 const bot = (name: string): Bot => BOTS.find((b) => b.name === name)!;
-const many = (name: string, n = 4): RunStat[] => Array.from({ length: n }, (_, i) => playRun(bot(name), i + 1));
+const many = (name: string, n = 4, assist: 0 | 1 | 2 = 1): RunStat[] => Array.from({ length: n }, (_, i) => playRun(bot(name), i + 1, (g) => (g.assist = assist)));
 const avg = (rs: RunStat[], f: (r: RunStat) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
 const inp = (steer = 0, throttle = 0, brake = 0, hand = 0): NightInput => ({ steer, throttle, brake, hand });
 
@@ -32,44 +32,59 @@ describe("cars: the spread between drivers", () => {
     expect(r.score).toBeLessThan(MEDALS[0].score / 2);
   });
 
-  it("a driver who steers but never brakes finishes, and does not get past bronze", () => {
-    const rs = many("gas+steer");
-    expect(rs.every((r) => r.finished)).toBe(true);
-    expect(rs.every((r) => medalsAt(r.score) <= 1)).toBe(true);
-    // a rail every corner or so: this is where the time and the clean legs go
-    expect(avg(rs, (r) => r.rails)).toBeGreaterThan(6);
-    expect(avg(rs, (r) => r.clean)).toBeLessThan(2);
+  it("a driver who steers but never brakes does not beat the target and gets no medal, with the assist on or off", () => {
+    for (const level of [0, 1] as const) {
+      const rs = Array.from({ length: 16 }, (_, i) => playRun(bot("gas+steer"), i + 1, (g) => (g.assist = level)));
+      for (const r of rs) {
+        expect(r.vsTarget === null || r.vsTarget > 0).toBe(true);
+        expect(medalsAt(r.score)).toBe(0);
+      }
+      // a rail every corner or so: this is where the time, the clock and the clean legs go
+      expect(avg(rs, (r) => r.rails)).toBeGreaterThan(5);
+      expect(avg(rs, (r) => r.clean)).toBeLessThan(2);
+      // and most of them are out of time before the end
+      expect(rs.filter((r) => r.finished).length).toBeLessThan(rs.length * 0.75);
+    }
   });
 
-  it("a careful driver finishes with a little time in hand and few rail hits", () => {
-    const rs = many("cautious");
-    expect(rs.every((r) => r.finished)).toBe(true);
-    expect(avg(rs, (r) => r.rails)).toBeLessThan(7);
-    expect(avg(rs, (r) => r.clean)).toBeGreaterThan(3);
-    expect(avg(rs, (r) => r.timeLeftEnd)).toBeGreaterThan(3);
-    expect(avg(rs, (r) => r.timeLeftEnd)).toBeLessThan(30);
+  it("a careful drifter beats the target, now and then, and ends with a few seconds on the clock", () => {
+    const rs = many("careful-drifter", 24);
+    expect(rs.filter((r) => r.finished).length).toBeGreaterThan(20);
+    const fin = rs.filter((r) => r.finished);
+    expect(fin.filter((r) => r.vsTarget! < 0).length).toBeGreaterThanOrEqual(3);
+    expect(avg(rs, (r) => r.rails)).toBeLessThan(8);
+    // about 8 to 12 s, where it was 30
+    expect(avg(fin, (r) => r.timeLeftEnd)).toBeGreaterThan(6);
+    expect(avg(fin, (r) => r.timeLeftEnd)).toBeLessThan(14);
   });
 
-  it("a decent driver finishes with time in hand and the greedy drifter out-scores him by a long way", () => {
-    const decent = many("decent");
-    const greedy = many("drifter");
-    expect(decent.every((r) => r.finished)).toBe(true);
-    expect(greedy.every((r) => r.finished)).toBe(true);
-    expect(avg(greedy, (r) => r.score)).toBeGreaterThan(avg(decent, (r) => r.score) * 1.4);
+  it("a cautious driver finishes, mostly, with few rail hits and a clock that is felt", () => {
+    const rs = many("cautious", 24);
+    expect(rs.filter((r) => r.finished).length).toBeGreaterThan(rs.length * 0.6);
+    expect(avg(rs, (r) => r.rails)).toBeLessThan(5);
+    expect(avg(rs, (r) => r.clean)).toBeGreaterThan(2);
+    for (const r of rs.filter((x) => x.finished)) expect(r.timeLeftEnd).toBeLessThan(30);
+  });
+
+  it("the greedy drifter out-scores the decent driver, whose points are gates and the clock", () => {
+    const decent = many("decent", 24);
+    const greedy = many("drifter", 24);
+    expect(avg(greedy, (r) => r.score)).toBeGreaterThan(avg(decent, (r) => r.score) * 1.05);
     // the drifter's points are drift, the decent driver's are gates and the clock
-    expect(avg(greedy, (r) => r.drift)).toBeGreaterThan(avg(decent, (r) => r.drift) * 2);
-    expect(avg(greedy, (r) => r.score)).toBeGreaterThan(MEDALS[1].score * 0.9);
+    expect(avg(greedy, (r) => r.drift)).toBeGreaterThan(avg(decent, (r) => r.drift) * 1.5);
+    // a clean run of a committed drifter reaches gold
+    expect(Math.max(...greedy.map((r) => r.score))).toBeGreaterThanOrEqual(MEDALS[2].score);
   });
 
   it("is tight: nobody has the clock to spare, so a rail or a late brake is felt", () => {
     for (const name of ["cautious", "decent", "drifter"]) {
-      for (const r of many(name, 3)) expect(r.timeLeftEnd).toBeLessThan(45);
+      for (const r of many(name, 3)) expect(r.timeLeftEnd).toBeLessThan(25);
     }
     const t = getTarget();
-    // the clock on offer is a third more than the target driver needs, not two and a half times
+    // the clock on offer is a little over what the target driver needs, not two and a half times
     const budget = t.startS + t.bonusS.reduce((a, b) => a + b, 0);
-    expect(budget).toBeGreaterThan(t.ghost.time * 1.15);
-    expect(budget).toBeLessThan(t.ghost.time * 1.45);
+    expect(budget).toBeGreaterThan(t.ghost.time * 1.05);
+    expect(budget).toBeLessThan(t.ghost.time * 1.25);
   });
 
   it("does not pay a slalom down the straights", () => {
@@ -137,10 +152,21 @@ describe("cars: the road teaches, and is not long", () => {
     expect(Math.min(...Array.from(t.plan.vmax.slice(first, first + 25))) * 2.237).toBeLessThan(100);
   });
 
-  it("is under two minutes for the target driver, where it was two and a half", () => {
+  it("counts the rail penalties in the time it measures against the target, and says them as \"3.5 S\", not \"−4 S\"", () => {
     const t = getTarget();
-    expect(t.ghost.time).toBeGreaterThan(85);
-    expect(t.ghost.time).toBeLessThan(125);
+    const pen = ENGINE_CAL.run.railPenaltyS;
+    for (const r of many("careful-drifter", 6).filter((x) => x.finished)) {
+      expect(r.vsTarget!).toBeCloseTo(r.time + r.rails * pen - t.ghost.time, 1);
+    }
+    expect(secs(2)).toBe("2 S");
+    expect(secs(3.5)).toBe("3.5 S");
+    expect(secs(7)).toBe("7 S");
+  });
+
+  it("is about two minutes for the target driver, a driver who keeps off the rails", () => {
+    const t = getTarget();
+    expect(t.ghost.time).toBeGreaterThan(100);
+    expect(t.ghost.time).toBeLessThan(130);
     expect(getRoad().finish).toBeLessThan(4200);
   });
 });
@@ -317,7 +343,7 @@ describe("cars: the countdown and the end card", () => {
 
   const base: AdviceInput = { finished: true, checkpoints: 8, rails: 0, railS: 0, spins: 0, driftTotal: 9000, bestDrift: 2000, score: 20000, vsTargetS: -2 };
   it("gives one short line, the first thing that went wrong", () => {
-    expect(adviceFor({ ...base, rails: MANY_RAILS, railS: 7.5 }, false)).toMatch(/RAIL HITS TOOK 8 S/);
+    expect(adviceFor({ ...base, rails: MANY_RAILS, railS: 7.5 }, false)).toMatch(/RAIL HITS TOOK 7\.5 S/);
     expect(adviceFor({ ...base, finished: false, checkpoints: 5 }, false)).toMatch(/BRAKE LATER/);
     expect(adviceFor({ ...base, spins: 2 }, false)).toMatch(/SPIN/);
     expect(adviceFor({ ...base, driftTotal: 1000 }, false)).toMatch(/SHIFT/);
@@ -330,7 +356,7 @@ describe("cars: the countdown and the end card", () => {
 
   it("puts the rail hits, the clean legs and the advice in the result a finished run hands the page", () => {
     forgetBestRun();
-    const r = playRun(bot("cautious"), 2);
+    const r = playRun(bot("careful-drifter"), 1, (g) => (g.assist = 1));
     expect(r.finished).toBe(true);
     const g = new NightGame(true);
     g.start();
@@ -421,7 +447,7 @@ describe("cars: the strip", () => {
       expect(c.phase).toBe("tree");
       expect(c.wait).toBeGreaterThanOrEqual(TREE_WAIT.min);
       expect(c.wait).toBeLessThanOrEqual(TREE_WAIT.min + TREE_WAIT.spread);
-      expect(treeTime(c)).toBeCloseTo(c.wait + 1.6, 5);
+      expect(treeTime(c)).toBeCloseTo(c.wait + 1 + c.gap, 5);
       waits.add(c.wait);
     }
     expect(waits.size).toBe(3);
@@ -431,6 +457,74 @@ describe("cars: the strip", () => {
     expect(sinceAmber(c)).toBeLessThan(0);
     c.tree = 1.2;
     expect(sinceAmber(c)).toBeCloseTo(0.7, 5);
+  });
+
+  it("puts the green a different time after the last amber each run, 0.6 s give or take 0.15, so it cannot be counted from the ambers", () => {
+    const gaps: number[] = [];
+    for (const r of [0, 0.25, 0.5, 0.75, 0.999]) {
+      const c = freshCar();
+      c.throttle = true;
+      c.pedal = 1;
+      for (let i = 0; i < 120 && c.phase !== "tree"; i++) stepDrag(c, 1 / 120, i / 120, [], {}, () => r);
+      expect(c.gap).toBeGreaterThanOrEqual(TREE_GAP_S - TREE_GAP_JITTER_S - 1e-9);
+      expect(c.gap).toBeLessThanOrEqual(TREE_GAP_S + TREE_GAP_JITTER_S + 1e-9);
+      // the last amber is 1 s after the first: the green is `gap` after it
+      expect(treeTime(c) - c.wait).toBeCloseTo(1 + c.gap, 9);
+      gaps.push(c.gap);
+    }
+    expect(new Set(gaps.map((g) => g.toFixed(3))).size).toBe(5);
+    // and par is what it was: it is made at the middle of the range
+    expect(treeTime({ wait: 0 })).toBeCloseTo(TREE_GREEN_S, 9);
+  });
+
+  describe("the reaction can be lost", () => {
+    /** stage, then run the tree with `foot(timeBeforeGreen)` saying whether the throttle is down, and return the car at the first step of the run */
+    const tree = (foot: (toGreen: number) => boolean, revs = 5000) => {
+      const c = freshCar();
+      c.phase = "tree";
+      c.wait = 0.4;
+      c.gap = 0.6;
+      c.tree = 0;
+      c.throttle = true;
+      c.pedal = 1;
+      const dt = 1 / 120;
+      for (let i = 0; i < 120 * 5 && c.phase === "tree"; i++) {
+        c.throttle = foot(treeTime(c) - c.tree);
+        c.pedal = c.throttle ? 1 : 0;
+        stepDrag(c, dt, i * dt, [], {}, () => 0.5);
+        if (c.phase === "tree") c.rpm = revs;
+      }
+      return c;
+    };
+
+    it("holds steady: a foot that stays down, or taps to hold the revs, is on time", () => {
+      expect(tree(() => true).reaction).toBe(0);
+      const tap = tree((t) => !(t > 0.5 && t < 0.62) && !(t > 0.9 && t < 1.0));
+      expect(tap.jumped).toBe(false);
+      expect(tap.reaction).toBe(0);
+    });
+
+    it("counts a lift of a quarter second or more and a stab in the 0.3 s before green as jumping the light", () => {
+      const c = tree((t) => !(t > 0.28 && t < 1.0));
+      expect(c.jumped).toBe(true);
+      expect(c.reaction).toBeCloseTo(FALSE_START_S, 9);
+      expect(dragAdvice(noteRun(c), parEt())).toMatch(/JUMPED THE LIGHT/);
+      // lifted for as long, but back on it well before the 0.3 s: not a jump
+      expect(tree((t) => !(t > 0.9 && t < 1.2)).jumped).toBe(false);
+    });
+
+    it("counts a throttle held into the green with the revs past the launch band as a slow start", () => {
+      const c = tree(() => true, LAUNCH.hi + 400);
+      expect(c.reaction).toBeCloseTo(SLOW_START_S, 9);
+      expect(c.launch).toBe("WHEELSPIN");
+      // the card names the revs, not the foot
+      expect(dragAdvice(noteRun(c), parEt())).toMatch(/TOO MANY REVS/);
+    });
+
+    it("still measures a press after the green", () => {
+      const c = tree((t) => t > 0.7 || t < 0.2);
+      expect(c.reaction === null || c.reaction >= 0).toBe(true);
+    });
   });
 
   it("times sixty feet and the quarter, and the speed over the line", () => {
