@@ -913,7 +913,7 @@ function readyCard(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game,
   mono(ctx, Math.max(11, sm));
   const pulse = 0.65 + 0.35 * Math.sin(g.time * 4);
   ctx.globalAlpha = pulse;
-  ctx.fillText(coarse() ? "TAP TO DROP IN" : "PRESS ENTER, SPACE OR TAP TO DROP IN", w / 2, cur + 13);
+  ctx.fillText(coarse() ? "TAP TO DROP IN" : "← →, SPACE OR TAP TO DROP IN", w / 2, cur + 13);
   ctx.globalAlpha = 1;
 }
 
