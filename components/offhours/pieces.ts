@@ -28,7 +28,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Gaming",
     line: "1-bit, and the machines play too.",
     title: "Solve the maze, or watch them learn",
-    how: ["Walk it yourself (arrows, WASD or drag), or pick a solver", "New maze any time"],
+    how: ["Walk it yourself: drag (or arrows/WASD)", "Or pick a solver and watch it think", "New maze any time"],
   },
   {
     id: "hoops",
@@ -36,7 +36,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Basketball",
     line: "Hornets. Through whatever.",
     title: "30 seconds on the clock",
-    how: ["Swipe up on the ball to shoot (keyboard: arrows aim, hold Space)", "Three in a row doubles your points"],
+    how: ["Swipe up to shoot (or arrows aim, hold Space)", "Three in a row doubles your points"],
   },
   {
     id: "penalty",
@@ -44,7 +44,7 @@ export const PIECE_META: PieceMeta[] = [
     label: "Barça",
     line: "Més que un club.",
     title: "Penalty shootout",
-    how: ["Pick a shot (keys 1-7)", "Aim, hold to power up, let go", "Best of five, then sudden death"],
+    how: ["Pick a shot (keys 1-7)", "Aim, hold to power up, let go (or arrows, hold Space)", "Five kicks. Score all five to keep going"],
   },
   {
     id: "decks",
@@ -61,7 +61,7 @@ export const PIECE_META: PieceMeta[] = [
     line: "A canyon road, after midnight.",
     title: "Night run",
     how: [
-      "←/→ steer, ↑ gas, ↓ brake, Shift handbrake",
+      "Keyboard: ←/→ steer, ↑ gas, ↓ brake, Shift handbrake",
       "Brake into a corner to drift. Drifting scores; a rail hit loses it",
       "Beat the ghost to the last checkpoint",
     ],

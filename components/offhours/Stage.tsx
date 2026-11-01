@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { isMuted, onMuteChange, setMuted } from "./audio";
 import PairChip from "@/components/link/PairChip";
 import SoundPrompt from "./SoundPrompt";
+import { forTouch } from "./hints";
 
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
 // (a clip-path from the tile's rect to the whole window) and shrinks back on
@@ -33,14 +34,6 @@ export function useStageLabel(label: StageLabel | null) {
 
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 const MS = 440;
-
-// On a touch screen the keyboard half of a hint is noise: drop "(or Space)",
-// "(keys 1-7)" and keyboard-only lines, and say tap instead of click.
-function forTouch(how: string[]) {
-  return how
-    .filter((h) => !h.startsWith("Keyboard:"))
-    .map((h) => h.replace(/\s*\((?:or |keys )[^)]*\)/g, "").replace(/^Click/, "Tap").replace("arrows, WASD, or drag", "drag"));
-}
 
 function useMuted() {
   return useSyncExternalStore(onMuteChange, isMuted, () => false);

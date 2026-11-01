@@ -246,6 +246,7 @@ export default function Maze({ mode, paused }: PieceProps) {
   const tick = useRef(0);
   const seedRef = useRef(7);
   const preview = useRef(0); // preview cycles algorithms
+  const downAt = useRef<{ x: number; y: number } | null>(null);
   const off = useRef<{ c: HTMLCanvasElement; img: ImageData } | null>(null);
   // every solver's result on the current maze, for comparison
   const board = useRef<{ maze: Maze | null; rows: [Algo, string][] }>({ maze: null, rows: [] });
@@ -347,23 +348,44 @@ export default function Maze({ mode, paused }: PieceProps) {
       paused,
       animateAlways: play,
       keys: (e, down) => {
-        const R = run.current;
-        if (!R || R.algo !== "you") return false;
         const k = e.key.toLowerCase();
         if (!["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) return false;
+        let R = run.current;
+        if (!R) return false;
+        if (down && (R.algo !== "you" || (R.phase === "done" && tick.current - R.doneAt > 1))) {
+          // the first move key takes over from a solver, and after an escape it starts the next maze
+          if (R.algo !== "you") pick("you");
+          else fresh("you", tick.current, true);
+          R = run.current!;
+        }
+        if (R.algo !== "you") return true;
         if (down) R.keys.add(k);
         else R.keys.delete(k);
         return true;
       },
       onDown: (p) => {
         const R = run.current;
-        if (R?.algo === "you") R.stick = { x0: p.x, y0: p.y, x: p.x, y: p.y };
+        if (!R) return;
+        if (R.algo === "you" && R.phase === "done" && tick.current - R.doneAt > 1) {
+          fresh("you", tick.current, true);
+          return;
+        }
+        // a drag walks; it takes over from a solver once it has moved (a click to look does not)
+        downAt.current = { x: p.x, y: p.y };
+        if (R.algo === "you") R.stick = { x0: p.x, y0: p.y, x: p.x, y: p.y };
       },
       onMove: (p) => {
-        const R = run.current;
+        let R = run.current;
+        const d0 = downAt.current;
+        if (R && d0 && p.down && R.algo !== "you" && Math.hypot(p.x - d0.x, p.y - d0.y) > 10) {
+          pick("you");
+          R = run.current!;
+          R.stick = { x0: d0.x, y0: d0.y, x: p.x, y: p.y };
+        }
         if (R?.stick && p.down) Object.assign(R.stick, { x: p.x, y: p.y });
       },
       onUp: () => {
+        downAt.current = null;
         if (run.current) run.current.stick = null;
       },
     },
@@ -619,7 +641,9 @@ export default function Maze({ mode, paused }: PieceProps) {
     // crosshair-ish HUD
     mono(ctx, play ? 12 : 10);
     const name = ALGOS.find((x) => x.id === R.algo)!.name.toUpperCase();
-    const label = R.phase === "think" ? (R.algo === "q" ? "LEARNING" : "THINKING") : R.phase === "done" ? "ESCAPED" : R.phase === "manual" ? "YOUR MOVE" : "WALKING";
+    // walking it yourself, the clock runs on the HUD, and stays on it once you are out
+    const mine = R.algo === "you" ? ` · ${((R.phase === "done" ? R.doneAt : tick.current) - R.t0).toFixed(1)}S` : "";
+    const label = (R.phase === "think" ? (R.algo === "q" ? "LEARNING" : "THINKING") : R.phase === "done" ? "ESCAPED" : R.phase === "manual" ? "YOUR MOVE" : "WALKING") + mine;
     const hud = `${name} · ${label}`;
     ctx.fillStyle = "#0d100e";
     ctx.fillRect(8, vh - 30, ctx.measureText(hud).width + 16, 22);
@@ -717,7 +741,8 @@ export default function Maze({ mode, paused }: PieceProps) {
   return (
     <div className="absolute inset-0 flex flex-col bg-[#0d100e]">
       {play && (
-        <div className="chip-row flex items-center gap-2 px-3 pt-3 pb-2 overflow-x-auto sm:flex-wrap">
+        <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+          <div className="chip-row flex min-w-0 flex-1 items-center gap-2 overflow-x-auto sm:flex-wrap">
           {ALGOS.map((a) => (
             <button
               key={a.id}
@@ -732,6 +757,7 @@ export default function Maze({ mode, paused }: PieceProps) {
               {a.name}
             </button>
           ))}
+          </div>
           <button
             type="button"
             onClick={() => fresh(algo, tick.current, true)}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRemote } from "@/lib/link/remote";
 import { useCanvas, type PieceProps } from "./useCanvas";
-import { getAudio } from "./audio";
+import { burst, getAudio, tone } from "./audio";
 import { display, mono } from "./font";
 import { DECKS_CAL, OMEGA, scratchRate } from "./decksRemote";
 import Scope, { ScopeToggle } from "./Scope";
@@ -165,6 +165,8 @@ export default function Decks({ mode, paused }: PieceProps) {
     grabAngle: 0,
     lastGrab: 0,
     grabRate: 0,
+    /** an arrow key held: the rate it scratches at, every frame until it lets go (0: none) */
+    keyRate: 0,
     cut: false,
     // a phone's hand on the record: held, when its last scratch came, and the cut it holds
     remote: false,
@@ -300,7 +302,13 @@ export default function Decks({ mode, paused }: PieceProps) {
       if (s.grab) {
         s.rate += (s.grabRate - s.rate) * Math.min(1, dt * 30);
         // holding still stops it (a phone says so itself, so only once its messages dry up)
-        if (!s.remote || performance.now() - s.remoteAt > DECKS_CAL.staleMs) s.grabRate *= Math.exp(-dt * 10);
+        // a key's scratch ends if the record loses focus with the key still down (its keyup goes elsewhere)
+        if (s.keyRate && document.activeElement !== ctx.canvas) {
+          s.keyRate = 0;
+          s.grab = false;
+        }
+        if (s.keyRate) s.grabRate = s.keyRate;
+        else if (!s.remote || performance.now() - s.remoteAt > DECKS_CAL.staleMs) s.grabRate *= Math.exp(-dt * 10);
       } else {
         const target = s.running ? 1 : 0;
         s.rate += (target - s.rate) * Math.min(1, dt * (s.running ? 5 : 2.2));
@@ -460,8 +468,13 @@ export default function Decks({ mode, paused }: PieceProps) {
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           // keyboard scratch: hold to drag the record back or forward
           if (down) void boot();
-          s.grab = down;
-          s.grabRate = down ? (e.key === "ArrowLeft" ? -2.5 : 2.5) : 0;
+          // the key held is a hand held still at that speed: it keeps scratching until it lets go (it used to die away
+          // in half a second, until the key started to repeat)
+          const rate = e.key === "ArrowLeft" ? -2.5 : 2.5;
+          if (down) s.keyRate = rate;
+          else if (s.keyRate === rate) s.keyRate = 0;
+          s.grab = s.keyRate !== 0;
+          s.grabRate = s.keyRate;
           return true;
         }
         if (e.key === " " || e.key === "Enter") {
@@ -479,7 +492,17 @@ export default function Decks({ mode, paused }: PieceProps) {
 
   const toggle = (r: number, c: number) => {
     void boot();
+    // with the deck stopped a step you turn on plays its sound once, so the first click is heard
+    if (!S.current.running && !pattern[r][c]) audition(r, c);
     setPattern((p) => p.map((row, i) => (i === r ? row.map((v, j) => (j === c ? (v ? 0 : 1) : v)) : row)));
+  };
+  const audition = (r: number, c: number) => {
+    const au = getAudio();
+    if (!au) return;
+    if (r === 0) tone(au, { freq: 160, to: 42, dur: 0.3, gain: 0.6 });
+    else if (r === 1) burst(au, { freq: 1900, q: 0.8, dur: 0.16, gain: 0.45 });
+    else if (r === 2) burst(au, { freq: 7500, type: "highpass", q: 0.6, dur: 0.05, gain: 0.2 });
+    else tone(au, { freq: RIFF[c], type: "sawtooth", dur: 0.22, gain: 0.16 });
   };
 
   const Cell = play ? "button" : "span";
