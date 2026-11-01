@@ -66,7 +66,7 @@ describe("the tracks", () => {
       expect(t[1].score).toBeLessThan(t[2].score);
     }
     // the canyon's marks, set from the bots' runs in cars-play.test.ts (a driver who never brakes is under bronze)
-    expect(MEDALS.map((m) => m.score)).toEqual([11_000, 18_000, 28_000]);
+    expect(MEDALS.map((m) => m.score)).toEqual([9_500, 13_000, 28_000]);
     expect(CLIMB_MEDALS[2].score).toBeLessThan(MEDALS[2].score);
     expect(TRACKS.climb.cleared).not.toBe(TRACKS.canyon.cleared);
     expect(TRACKS.climb.strap).not.toBe(TRACKS.canyon.strap);
@@ -74,13 +74,13 @@ describe("the tracks", () => {
 
   it("score against their own marks", () => {
     expect(medalsAt(9_000)).toBe(0);
-    expect(medalsAt(9_000, CLIMB_MEDALS)).toBe(1);
-    expect(medalsAt(15_500, CLIMB_MEDALS)).toBe(3);
+    expect(medalsAt(8_000, CLIMB_MEDALS)).toBe(1);
+    expect(medalsAt(18_500, CLIMB_MEDALS)).toBe(3);
     expect(nextMedal(10_500, CLIMB_MEDALS)?.name).toBe("GOLD");
     expect(nextMedal(30_000, CLIMB_MEDALS)).toBeNull();
-    expect(medalHint(9_000, CLIMB_MEDALS)).toBe("SILVER 9,500");
+    expect(medalHint(8_000, CLIMB_MEDALS)).toBe("SILVER 9,000");
     // the dash's default is the canyon's
-    expect(medalHint(10_000)).toBe("BRONZE 11,000");
+    expect(medalHint(9_000)).toBe("BRONZE 9,500");
   });
 
   it("the canyon's road is what it was; its target driver and clock come from the retuned pace", () => {
@@ -95,9 +95,9 @@ describe("the tracks", () => {
     expect(buildRoad().kappa).toEqual(r.kappa);
     const t = getTarget();
     expect(t.road).toBe(r);
-    expect(t.ghost.time).toBeCloseTo(123.7, 0);
-    expect(t.startS).toBe(22);
-    expect(t.bonusS).toEqual([17.5, 14, 12.5, 12.5, 17, 21, 20.5, 0]);
+    expect(t.ghost.time).toBeCloseTo(134.3, 0);
+    expect(t.startS).toBe(21.5);
+    expect(t.bonusS).toEqual([17, 13.5, 12.5, 12.5, 17, 20.5, 20, 0]);
     expect(TRACKS.canyon.run).toBe(ENGINE_CAL.run);
     expect(TRACKS.canyon.driftPay).toBe(1);
     // a tunnel and a bridge, as ever
@@ -214,12 +214,12 @@ describe("the climb's road", () => {
 });
 
 describe("the climb's run", () => {
-  it("is about a minute and a quarter for the target driver, who finishes it without a hit", () => {
+  it("is about a minute and a half for the target driver, who finishes it without a hit", () => {
     const t = getTarget("climb");
     expect(t.road).toBe(climb());
     expect(t.ghost.finished).toBe(true);
-    expect(t.ghost.time).toBeGreaterThan(65);
-    expect(t.ghost.time).toBeLessThan(85);
+    expect(t.ghost.time).toBeGreaterThan(80);
+    expect(t.ghost.time).toBeLessThan(105);
     expect(t.bonusS).toHaveLength(7);
     expect(t.bonusS[6]).toBe(0);
     expect(getTarget("climb")).toBe(t);
@@ -228,14 +228,14 @@ describe("the climb's run", () => {
 
   it("has its own clock, and a slide pays more on a road of slower corners", () => {
     const run = TRACKS.climb.run;
-    expect(run.startShare).toBeGreaterThan(ENGINE_CAL.run.startShare);
+    expect(run.targetPace).toBeLessThan(ENGINE_CAL.run.targetPace);
     expect(run.railPenaltyS).toBe(ENGINE_CAL.run.railPenaltyS);
     expect(run.checkpointPoints).toBe(ENGINE_CAL.run.checkpointPoints);
     expect(TRACKS.climb.driftPay).toBeGreaterThan(1);
     const t = getTarget("climb");
     const budget = t.startS + t.bonusS.reduce((a, b) => a + b, 0);
-    expect(budget).toBeGreaterThan(t.ghost.time * 1.05);
-    expect(budget).toBeLessThan(t.ghost.time * 1.5);
+    expect(budget).toBeGreaterThan(t.ghost.time * 0.8);
+    expect(budget).toBeLessThan(t.ghost.time * 1.15);
   });
 
   it("a rail on the climb takes more speed than the canyon's, so a hairpin is not a berm", () => {
@@ -366,25 +366,30 @@ describe("what the climb does to the drivers (scripted keyboard drivers, 48 runs
     }
   });
 
-  it("a careful driver finishes, beats the target and gets bronze or silver, and the greedy drifter can still gold", () => {
-    const cautious = many("cautious", 24);
-    const careful = many("careful-drifter", 48);
-    const drifter = many("drifter", 48);
-    for (const rs of [cautious, careful]) expect(rs.every((r) => r.finished)).toBe(true);
+  it("every driver but the one on the gas gets to the summit, beats the target, and the medals sit by skill, with gold for the greedy drifter", () => {
+    const by = Object.fromEntries(["cautious", "careful-drifter", "decent", "precise", "drifter"].map((n) => [n, many(n, 48)]));
+    for (const rs of Object.values(by)) {
+      expect(rs.filter((r) => r.finished).length).toBeGreaterThanOrEqual(46);
+      expect(rs.filter((r) => r.finished && r.vsTarget! < 0).length / rs.length).toBeGreaterThan(0.9);
+    }
     const share = (rs: RunStat[], n: number) => rs.filter((r) => medalsAt(r.score, CLIMB_MEDALS) >= n).length / rs.length;
-    expect(share(cautious, 1)).toBeGreaterThan(0.95);
-    expect(share(cautious, 2)).toBeLessThan(0.4);
-    expect(share(careful, 1)).toBeGreaterThan(0.95);
-    expect(share(careful, 2)).toBeGreaterThan(0.25);
-    expect(share(careful, 2)).toBeLessThan(0.8);
-    for (const rs of [cautious, careful]) expect(rs.filter((r) => r.vsTarget! < 0).length / rs.length).toBeGreaterThan(0.5);
-    // a minute or so of driving, and a clock that is felt: about 15 s left, where it was 20
-    expect(mean(careful.map((r) => r.time))).toBeGreaterThan(55);
-    expect(mean(careful.map((r) => r.time))).toBeLessThan(75);
-    expect(mean(careful.map((r) => r.timeLeftEnd))).toBeLessThan(18);
-    // the sloppy flicker runs out of clock more often than not, and the best of its runs are gold
-    expect(drifter.filter((r) => r.finished).length).toBeLessThan(drifter.length * 0.5);
-    expect(Math.max(...drifter.map((r) => r.score))).toBeGreaterThanOrEqual(CLIMB_MEDALS[2].score);
+    expect(share(by.cautious, 1)).toBeGreaterThan(0.95);
+    expect(share(by.cautious, 2)).toBeLessThan(0.4);
+    expect(share(by.decent, 2)).toBeGreaterThan(0.6);
+    expect(share(by.drifter, 2)).toBeGreaterThan(0.8);
+    expect(share(by.drifter, 3)).toBeGreaterThan(0.04);
+    expect(share(by.drifter, 3)).toBeLessThan(0.4);
+    expect(Math.max(...by.precise.map((r) => r.score))).toBeGreaterThanOrEqual(CLIMB_MEDALS[2].score);
+    expect(mean(by.drifter.map((r) => r.score))).toBeGreaterThan(mean(by.cautious.map((r) => r.score)) * 1.3);
+    expect(mean(by.drifter.map((r) => r.score))).toBeGreaterThan(mean(by.decent.map((r) => r.score)) * 1.2);
+    // a minute or so of driving and a clock that is felt (about 10 s left, a careful run 15 or so)
+    for (const n of ["decent", "drifter"]) {
+      expect(mean(by[n].map((r) => r.time))).toBeGreaterThan(55);
+      expect(mean(by[n].map((r) => r.time))).toBeLessThan(75);
+      expect(mean(by[n].map((r) => r.timeLeftEnd))).toBeLessThan(20);
+    }
+    // and with the assist off they still finish
+    for (const n of ["decent", "precise", "drifter", "careful-drifter", "cautious"]) expect(many(n, 16, 0).filter((r) => r.finished).length).toBeGreaterThanOrEqual(15);
   });
 
   it("is not a berm: the driver who never brakes finishes no faster than a careful one's score and loses the clean legs", () => {

@@ -12,8 +12,8 @@
 export type Medal = { name: string; score: number };
 
 export const MEDALS: Medal[] = [
-  { name: "BRONZE", score: 11_000 },
-  { name: "SILVER", score: 18_000 },
+  { name: "BRONZE", score: 9_500 },
+  { name: "SILVER", score: 13_000 },
   { name: "GOLD", score: 28_000 },
 ];
 
@@ -22,9 +22,9 @@ export const MEDALS: Medal[] = [
  * a driver who only holds the gas, or who never brakes, does not reach bronze, a careful one is around silver, and the greedy drifter golds.
  */
 export const CLIMB_MEDALS: Medal[] = [
-  { name: "BRONZE", score: 6_000 },
-  { name: "SILVER", score: 9_500 },
-  { name: "GOLD", score: 15_000 },
+  { name: "BRONZE", score: 5_500 },
+  { name: "SILVER", score: 9_000 },
+  { name: "GOLD", score: 18_000 },
 ];
 
 /** How many medals this score has earned (0 to 3), against a track's marks (the canyon's unless told). */

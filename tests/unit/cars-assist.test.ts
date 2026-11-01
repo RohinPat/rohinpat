@@ -163,17 +163,16 @@ describe("what the assist does to a run (scripted keyboard drivers, 24 runs each
     // it gives way to the keys now (see "a key press wins"), so it saves fewer rail hits than a wheel pulled to the line would
     expect(r(light)).toBeLessThan(r(off) * 0.85);
     expect(r(full)).toBeLessThan(r(off) * 0.8);
-    // more of them get to the end (the clock is tight), and a leg driven clean is more common
-    expect(light.filter((x) => x.finished).length).toBeGreaterThan(off.filter((x) => x.finished).length);
+    // they all get to the end, and a leg driven clean is more common
+    expect(light.every((x) => x.finished)).toBe(true);
     expect(avg(light, (x) => x.clean)).toBeGreaterThan(avg(off, (x) => x.clean));
   });
 
-  it("a careful driver is helped most, and most of them finish", () => {
+  it("a careful driver is helped most, and everyone still finishes", () => {
     const off = many("cautious", 0, 12);
     const light = many("cautious", 1, 12);
     expect(perKm(light)).toBeLessThan(perKm(off) * 0.7);
-    expect(light.filter((x) => x.finished).length).toBeGreaterThan(off.filter((x) => x.finished).length);
-    expect(light.filter((x) => x.finished).length).toBeGreaterThan(light.length / 2);
+    expect(light.every((x) => x.finished)).toBe(true);
   });
 
   it("does not take the slide away: the greedy drifter's drift points do not fall, and the points are still the drift", () => {

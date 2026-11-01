@@ -73,6 +73,8 @@ export type RunStat = {
   cues: number;
   bestDrift: number;
   timeLeftEnd: number;
+  /** the speed into the rail at the first touch of each incident, m/s */
+  railInto: number[];
   /** seconds behind (+) or ahead (-) of the target at the finish, rail penalties counted; null if it did not finish */
   vsTarget: number | null;
   firstHitS: number | null;
@@ -244,6 +246,7 @@ export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): Ru
     bestDrift: r?.bestDrift ?? 0,
     timeLeftEnd: +g.timeLeft.toFixed(1),
     vsTarget: r?.vsTargetS ?? null,
+    railInto: [...g.railInto],
     firstHitS: crashes[0] ?? null,
   };
   forgetBestRun();

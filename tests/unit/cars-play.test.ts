@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ENGINE_CAL, NO_INPUT, type NightInput } from "@/components/offhours/engineRemote";
-import { NightGame, forgetBestRun } from "@/components/offhours/night/game";
+import { NightGame, forgetBestRun, railPenalty } from "@/components/offhours/night/game";
 import { MEDALS, medalsAt } from "@/components/offhours/night/medals";
 import { getRoad } from "@/components/offhours/night/road";
 import { getTarget } from "@/components/offhours/night/target";
@@ -32,59 +32,81 @@ describe("cars: the spread between drivers", () => {
     expect(r.score).toBeLessThan(MEDALS[0].score / 2);
   });
 
-  it("a driver who steers but never brakes does not beat the target and gets no medal, with the assist on or off", () => {
-    for (const level of [0, 1] as const) {
-      const rs = Array.from({ length: 16 }, (_, i) => playRun(bot("gas+steer"), i + 1, (g) => (g.assist = level)));
-      for (const r of rs) {
-        expect(r.vsTarget === null || r.vsTarget > 0).toBe(true);
-        expect(medalsAt(r.score)).toBe(0);
-      }
-      // a rail every corner or so: this is where the time, the clock and the clean legs go
-      expect(avg(rs, (r) => r.rails)).toBeGreaterThan(5);
-      expect(avg(rs, (r) => r.clean)).toBeLessThan(2);
-      // and most of them are out of time before the end
-      expect(rs.filter((r) => r.finished).length).toBeLessThan(rs.length * 0.75);
+  // 16 seeded runs of each scripted driver, the assist Light (the default) and Off, on the canyon (the climb's are in cars-climb.test.ts)
+  describe("the drivers, 16 runs each", { timeout: 60_000 }, () => {
+    const runs = (name: string, assist: 0 | 1) => many(name, 16, assist);
+    const fin = (rs: RunStat[]) => rs.filter((r) => r.finished);
+    const beat = (rs: RunStat[]) => fin(rs).filter((r) => r.vsTarget! < 0).length;
+    const medalled = (rs: RunStat[], n: number) => rs.filter((r) => medalsAt(r.score) >= n).length;
+
+    for (const assist of [1, 0] as const) {
+      const lvl = assist === 1 ? "Light" : "Off";
+
+      it(`assist ${lvl}: held gas, with or without steering, never beats the target and never medals`, () => {
+        for (const name of ["gas-only", "gas+steer"]) {
+          const rs = runs(name, assist);
+          expect(beat(rs)).toBe(0);
+          expect(medalled(rs, 1)).toBe(0);
+        }
+        // a rail every corner or so: this is where the time, the clock and the clean legs go
+        const rs = runs("gas+steer", assist);
+        expect(avg(rs, (r) => r.rails)).toBeGreaterThan(5);
+        expect(avg(rs, (r) => r.clean)).toBeLessThan(2);
+      });
+
+      it(`assist ${lvl}: the drifters, the decent driver and the careful ones all finish, with some clock left`, () => {
+        for (const name of ["cautious", "careful-drifter", "decent", "precise", "drifter"]) {
+          const rs = runs(name, assist);
+          expect(fin(rs).length, name).toBeGreaterThanOrEqual(15);
+          expect(avg(fin(rs), (r) => r.timeLeftEnd), name).toBeGreaterThan(4);
+          // a clock that is felt: about 12 to 20 s, where it was 30 for a careful run
+          expect(avg(fin(rs), (r) => r.timeLeftEnd), name).toBeLessThan(24);
+        }
+      });
+
+      it(`assist ${lvl}: the target is beaten by the drifters most of the time and by the decent driver sometimes`, () => {
+        expect(beat(runs("precise", assist))).toBeGreaterThanOrEqual(10);
+        expect(beat(runs("drifter", assist))).toBeGreaterThanOrEqual(10);
+        expect(beat(runs("decent", assist))).toBeGreaterThanOrEqual(1);
+        expect(beat(runs("careful-drifter", assist))).toBeGreaterThanOrEqual(10);
+      });
+
+      it(`assist ${lvl}: skill ranks (the drifters score clearly more than the decent and the cautious), and the medals sit where it lands`, () => {
+        const cautious = runs("cautious", assist);
+        const decent = runs("decent", assist);
+        const precise = runs("precise", assist);
+        const drifter = runs("drifter", assist);
+        for (const hi of [precise, drifter]) for (const lo of [cautious, decent]) expect(avg(hi, (r) => r.score)).toBeGreaterThan(avg(lo, (r) => r.score) * 1.2);
+        expect(avg(drifter, (r) => r.drift)).toBeGreaterThan(avg(decent, (r) => r.drift) * 1.5);
+        // bronze is common for the cautious, silver for the decent, and gold is reached, by the drifter and (with the assist) the precise one
+        expect(medalled(cautious, 1)).toBeGreaterThanOrEqual(10);
+        expect(medalled(decent, 1)).toBeGreaterThanOrEqual(8);
+        expect(medalled(decent, 2)).toBeGreaterThanOrEqual(2);
+        expect(medalled(drifter, 3)).toBeGreaterThanOrEqual(1);
+        expect(medalled(drifter, 3)).toBeLessThanOrEqual(8);
+        if (assist === 1) expect(medalled(precise, 3)).toBeGreaterThanOrEqual(1);
+        expect(medalled(precise, 2)).toBeGreaterThanOrEqual(5);
+      });
     }
-  });
 
-  it("a careful drifter beats the target, now and then, and ends with a few seconds on the clock", () => {
-    const rs = many("careful-drifter", 24);
-    expect(rs.filter((r) => r.finished).length).toBeGreaterThan(20);
-    const fin = rs.filter((r) => r.finished);
-    expect(fin.filter((r) => r.vsTarget! < 0).length).toBeGreaterThanOrEqual(3);
-    expect(avg(rs, (r) => r.rails)).toBeLessThan(8);
-    // about 8 to 12 s, where it was 30
-    expect(avg(fin, (r) => r.timeLeftEnd)).toBeGreaterThan(6);
-    expect(avg(fin, (r) => r.timeLeftEnd)).toBeLessThan(14);
-  });
+    it("a careful drifter keeps off the rails and finishes with the clock to spare", () => {
+      const rs = runs("careful-drifter", 1);
+      expect(avg(rs, (r) => r.rails)).toBeLessThan(8);
+      expect(avg(rs, (r) => r.clean)).toBeGreaterThan(2);
+    });
 
-  it("a cautious driver finishes, mostly, with few rail hits and a clock that is felt", () => {
-    const rs = many("cautious", 24);
-    expect(rs.filter((r) => r.finished).length).toBeGreaterThan(rs.length * 0.6);
-    expect(avg(rs, (r) => r.rails)).toBeLessThan(5);
-    expect(avg(rs, (r) => r.clean)).toBeGreaterThan(2);
-    for (const r of rs.filter((x) => x.finished)) expect(r.timeLeftEnd).toBeLessThan(30);
-  });
+    it("a cautious driver has few rail hits and a lot of clean legs", () => {
+      const rs = runs("cautious", 1);
+      expect(avg(rs, (r) => r.rails)).toBeLessThan(5);
+      expect(avg(rs, (r) => r.clean)).toBeGreaterThan(4);
+    });
 
-  it("the greedy drifter out-scores the decent driver, whose points are gates and the clock", () => {
-    const decent = many("decent", 24);
-    const greedy = many("drifter", 24);
-    expect(avg(greedy, (r) => r.score)).toBeGreaterThan(avg(decent, (r) => r.score) * 1.05);
-    // the drifter's points are drift, the decent driver's are gates and the clock
-    expect(avg(greedy, (r) => r.drift)).toBeGreaterThan(avg(decent, (r) => r.drift) * 1.5);
-    // a clean run of a committed drifter reaches gold
-    expect(Math.max(...greedy.map((r) => r.score))).toBeGreaterThanOrEqual(MEDALS[2].score);
-  });
-
-  it("is tight: nobody has the clock to spare, so a rail or a late brake is felt", () => {
-    for (const name of ["cautious", "decent", "drifter"]) {
-      for (const r of many(name, 3)) expect(r.timeLeftEnd).toBeLessThan(25);
-    }
-    const t = getTarget();
-    // the clock on offer is a little over what the target driver needs, not two and a half times
-    const budget = t.startS + t.bonusS.reduce((a, b) => a + b, 0);
-    expect(budget).toBeGreaterThan(t.ghost.time * 1.05);
-    expect(budget).toBeLessThan(t.ghost.time * 1.25);
+    it("the clock on offer is about what the target driver needs (and the target is the slow one)", () => {
+      const t = getTarget();
+      const budget = t.startS + t.bonusS.reduce((a, b) => a + b, 0);
+      expect(budget).toBeGreaterThan(t.ghost.time * 0.9);
+      expect(budget).toBeLessThan(t.ghost.time * 1.15);
+    });
   });
 
   it("does not pay a slalom down the straights", () => {
@@ -152,21 +174,25 @@ describe("cars: the road teaches, and is not long", () => {
     expect(Math.min(...Array.from(t.plan.vmax.slice(first, first + 25))) * 2.237).toBeLessThan(100);
   });
 
-  it("counts the rail penalties in the time it measures against the target, and says them as \"3.5 S\", not \"−4 S\"", () => {
+  it("counts the rail penalties in the time it measures against the target, harder hits more, and says them as \"3.5 S\", not \"−4 S\"", () => {
     const t = getTarget();
-    const pen = ENGINE_CAL.run.railPenaltyS;
     for (const r of many("careful-drifter", 6).filter((x) => x.finished)) {
-      expect(r.vsTarget!).toBeCloseTo(r.time + r.rails * pen - t.ghost.time, 1);
+      const pens = r.railInto.reduce((a, into) => a + railPenalty(ENGINE_CAL.run, into), 0);
+      expect(r.vsTarget!).toBeCloseTo(r.time + pens - t.ghost.time, 1);
     }
+    // a brush costs about the base, a flat-out hit a good deal more, and no more than the cap
+    expect(railPenalty(ENGINE_CAL.run, 1)).toBeLessThan(1);
+    expect(railPenalty(ENGINE_CAL.run, 10)).toBeGreaterThan(railPenalty(ENGINE_CAL.run, 5) * 2);
+    expect(railPenalty(ENGINE_CAL.run, 40)).toBe(ENGINE_CAL.run.railPenaltyMaxS);
     expect(secs(2)).toBe("2 S");
     expect(secs(3.5)).toBe("3.5 S");
     expect(secs(7)).toBe("7 S");
   });
 
-  it("is about two minutes for the target driver, a driver who keeps off the rails", () => {
+  it("is a bit over two minutes for the target driver, a driver who keeps off the rails", () => {
     const t = getTarget();
-    expect(t.ghost.time).toBeGreaterThan(100);
-    expect(t.ghost.time).toBeLessThan(130);
+    expect(t.ghost.time).toBeGreaterThan(115);
+    expect(t.ghost.time).toBeLessThan(145);
     expect(getRoad().finish).toBeLessThan(4200);
   });
 });
@@ -193,7 +219,7 @@ describe("cars: the rail costs", () => {
     grind(g, 1.2);
     expect(g.rails).toBe(1);
     // the clock ran for the time that went by and the penalty came off it as well
-    expect(left - g.timeLeft).toBeGreaterThan(ENGINE_CAL.run.railPenaltyS + (g.clock - t0) - 0.1);
+    expect(left - g.timeLeft).toBeGreaterThan(ENGINE_CAL.run.railPenaltyS * ENGINE_CAL.run.railClockShare + (g.clock - t0) - 0.1);
     expect(g.penaltyShown).toBeGreaterThan(0);
     // clear of it for a couple of seconds, then back
     g.car.lat = 0;

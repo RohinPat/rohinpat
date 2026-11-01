@@ -97,6 +97,8 @@ const bestRuns: Partial<Record<TrackId, Ghost>> = {};
 const bestScores: Partial<Record<TrackId, number>> = {};
 /** runs finished this visit: the coach speaks on the first and not after */
 let runsDone = 0;
+/** What a rail incident costs, s: a base, and more the harder the first touch (`into`, m/s, the speed into the rail), at most the cap. A brush costs about the base and a flat-out hit seconds. */
+export const railPenalty = (run: { railPenaltyS: number; railPerMs2: number; railPenaltyMaxS: number }, into: number) => Math.min(run.railPenaltyMaxS, run.railPenaltyS + run.railPerMs2 * into * into);
 export const getBestRun = (track: TrackId = "canyon") => bestRuns[track] ?? null;
 export const getBestScore = (track: TrackId = "canyon") => bestScores[track] ?? 0;
 export const forgetBestRun = () => {
@@ -162,6 +164,8 @@ export class NightGame {
   /** rail incidents this run, the seconds they cost, spins, legs driven clean */
   rails = 0;
   railS = 0;
+  /** the speed into the rail at the first touch of each incident, m/s */
+  railInto: number[] = [];
   spins = 0;
   cleanLegs = 0;
   /** the seconds the last rail incident took, and how long the clock shows it for */
@@ -282,6 +286,7 @@ export class NightGame {
     this.bonusShown = 0;
     this.penaltyShown = 0;
     this.rails = this.railS = this.spins = this.cleanLegs = 0;
+    this.railInto.length = 0;
     this.legClean = true;
     this.handUsed = false;
     this.lastContactAt = -9;
@@ -562,13 +567,16 @@ export class NightGame {
     const e = loseDrift(this.drift);
     if (fresh) {
       this.rails++;
-      this.railS += this.run.railPenaltyS;
+      this.railInto.push(speed);
+      const pen = railPenalty(this.run, speed);
+      this.railS += pen;
       this.legClean = false;
-      this.timeLeft = Math.max(0, this.timeLeft - this.run.railPenaltyS);
-      this.penaltyS = this.run.railPenaltyS;
+      const off = pen * this.run.railClockShare;
+      this.timeLeft = Math.max(0, this.timeLeft - off);
+      this.penaltyS = off;
       this.penaltyShown = 1.4;
       const lost = e.kind === "lost" && e.points >= 100 ? ` · COMBO −${e.points.toLocaleString("en-US")}` : "";
-      this.toast("RAIL", `−${this.run.railPenaltyS.toFixed(1).replace(/\.0$/, "")} S${lost}`, "bad", 1.6);
+      this.toast("RAIL", `−${off.toFixed(1).replace(/\.0$/, "")} S${lost}`, "bad", 1.6);
     }
     if (e.kind === "lost") this.onEvent({ kind: "lost", points: e.points });
     if (!this.help(this.crashWhy())) this.help(e.kind === "lost" ? "wall-points" : "wall");

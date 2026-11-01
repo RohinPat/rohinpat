@@ -553,7 +553,8 @@ describe("night run: the game", () => {
     // one message: the rail, what it took off the clock, and the combo it cost
     const rail = g.toasts.find((t) => t.text === "RAIL");
     expect(rail?.sub).toContain("COMBO −");
-    expect(rail?.sub).toContain(`${ENGINE_CAL.run.railPenaltyS}`);
+    // what the clock lost: the share of the incident's penalty it takes at once
+    expect(rail?.sub).toMatch(/^−\d+(\.\d)? S/);
   });
 
   it("tells the phone the run in a shape it can read back", () => {
