@@ -74,8 +74,9 @@ export default function Golf({ mode, paused }: PieceProps) {
   }, [remote.linked, club, kind]);
 
   const ref = useCanvas(
-    ({ ctx, w, h, dt, t, p }) => {
+    ({ ctx, w, h, dt, t, p, reduce }) => {
       tRef.current = t;
+      penv.current.reduce = reduce;
       if (!play) {
         // the tile alternates: a couple of putts, then a couple of drives
         const k: Kind = t % 30 < 12 ? "putt" : "range";
@@ -225,7 +226,7 @@ export default function Golf({ mode, paused }: PieceProps) {
           role={play ? "img" : undefined}
           aria-label={
             play
-              ? "Golf. Putting: drag back from the ball and let go, or use the arrow keys to aim and hold Space; press R to read the green. Driving range: drag down and swing up, or press Space three times; arrows aim and change club."
+              ? "Golf. Putting: drag back from the ball and let go, or use the arrow keys to aim (Alt for fine steps) and hold Space; press R to read the green. Driving range: drag down and swing up, or press Space three times; arrows aim and change club."
               : undefined
           }
           className="absolute inset-0 w-full h-full outline-none touch-none"

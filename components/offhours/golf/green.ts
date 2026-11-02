@@ -12,8 +12,13 @@ import { sfx } from "./sound";
 
 export const GW = 20;
 export const GH = 12.5;
-const CUP_R = 0.054;
-const MU = 0.065 * 9.81;
+export const CUP_R = 0.07;
+/** a ball that comes to rest this close to the cup (m) is holed for one more stroke, after a short beat */
+export const TAP_IN = 0.45;
+const TAP_BEAT = 0.45;
+/** the arrow keys' aim steps, radians: Alt for fine, none for normal, Shift for big */
+export const AIM_STEP = { fine: 0.005, normal: 0.03, big: 0.1 };
+export const MU = 0.065 * 9.81;
 const ROLL = (5 / 7) * 9.81;
 export const HOLES = 9;
 const PICK_UP = 7;
@@ -106,7 +111,7 @@ type Drop = { x: number; y: number; vx: number; vy: number; trail: [number, numb
 const tmp: [number, number, number] = [0, 0, 0];
 
 /** advance the ball one step; returns "sunk" / "lip" when something happens at the cup */
-function stepBall(H: Hole, b: Ball, dt: number): "sunk" | "lip" | null {
+export function stepBall(H: Hole, b: Ball, dt: number): "sunk" | "lip" | null {
   hg(H, b.x, b.y, tmp);
   const mul = (z: number) => (z === 0 ? 1 : z === 1 ? 2.8 : 7.5);
   const zn = zone(H, b.x, b.y);
@@ -176,7 +181,7 @@ function trial(H: Hole, x: number, y: number, ang: number, speed: number) {
 
 // ---------------------------------------------------------------- state
 
-export type PuttEnv = { play: boolean; say: (m: string) => void };
+export type PuttEnv = { play: boolean; say: (m: string) => void; /** prefers-reduced-motion: the ball's ring holds still */ reduce?: boolean };
 
 export type Putt = {
   hole: Hole;
@@ -214,6 +219,8 @@ export type Putt = {
   cache: { key: string; c: HTMLCanvasElement } | null;
   arrows: { key: string; pts: [number, number, number, number][] } | null;
   held: number;
+  /** a ball at rest by the cup, on its way in as a tap-in */
+  tap: { t: number; x: number; y: number } | null;
 };
 
 export function newPutt(): Putt {
@@ -252,6 +259,7 @@ export function newPutt(): Putt {
     cache: null,
     arrows: null,
     held: 0,
+    tap: null,
   };
   setupHole(p, 1);
   return p;
@@ -264,6 +272,7 @@ function setupHole(p: Putt, n: number) {
   p.drops = [];
   p.trail = [];
   p.putter = null;
+  p.tap = null;
   p.sunkT = 0;
   p.dropT = 0;
   p.nextT = -1;
@@ -341,7 +350,7 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
     return;
   }
   if (kind === "down") {
-    if (p.ball.moving || p.ball.sunk || p.putter) return;
+    if (p.ball.moving || p.ball.sunk || p.putter || p.tap) return;
     p.aiming = true;
     // the pull is the drag from where the press landed, laid on the ball: a press anywhere can pull back, and a tap
     // (a click to focus, a look at the cup) is no pull at all, so it does not putt
@@ -386,13 +395,13 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
   }
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     if (down) {
-      p.kAngle += (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 0.1 : 0.03);
+      p.kAngle += (e.key === "ArrowLeft" ? -1 : 1) * (e.altKey ? AIM_STEP.fine : e.shiftKey ? AIM_STEP.big : AIM_STEP.normal);
       p.kTouched = t;
     }
     return true;
   }
   if (e.key === " " || e.key === "Enter") {
-    if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter) {
+    if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap) {
       p.kCharging = true;
       p.kPower = 0;
       p.kTouched = t;
@@ -483,9 +492,35 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     if (!p.ball.moving && !p.ball.sunk) {
       p.trailAge = 0;
       if (p.strokes >= PICK_UP) finishHole(p, t, env, true);
-      else p.kAngle = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
+      else if (Math.hypot(H.cup[0] - p.ball.x, H.cup[1] - p.ball.y) < TAP_IN) {
+        // close enough to the cup: no need for another stroke to be aimed
+        p.tap = { t: 0, x: p.ball.x, y: p.ball.y };
+        p.call = "TAP IN";
+        p.callT = t;
+        if (env.play) env.say("Tap in.");
+      } else p.kAngle = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
     }
   } else if (!p.ball.moving) p.trailAge += dt;
+  if (p.tap) {
+    // a beat, then the ball rolls the last few inches in, and it counts as one more stroke
+    const tp = p.tap;
+    tp.t += dt;
+    const u = Math.min(1, Math.max(0, (tp.t - 0.2) / (TAP_BEAT - 0.2)));
+    p.ball.x = tp.x + (H.cup[0] - tp.x) * u * u;
+    p.ball.y = tp.y + (H.cup[1] - tp.y) * u * u;
+    if (tp.t >= TAP_BEAT) {
+      p.tap = null;
+      p.strokes++;
+      p.ball.x = H.cup[0];
+      p.ball.y = H.cup[1];
+      p.ball.sunk = true;
+      p.ball.moving = false;
+      p.sunkT = t;
+      p.dropT = 0;
+      if (env.play) sfx("cup");
+      finishHole(p, t, env);
+    }
+  }
   if (p.ball.sunk) {
     p.dropT += dt;
     if (p.nextT > 0 && t > p.nextT) {
@@ -511,7 +546,7 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
   if (p.reading) p.readT += dt;
 
   // the self-playing demo: it reads the green by trying putts
-  if (!env.play && !p.ball.moving && !p.ball.sunk && !p.putter && p.nextT < 0 && !p.done) {
+  if (!env.play && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap && p.nextT < 0 && !p.done) {
     p.auto -= dt;
     if (p.auto <= 0) {
       const base = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
@@ -661,8 +696,28 @@ export function puttDraw(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: n
       const pow = Math.min(1, Math.hypot(dx, dy) / dragMax(v));
       const w0 = toWorld(v, p.aimFrom.x, p.aimFrom.y), w1 = toWorld(v, p.aimFrom.x + dx, p.aimFrom.y + dy);
       drawPutterAt(ctx, p, X, Y, sc, w1.x - w0.x, w1.y - w0.y, pow, 0);
-    } else if (play && !p.ball.moving && (p.kCharging || t - p.kTouched < 3)) {
+    } else if (play && !p.ball.moving && !p.tap && (p.kCharging || t - p.kTouched < 3)) {
       drawPutterAt(ctx, p, X, Y, sc, Math.cos(p.kAngle), Math.sin(p.kAngle), p.kPower, 0);
+    }
+    // until the first stroke the ball wears a soft ring, so it reads at any size
+    if (play && p.strokes === 0 && !p.ball.moving) {
+      const pulse = env.reduce ? 0 : Math.sin(t * 3.4);
+      const rr = Math.max(11, br * 2.6) * (1 + 0.1 * pulse);
+      const halo = ctx.createRadialGradient(bx, by, br, bx, by, rr * 1.5);
+      halo.addColorStop(0, "rgba(242,234,215,0.34)");
+      halo.addColorStop(1, "rgba(242,234,215,0)");
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(bx, by, rr * 1.5, 0, 7);
+      ctx.fill();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "rgba(13,16,14,0.3)";
+      ctx.beginPath();
+      ctx.arc(bx, by, rr, 0, 7);
+      ctx.stroke();
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = `rgba(242,234,215,${0.8 + 0.15 * pulse})`;
+      ctx.stroke();
     }
     // ball shadow and ball
     ctx.fillStyle = "rgba(0,0,0,0.28)";
