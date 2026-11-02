@@ -23,6 +23,8 @@ export type Track = {
   medals: Medal[];
   /** the run's numbers: the clock, the points, the penalty (ENGINE_CAL.run, with what the track changes) */
   run: typeof ENGINE_CAL.run;
+  /** how the target driver drives it (ENGINE_CAL.pilot, with what the track changes) */
+  pilot: typeof ENGINE_CAL.pilot;
   /** what a slide pays, as a multiple of the canyon's (a road of slower corners pays more, since the pay grows with the square of the speed) */
   driftPay: number;
 };
@@ -37,6 +39,7 @@ export const TRACKS: Record<TrackId, Track> = {
     label: "a canyon road after midnight",
     medals: MEDALS,
     run: ENGINE_CAL.run,
+    pilot: ENGINE_CAL.pilot,
     driftPay: 1,
   },
   climb: {
@@ -48,6 +51,7 @@ export const TRACKS: Record<TrackId, Track> = {
     label: "a switchback road up a mountain at night",
     medals: CLIMB_MEDALS,
     run: { ...ENGINE_CAL.run, ...ENGINE_CAL.climb.run },
+    pilot: { ...ENGINE_CAL.pilot, ...ENGINE_CAL.climb.pilot },
     driftPay: ENGINE_CAL.climb.driftPay,
   },
 };

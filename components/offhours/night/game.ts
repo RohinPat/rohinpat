@@ -4,7 +4,7 @@ import { newCar, resetCar, shiftGear, speedOf, stepCar, type Car } from "./car";
 import { clearFx, stepFx } from "./fx";
 import { better, createRecorder, newPose, samplePose, timeAt, type Ghost } from "./ghost";
 import { bankNow, loseDrift, newDrift, pending, stepDrift, type Drift } from "./score";
-import { launchSmoke, newScene, stepCamera, stepFxFromCar, type Scene } from "./scene";
+import { launchSmoke, newScene, stepCamera, stepFxFromCar, stepFxFromGhost, type Scene } from "./scene";
 import { medalsAt, nextMedal } from "./medals";
 import { TRACKS, type Track, type TrackId } from "./tracks";
 import { getTarget, poseOf, type Target } from "./target";
@@ -761,6 +761,7 @@ export class NightGame {
 
     if (dt > 0) {
       stepFxFromCar(sc, dt);
+      stepFxFromGhost(sc, tg, dt);
       stepFx(sc.fx, dt);
       stepCamera(sc, dt);
     } else stepCamera(sc, 0.016);
