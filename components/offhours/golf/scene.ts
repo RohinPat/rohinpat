@@ -121,15 +121,15 @@ export function poly(ctx: CanvasRenderingContext2D, c: Cam, pts: V3[], fill: str
 
 // ---------------------------------------------------------------- colour
 
-type RGB = [number, number, number];
-const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+export type RGB = [number, number, number];
+export const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 export const HAZE = hex("#cfe3e4");
 export function mixc(a: RGB, b: RGB, t: number) {
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
 }
-const fogAt = (d: number) => Math.min(0.72, 1 - Math.exp(-d / 520));
+export const fogAt = (d: number) => Math.min(0.72, 1 - Math.exp(-d / 520));
 
-const C = {
+export const C = {
   fairA: hex("#79b957"),
   fairB: hex("#6aab4d"),
   rough: hex("#4a8a42"),
@@ -138,6 +138,59 @@ const C = {
   greenB: hex("#82c562"),
   fringe: hex("#6db553"),
   sand: hex("#ead9a2"),
+};
+const WATER = hex("#4f9bb0");
+
+// ---------------------------------------------------------------- worlds
+
+export type Tree = { x: number; z: number; h: number; kind: number; flip: boolean };
+
+/** a green with a flag: a circle on the range, any outline on the course */
+export type Green = {
+  /** where the green is centred */
+  x: number;
+  z: number;
+  /** its nominal radius, m */
+  r: number;
+  /** the outline at effective radius `rad` m (r is the green's edge) */
+  ring: (rad: number) => V3[];
+  /** how far the fringe reaches past the edge, m */
+  fringe: number;
+  /** no target rings on it: a green of the course is a green, not a target */
+  plain?: boolean;
+  /** where the flag stands (default the centre) */
+  pin?: [number, number];
+  /** a distance sign beside the flag */
+  name?: string;
+};
+
+/**
+ * Everything drawWorld needs to know about a place: where the ball stops (surfaceAt), the ground (mown bands, rough),
+ * and what sits on it. The range is RANGE_WORLD; the course builds one per hole (golf/course.ts).
+ */
+export type World = {
+  surfaceAt: (x: number, z: number) => Surface;
+  /** the mown ground and the rough, far to near (below the bunkers and greens) */
+  ground: (ctx: CanvasRenderingContext2D, cam: Cam) => void;
+  /** a mown pad and a mat at the origin */
+  tee: boolean;
+  bunkers: [number, number, number][];
+  /** more sand, as outlines on the ground (x, z) */
+  sand?: [number, number][][];
+  /** ponds, as outlines on the ground (x, z) */
+  water: [number, number][][];
+  greens: Green[];
+  trees: Tree[];
+  /** yardage boards down both sides, at these distances from the tee (yd) */
+  boards: number[];
+  /** yardage markers placed one by one (the course puts them where there is no hazard) */
+  markers?: { x: number; z: number; label: string }[];
+  /** the flag is drawn at least this tall, px, so it can be found from a long way off (default: true size) */
+  flagMin?: number;
+  /** colours of the ground (default: the range's) */
+  palette?: { deep: RGB; green: RGB; greenB: RGB; fringe: RGB };
+  /** the fairway's half width at a distance, for placing the boards */
+  halfW?: (z: number) => number;
 };
 
 // ---------------------------------------------------------------- the range
@@ -181,7 +234,6 @@ export function surfaceAt(x: number, z: number): Surface {
   return "out";
 }
 
-type Tree = { x: number; z: number; h: number; kind: number; flip: boolean };
 const TREES: Tree[] = (() => {
   const r = seeded(77);
   const out: Tree[] = [];
@@ -196,6 +248,55 @@ const TREES: Tree[] = (() => {
     for (let x = -230; x < 230; x += 6 + r() * 4) out.push({ x, z: END + 14 + row * 14 + r() * 6, h: 15 + r() * 12 + row * 3, kind: Math.floor(r() * 4), flip: r() > 0.5 });
   return out;
 })();
+
+// the range's ground: mown bands every 10 yd with the rough beside them, far to near
+function rangeGround(ctx: CanvasRenderingContext2D, cam: Cam) {
+  const z0 = -40;
+  // mown stripes: alternating bands, every 10 yd, with a checker of two lanes
+  const band = 10 * YD;
+  const nb = Math.ceil((END - z0) / band);
+  const Z = (i: number) => z0 + i * band;
+  for (let i = nb - 1; i >= 0; i--) {
+    const za = Z(i), zb = Z(i + 1);
+    const hwa = halfW(za), hwb = halfW(zb);
+    const d = Math.max(1, (za + zb) / 2 - cam.z);
+    const fg = fogAt(d);
+    // rough on both sides, wide
+    ctx.save();
+    const rc = mixc(C.rough, HAZE, fg);
+    for (const s of [-1, 1])
+      poly(ctx, cam, [[s * hwa, 0, za], [s * (hwa + 24), 0, za], [s * (hwb + 24), 0, zb], [s * hwb, 0, zb]], rc);
+    ctx.restore();
+    // fairway: one mown band
+    poly(ctx, cam, [[-hwa, 0, za], [hwa, 0, za], [hwb, 0, zb], [-hwb, 0, zb]], mixc(i % 2 ? C.fairB : C.fairA, HAZE, fg));
+  }
+}
+
+export const RANGE_WORLD: World = {
+  surfaceAt,
+  ground: rangeGround,
+  tee: true,
+  bunkers: BUNKERS,
+  water: [],
+  greens: TARGETS.map((t) => ({
+    x: t.gx,
+    z: t.gz,
+    r: t.gr,
+    ring: (rad: number) => {
+      const o: V3[] = [];
+      for (let i = 0; i < 40; i++) {
+        const a = (i / 40) * Math.PI * 2;
+        o.push([t.gx + Math.cos(a) * rad, 0.015, t.gz + Math.sin(a) * rad]);
+      }
+      return o;
+    },
+    fringe: 2.8,
+    name: t.name,
+  })),
+  trees: TREES,
+  boards: [50, 100, 150, 200, 250, 300],
+  halfW,
+};
 
 // tree sprites, drawn once per kind and haze level
 const SW = 120, SH = 190;
@@ -293,8 +394,9 @@ export function drawWorld(
   h: number,
   t: number,
   wind: Wind,
-  opts: { highlight?: number; extra?: Drawable[] } = {},
+  opts: { highlight?: number; extra?: Drawable[]; world?: World; /** prefers-reduced-motion: the water holds still */ still?: boolean } = {},
 ) {
+  const world = opts.world ?? RANGE_WORLD;
   const hor = Math.max(-50, Math.min(h * 0.95, cam.horizon));
   // ---- sky
   const sky = ctx.createLinearGradient(0, 0, 0, Math.max(40, hor));
@@ -354,33 +456,16 @@ export function drawWorld(
   ctx.fillRect(0, hor - 90, w, 92);
 
   // ---- ground
-  ctx.fillStyle = mixc(C.deep, HAZE, 0.55);
+  ctx.fillStyle = world.palette ? mixc(world.palette.deep, HAZE, 0.3) : mixc(C.deep, HAZE, 0.55);
   ctx.fillRect(0, Math.max(0, hor), w, h);
-  const z0 = -40;
-  // mown stripes: alternating bands, every 10 yd, with a checker of two lanes
-  const band = 10 * YD;
-  const nb = Math.ceil((END - z0) / band);
-  const Z = (i: number) => z0 + i * band;
-  for (let i = nb - 1; i >= 0; i--) {
-    const za = Z(i), zb = Z(i + 1);
-    const hwa = halfW(za), hwb = halfW(zb);
-    const d = Math.max(1, (za + zb) / 2 - cam.z);
-    const fg = fogAt(d);
-    // rough on both sides, wide
-    ctx.save();
-    const rc = mixc(C.rough, HAZE, fg);
-    for (const s of [-1, 1])
-      poly(ctx, cam, [[s * hwa, 0, za], [s * (hwa + 24), 0, za], [s * (hwb + 24), 0, zb], [s * hwb, 0, zb]], rc);
-    ctx.restore();
-    // fairway: one mown band
-    poly(ctx, cam, [[-hwa, 0, za], [hwa, 0, za], [hwb, 0, zb], [-hwb, 0, zb]], mixc(i % 2 ? C.fairB : C.fairA, HAZE, fg));
-  }
+  world.ground(ctx, cam);
   // the tee: a mown pad, a mat, and a line
-  const tdf = fogAt(8);
-  poly(ctx, cam, [[-0.9, 0.01, -0.6], [0.9, 0.01, -0.6], [0.9, 0.01, 0.8], [-0.9, 0.01, 0.8]], "#2c6a3b");
-  poly(ctx, cam, [[-0.9, 0.012, -0.6], [0.9, 0.012, -0.6], [0.9, 0.012, -0.5], [-0.9, 0.012, -0.5]], "#e6dfc8");
+  if (world.tee) {
+    poly(ctx, cam, [[-0.9, 0.01, -0.6], [0.9, 0.01, -0.6], [0.9, 0.01, 0.8], [-0.9, 0.01, 0.8]], "#2c6a3b");
+    poly(ctx, cam, [[-0.9, 0.012, -0.6], [0.9, 0.012, -0.6], [0.9, 0.012, -0.5], [-0.9, 0.012, -0.5]], "#e6dfc8");
+  }
   // bunkers
-  for (const [bx, bz, br] of BUNKERS) {
+  for (const [bx, bz, br] of world.bunkers) {
     const ring: V3[] = [];
     for (let i = 0; i < 18; i++) {
       const a = (i / 18) * Math.PI * 2;
@@ -390,22 +475,61 @@ export function drawWorld(
     const fg = fogAt(bz - cam.z);
     poly(ctx, cam, ring, mixc(C.sand, HAZE, fg), mixc(hex("#b8a56d"), HAZE, fg), 1);
   }
-  // target greens
-  TARGETS.forEach((tg, idx) => {
-    const fg = fogAt(tg.gz - cam.z);
-    const ring = (rad: number): V3[] => {
-      const o: V3[] = [];
-      for (let i = 0; i < 40; i++) {
-        const a = (i / 40) * Math.PI * 2;
-        o.push([tg.gx + Math.cos(a) * rad, 0.015, tg.gz + Math.sin(a) * rad]);
+  for (const outline of world.sand ?? []) {
+    let cz = 0;
+    for (const [, pz] of outline) cz += pz / outline.length;
+    const fg = fogAt(cz - cam.z);
+    poly(ctx, cam, outline.map(([x, z]) => [x, 0.012, z] as V3), mixc(C.sand, HAZE, fg), mixc(hex("#b8a56d"), HAZE, fg), 1);
+  }
+  // ponds: flat water with two bands of light that drift (held still under reduced motion)
+  for (const pond of world.water) {
+    let cz = 0;
+    for (const [, pz] of pond) cz += pz / pond.length;
+    const fg = fogAt(cz - cam.z);
+    const ring: V3[] = pond.map(([x, z]) => [x, 0.014, z]);
+    poly(ctx, cam, ring, mixc(WATER, HAZE, fg * 0.8), mixc(hex("#2c6f86"), HAZE, fg), 1);
+    if (!opts.still) {
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (const [x, z] of pond) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        z0 = Math.min(z0, z);
+        z1 = Math.max(z1, z);
       }
-      return o;
-    };
-    poly(ctx, cam, ring(tg.gr + 2.8), mixc(C.fringe, HAZE, fg));
-    poly(ctx, cam, ring(tg.gr), mixc(idx % 2 ? C.green : C.greenB, HAZE, fg));
+      // clip to the pond so the light stays on the water
+      ctx.save();
+      ctx.beginPath();
+      let ok = true;
+      pond.forEach(([x, z], i) => {
+        if (!project(cam, x, 0.014, z, p3)) ok = false;
+        if (i) ctx.lineTo(p3.x, p3.y);
+        else ctx.moveTo(p3.x, p3.y);
+      });
+      if (ok) {
+        ctx.closePath();
+        ctx.clip();
+        for (let k = 0; k < 2; k++) {
+          const u = (t * 0.07 + k * 0.5) % 1;
+          const zz = z0 + (z1 - z0) * u;
+          poly(ctx, cam, [[x0, 0.016, zz], [x1, 0.016, zz], [x1, 0.016, zz + (z1 - z0) * 0.05], [x0, 0.016, zz + (z1 - z0) * 0.05]], `rgba(220,240,246,${0.2 * (1 - fg)})`);
+        }
+      }
+      ctx.restore();
+    }
+  }
+  // greens
+  world.greens.forEach((tg, idx) => {
+    const fg = fogAt(tg.z - cam.z);
+    const pal = world.palette;
+    poly(ctx, cam, tg.ring(tg.r + tg.fringe), mixc(pal ? pal.fringe : C.fringe, HAZE, fg));
+    poly(ctx, cam, tg.ring(tg.r), mixc(pal ? (idx % 2 ? pal.green : pal.greenB) : idx % 2 ? C.green : C.greenB, HAZE, fg));
     const hl = opts.highlight === idx;
-    poly(ctx, cam, ring(tg.gr * 0.55), "rgba(0,0,0,0)", hl ? "rgba(255,255,255,0.9)" : mixc(hex("#e9f6dc"), HAZE, fg + 0.2), hl ? 2.2 : 1.1);
-    poly(ctx, cam, ring(tg.gr), "rgba(0,0,0,0)", hl ? "#ffffff" : mixc(hex("#e9f6dc"), HAZE, fg + 0.1), hl ? 2.6 : 1.2);
+    if (tg.plain) {
+      poly(ctx, cam, tg.ring(tg.r), "rgba(0,0,0,0)", mixc(hex("#2f7a3a"), HAZE, fg), 1.2);
+      return;
+    }
+    poly(ctx, cam, tg.ring(tg.r * 0.55), "rgba(0,0,0,0)", hl ? "rgba(255,255,255,0.9)" : mixc(hex("#e9f6dc"), HAZE, fg + 0.2), hl ? 2.2 : 1.1);
+    poly(ctx, cam, tg.ring(tg.r), "rgba(0,0,0,0)", hl ? "#ffffff" : mixc(hex("#e9f6dc"), HAZE, fg + 0.1), hl ? 2.6 : 1.2);
   });
   // haze on the ground, thickening to the horizon
   const gh = ctx.createLinearGradient(0, hor, 0, hor + Math.max(60, h * 0.2));
@@ -416,7 +540,7 @@ export function drawWorld(
 
   // ---- things that stand up, far to near
   const items: Drawable[] = [];
-  for (const tr of TREES) {
+  for (const tr of world.trees) {
     if (!project(cam, tr.x, 0, tr.z, p3)) continue;
     const d = p3.d;
     if (d > 760) continue;
@@ -439,37 +563,38 @@ export function drawWorld(
       },
     });
   }
-  // yardage boards on both sides
-  for (const yd of [50, 100, 150, 200, 250, 300]) {
-    for (const side of [-1, 1]) {
-      const bx = side * (halfW(yd * YD) + 3.5), bz = yd * YD;
-      if (!project(cam, bx, 0, bz, p3)) continue;
-      const d = p3.d, k = p3.s, sx = p3.x, sy = p3.y;
-      items.push({
-        d,
-        draw: () => {
-          const bw = 1.7 * k, bh = 1.15 * k;
-          const fg = fogAt(d);
-          ctx.fillStyle = mixc(hex("#6d6a60"), HAZE, fg);
-          ctx.fillRect(sx - 0.05 * k, sy - 1.9 * k, 0.1 * k, 1.9 * k);
-          ctx.fillStyle = mixc(hex("#f2ead7"), HAZE, fg * 0.8);
-          ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh);
-          ctx.fillStyle = mixc(hex("#1d5e3f"), HAZE, fg * 0.8);
-          ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh * 0.12);
-          ctx.textAlign = "center";
-          display(ctx, Math.max(6, bh * 0.62), 800);
-          ctx.fillText(String(yd), sx, sy - 1.9 * k + bh * 0.72);
-          ctx.textAlign = "left";
-        },
-      });
-    }
+  // yardage boards: down both sides of the range, or markers set one by one on a hole
+  const boards: { bx: number; bz: number; label: string }[] = [];
+  for (const yd of world.boards) for (const side of [-1, 1]) boards.push({ bx: side * ((world.halfW ?? halfW)(yd * YD) + 3.5), bz: yd * YD, label: String(yd) });
+  for (const m of world.markers ?? []) boards.push({ bx: m.x, bz: m.z, label: m.label });
+  for (const { bx, bz, label } of boards) {
+    if (!project(cam, bx, 0, bz, p3)) continue;
+    const d = p3.d, k = p3.s, sx = p3.x, sy = p3.y;
+    items.push({
+      d,
+      draw: () => {
+        const bw = 1.7 * k, bh = 1.15 * k;
+        const fg = fogAt(d);
+        ctx.fillStyle = mixc(hex("#6d6a60"), HAZE, fg);
+        ctx.fillRect(sx - 0.05 * k, sy - 1.9 * k, 0.1 * k, 1.9 * k);
+        ctx.fillStyle = mixc(hex("#f2ead7"), HAZE, fg * 0.8);
+        ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh);
+        ctx.fillStyle = mixc(hex("#1d5e3f"), HAZE, fg * 0.8);
+        ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh * 0.12);
+        ctx.textAlign = "center";
+        display(ctx, Math.max(6, bh * 0.62), 800);
+        ctx.fillText(label, sx, sy - 1.9 * k + bh * 0.72);
+        ctx.textAlign = "left";
+      },
+    });
   }
   // flags
-  TARGETS.forEach((tg, idx) => {
-    const fx = tg.gx, fz = tg.gz;
+  world.greens.forEach((tg, idx) => {
+    const [fx, fz] = tg.pin ?? [tg.x, tg.z];
     if (!project(cam, fx, 0, fz, p3)) return;
     const d = p3.d;
-    const sx = p3.x, sy = p3.y, k = p3.s;
+    // a course flag is at least `flagMin` px tall, so it can be found from the tee (the range's is its true size)
+    const sx = p3.x, sy = p3.y, k = Math.max(p3.s, (world.flagMin ?? 0) / 2.4);
     items.push({
       d: d - 0.1,
       draw: () => {
@@ -495,8 +620,8 @@ export function drawWorld(
         ctx.quadraticCurveTo(sx + dir * len * 0.5, bot + flutter * 0.4, sx, bot);
         ctx.fill();
         // distance sign beside the green
-        const bx = tg.gx + (idx % 2 ? 1 : -1) * (tg.gr + 5.2);
-        if (project(cam, bx, 0, fz, p2)) {
+        const bx = tg.x + (idx % 2 ? 1 : -1) * (tg.r + 5.2);
+        if (tg.name && project(cam, bx, 0, fz, p2)) {
           const kk = p2.s;
           ctx.fillStyle = mixc(hex("#f2ead7"), HAZE, fg * 0.8);
           ctx.fillRect(p2.x - 0.95 * kk, p2.y - 1.7 * kk, 1.9 * kk, 1.0 * kk);
@@ -505,7 +630,7 @@ export function drawWorld(
           ctx.fillStyle = mixc(hex("#0d100e"), HAZE, fg);
           ctx.textAlign = "center";
           display(ctx, Math.max(6, 0.62 * kk), 800);
-          ctx.fillText(tg.name, p2.x, p2.y - 0.9 * kk);
+          ctx.fillText(tg.name ?? "", p2.x, p2.y - 0.9 * kk);
           ctx.textAlign = "left";
         }
       },

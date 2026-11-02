@@ -4,7 +4,11 @@ import { CLUBS, at, simulate, type Club, type Shot } from "./flight";
 import { TARGETS, YD, drawWorld, newCam, prepare, project, surfaceAt, halfW, type Cam, type Drawable, type P2 } from "./scene";
 import { ballLocal, blend, clubHeadWorld, golferDrawable, poseFor, type Pose } from "./golfer";
 import { sfx } from "./sound";
+import { trace } from "./tracer";
 import type { RemoteShot } from "./remoteSwing";
+import { OVER_CARRY, fullCarry, meterFace, powerFor, strikeNumbers, suggest } from "./swing";
+
+export { OVER_CARRY, fullCarry, powerFor, suggest };
 
 // The driving range: a behind-the-golfer broadcast view, a swing you make with
 // your hand (drag back, swing up through) or with three presses of Space, a
@@ -99,8 +103,6 @@ export const SHOTS_PER_ROUND = 10;
 export const RESULT_HOLD = 1.2;
 /** playback speed once a press asks to skip ahead */
 const FAST_PLAY = 4;
-/** an over-the-top swing carries at most about this fraction of a pure swing with the same club */
-export const OVER_CARRY = 0.7;
 const LOCK_MSG = "AIM IS SET FOR THE TARGET";
 
 const emptySwing = (): Swing => ({ src: "gesture", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0 });
@@ -153,62 +155,6 @@ function rollWind(r: Range, rnd: () => number) {
   const sp = rnd() * 4.2;
   const a = rnd() * Math.PI * 2;
   r.wind = { x: Math.sin(a) * sp, z: Math.cos(a) * sp };
-}
-
-// ------------------------------------------------------------ club table
-const carryCache = new Map<string, number>();
-const flatSurf = () => "fairway" as const;
-function carryFor(club: number, sf: number): number {
-  const key = `${club}:${sf.toFixed(3)}`;
-  let v = carryCache.get(key);
-  if (v === undefined) {
-    v = simulate({ club: CLUBS[club], speed: sf, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: flatSurf }).carry;
-    carryCache.set(key, v);
-  }
-  return v;
-}
-export const fullCarry = (club: number) => carryFor(club, 1);
-/** the swing fraction (0..1 backswing) that carries `yd` with this club, or null if it can't */
-export function powerFor(club: number, yd: number): number | null {
-  if (yd > fullCarry(club) + 1) return null;
-  let lo = 0.3, hi = 1;
-  for (let i = 0; i < 9; i++) {
-    const m = (lo + hi) / 2;
-    if (carryFor(club, m) < yd) lo = m;
-    else hi = m;
-  }
-  return (hi - 0.3) / 0.7;
-}
-export function suggest(yd: number): { club: number; power: number } {
-  // the shortest club that gets there, with a little in hand
-  for (let i = CLUBS.length - 1; i >= 0; i--) {
-    const p = powerFor(i, yd);
-    if (p !== null && p >= 0.62) return { club: i, power: p };
-  }
-  return { club: 0, power: Math.min(1, powerFor(0, yd) ?? 1) };
-}
-const sfOf = (b: number) => 0.3 + 0.7 * clamp(b, 0, 1);
-
-// An over-the-top swing always has the same contact, hook and (random) thin or fat lift, so its
-// speed is found once per club: the best of those lies (fat, which flies highest) carries OVER_CARRY.
-const OVER_CONTACT = 0.4;
-const OVER_FACE = -0.6, OVER_CURVE = -0.9;
-const overCache = new Map<number, number>();
-function overSpeed(club: number): number {
-  let v = overCache.get(club);
-  if (v === undefined) {
-    const goal = OVER_CARRY * fullCarry(club);
-    const carry = (sf: number) => simulate({ club: CLUBS[club], speed: sf, yaw: 0, face: OVER_FACE, curve: OVER_CURVE, contact: OVER_CONTACT, lift: 1.15, wind: [0, 0], surfaceAt: flatSurf }).carry;
-    let lo = 0.3, hi = 1.05;
-    for (let i = 0; i < 12; i++) {
-      const m = (lo + hi) / 2;
-      if (carry(m) < goal) lo = m;
-      else hi = m;
-    }
-    v = (lo + hi) / 2;
-    overCache.set(club, v);
-  }
-  return v;
 }
 
 /** the ball is at rest and the next swing may begin (a shot still flying plays on) */
@@ -394,7 +340,7 @@ export function rangeKey(r: Range, e: KeyboardEvent, down: boolean, t: number, e
       sfx("swish", r.sw.peak);
     } else if (r.phase === "down" && r.sw.src === "meter") {
       const tau = r.sw.dur - r.sw.t; // seconds until the ideal impact (negative = late)
-      r.sw.autoFace = clamp(tau / 0.14, -1, 1);
+      r.sw.autoFace = meterFace(tau);
       r.timing = -tau;
       strike(r, t, env);
     }
@@ -407,52 +353,10 @@ export function rangeKey(r: Range, e: KeyboardEvent, down: boolean, t: number, e
 function strike(r: Range, t: number, env: RangeEnv) {
   const s = r.sw;
   const club = CLUBS[r.club];
-  let power = clamp(s.peak, 0.05, 1.15);
-  let face = 0, curve = 0, contact = 1;
-  if (s.src === "gesture") {
-    const lenPx = s.lastL || 160;
-    const ox = clamp((s.xNow - s.x0) / (0.34 * lenPx), -1, 1);
-    const path = clamp(((s.xNow - s.xTop) / (0.34 * lenPx)) * 0.6, -1, 1);
-    face = ox;
-    curve = clamp((ox - path) * 0.8, -1, 1);
-    const td = t - s.tRev;
-    let q = 1;
-    if (td > 0.6) q -= (td - 0.6) * 0.9;
-    if (td < 0.1) q -= (0.1 - td) * 2.5;
-    q -= Math.max(0, Math.abs(ox) - 0.55) * 0.5;
-    contact = q;
-  } else if (s.src === "remote" && s.remote) {
-    ({ face, curve, contact } = s.remote);
-  } else {
-    const f = s.autoFace;
-    face = f * 0.6;
-    curve = f * 0.9;
-    contact = 1 - Math.max(0, Math.abs(f) - 0.4) * 0.5;
-  }
-  if (power > 1.04) contact -= (power - 1.04) * 2.2;
-  contact = clamp(contact, 0.35, 1);
-  let lift = 1, label = "";
-  if (contact > 0.93) label = "PURE";
-  else if (contact > 0.8) label = "SOLID";
-  else {
-    if (Math.random() > 0.5) {
-      label = "THIN";
-      lift = 0.55;
-    } else {
-      label = "FAT";
-      lift = 1.15;
-      contact -= 0.06;
-    }
-  }
+  const k = strikeNumbers({ src: s.src, peak: s.peak, x0: s.x0, xTop: s.xTop, xNow: s.xNow, lastL: s.lastL, td: t - s.tRev, autoFace: s.autoFace, remote: s.remote, over: s.over }, r.club);
+  const { power, face, curve, contact, lift, label, speed } = k;
   const aimYaw = r.yaw;
-  const sp = Math.abs(power) > 1 ? 1 : power;
-  let speed = sfOf(sp) * (1 + clamp(power - 1, 0, 0.15) * 0.15);
-  if (s.over && s.src !== "gesture") {
-    // over the top: the same hooked, poor contact every time, and never more than OVER_CARRY of a pure swing
-    contact = Math.min(contact, OVER_CONTACT);
-    speed = overSpeed(r.club);
-    r.timing = null;
-  }
+  if (k.overTop) r.timing = null;
   const shot = simulate({
     club,
     speed,
@@ -783,81 +687,17 @@ export function rangeDraw(ctx: CanvasRenderingContext2D, r: Range, w: number, h:
 
   const sh = r.shot;
   // ---- tracers
-  const trace = (pts: Float32Array, n: number, upTo: number, glow: number, core: number, col: string) => {
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    const draw = (lw: number, style: string) => {
-      ctx.strokeStyle = style;
-      ctx.lineWidth = lw;
-      ctx.beginPath();
-      // camera-space polyline, clipped against the near plane so nothing behind
-      // (or beside) the camera can wrap around the screen
-      const NEARZ = 1.2;
-      let prev: V | null = null;
-      let pen = false;
-      const emit = (c: V, first: boolean) => {
-        const k = cam.F / c[2];
-        const x = cam.cx + c[0] * k, y = cam.cy - c[1] * k;
-        if (first) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      };
-      const toCam = (x: number, y: number, z: number): V => {
-        const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
-        return [dx * cam.rx + dy * cam.ry + dz * cam.rz, dx * cam.ux + dy * cam.uy + dz * cam.uz, dx * cam.fx + dy * cam.fy + dz * cam.fz];
-      };
-      const feed = (x: number, y: number, z: number) => {
-        const c = toCam(x, Math.max(0, y), z);
-        if (prev) {
-          const a = prev, inA = a[2] >= NEARZ, inB = c[2] >= NEARZ;
-          if (inA !== inB) {
-            const u = (NEARZ - a[2]) / (c[2] - a[2]);
-            const m: V = [a[0] + (c[0] - a[0]) * u, a[1] + (c[1] - a[1]) * u, NEARZ];
-            if (inA) {
-              if (!pen) emit(a, true);
-              emit(m, false);
-              pen = false;
-            } else {
-              emit(m, true);
-              pen = true;
-            }
-          }
-          if (inB) {
-            if (!pen) {
-              emit(c, true);
-              pen = true;
-            } else emit(c, false);
-          } else pen = false;
-        } else if (c[2] >= NEARZ) {
-          emit(c, true);
-          pen = true;
-        }
-        prev = c;
-      };
-      for (let i = 0; i < n; i++) {
-        const i4 = i * 4;
-        if (pts[i4] > upTo) break;
-        feed(pts[i4 + 1], pts[i4 + 2], pts[i4 + 3]);
-      }
-      if (upTo < pts[(n - 1) * 4]) {
-        const e = at(sh!, upTo);
-        feed(e[0], e[1], e[2]);
-      }
-      ctx.stroke();
-    };
-    if (glow) draw(glow, "rgba(255,70,50,0.22)");
-    draw(core, col);
-  };
   for (const q of r.past) {
     if (q.shot === sh && (r.phase === "fly" || r.phase === "rest")) continue;
     const a = Math.max(0, 0.3 - q.age * 0.02);
-    if (a > 0 && r.phase !== "fly") trace(q.shot.pts, q.shot.n, 99, 0, 1.4, `rgba(255,255,255,${a})`);
+    if (a > 0 && r.phase !== "fly") trace(ctx, cam, q.shot, 99, 0, 1.4, `rgba(255,255,255,${a})`);
   }
   if (sh && (r.phase === "fly" || r.phase === "rest")) {
     const upTo = r.phase === "fly" ? r.shotT : sh.restT;
     const fadeA = r.phase === "rest" ? clamp(1 - (r.restT - 0.7) / 0.8, 0, 1) : 1;
     ctx.globalAlpha = fadeA;
-    trace(sh.pts, sh.n, upTo, 7, 3, "#ff5a4a");
-    trace(sh.pts, sh.n, upTo, 0, 1.3, "#fff1e6");
+    trace(ctx, cam, sh, upTo, 7, 3, "#ff5a4a");
+    trace(ctx, cam, sh, upTo, 0, 1.3, "#fff1e6");
     ctx.globalAlpha = 1;
     // the ball itself
     const ball = at(sh, upTo);
