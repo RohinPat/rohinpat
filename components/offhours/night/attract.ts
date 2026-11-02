@@ -4,7 +4,7 @@ import { pointAt } from "./road";
 import { newScene, stepCamera, stepFxFromCar, type Scene } from "./scene";
 import { getTarget, type Target } from "./target";
 
-// The tile's attract mode: the target driver, replayed from its recording,
+// The tile's attract mode: the rival driver (the ghost), replayed from its recording,
 // cruising the canyon with the same camera, the same smoke and the same
 // picture as the game, and none of the cost of driving: no physics, no input,
 // no sound. It loops a stretch of the road with the biggest slide in it (the
@@ -42,19 +42,19 @@ export function attractWindow(g: Ghost): { from: number; to: number } {
 export class Attract {
   readonly target: Target = getTarget();
   readonly scene: Scene;
-  private win = attractWindow(this.target.ghost);
+  private win = attractWindow(this.target.rival);
   t = this.win.from;
   private pose = newPose();
 
   constructor(reduce: boolean) {
     this.scene = newScene(this.target.road, reduce);
-    if (reduce) this.t = widestSlide(this.target.ghost);
+    if (reduce) this.t = widestSlide(this.target.rival);
     this.place(0);
   }
 
   private place(dt: number) {
     const sc = this.scene;
-    const p = samplePose(this.target.ghost, this.t, this.pose);
+    const p = samplePose(this.target.rival, this.t, this.pose);
     const c = sc.car;
     c.s = p.s;
     c.lat = p.lat;

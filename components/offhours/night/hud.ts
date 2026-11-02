@@ -75,9 +75,15 @@ export function gateHint(cp: number, of: number, toGateM: number): string | null
   return `CHECKPOINT ${cp + 1} / ${of} · ${Math.max(0, Math.round(toGateM / 10) * 10)} M`;
 }
 
-/** The gap to the target driver as printed, from tenths of a second (negative is ahead): the sign and the colour both come from the printed number, so a gap that rounds to nothing is "0.0s", not "−0.0s" in the colour of being behind. */
+/** The gap to the ghost as printed, from tenths of a second (negative is ahead): the sign and the colour both come from the printed number, so a gap that rounds to nothing is "0.0s", not "−0.0s" in the colour of being behind. */
 export function deltaText(tenths: number): string {
   return tenths === 0 ? "0.0s" : `${tenths < 0 ? "−" : "+"}${(Math.abs(tenths) / 10).toFixed(1)}s`;
+}
+
+/** The end card's line on the ghost: who was ahead at the finish, and by how much. */
+export function ghostLine(gap: number): string {
+  const t = Math.round(Math.abs(gap) * 10) / 10;
+  return t === 0 ? "LEVEL" : `${t.toFixed(1)}s ${gap < 0 ? "AHEAD" : "BEHIND"}`;
 }
 
 const rr = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
@@ -361,7 +367,7 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     ctx.fillText(fmt("bestv", bv, (v) => `BEST THIS VISIT ${grouped(v)}`), lx, ly + below);
   }
 
-  // ---- against the target driver, top right (under the mode switch)
+  // ---- against the ghost, top right (under the mode switch)
   if (g.deltaOn && live && g.endWhy === null) {
     ctx.textAlign = "right";
     // the sign and the colour come from the number as it is printed (a tenth of a second), so "-0.0s" in amber cannot happen
@@ -372,7 +378,7 @@ function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number
     const ry = narrow ? 128 : 128 * u;
     font(ctx, "m", Math.max(9, 10 * u), 500);
     ctx.fillStyle = MUTED;
-    ctx.fillText("VS TARGET", rx, ry - 22 * u);
+    ctx.fillText("VS GHOST", rx, ry - 22 * u);
     font(ctx, "d", 30 * u, 800);
     ctx.fillStyle = tenths === 0 ? CREAM : ahead ? MINT : AMBER;
     ctx.fillText(fmt("delta", tenths, deltaText), rx, ry + 8 * u);
@@ -641,10 +647,10 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   font(ctx, "m", 10 * u, 500);
   ctx.fillStyle = MUTED;
   ctx.fillText("TOTAL SCORE", x + 28 * u, y + 120 * u);
-  const vs = r.vsTargetS;
+  const vs = r.vsGhostS;
   const rows: [string, string][] = [
     r.finished ? ["FINISH TIME", clock(r.netTime)] : ["DISTANCE", `${r.miles.toFixed(2)} mi`],
-    vs !== null ? ["VS TARGET", `${vs <= 0 ? "−" : "+"}${Math.abs(vs).toFixed(1)}s`] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
+    vs !== null ? ["VS GHOST", ghostLine(vs)] : ["CHECKPOINTS", `${r.checkpoints} / ${g.road.checks.length}`],
     ["BEST DRIFT", grouped(r.bestDrift)],
     ["RAIL HITS", r.rails === 0 ? "NONE" : `${r.rails} · ${secs(r.railS)}`],
   ];
@@ -655,7 +661,7 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
     ctx.textAlign = "left";
     ctx.fillText(k, x + 28 * u, ry);
     font(ctx, "d", 24 * u, 800);
-    ctx.fillStyle = k === "VS TARGET" ? (vs !== null && vs <= 0 ? MINT : AMBER) : CREAM;
+    ctx.fillStyle = k === "VS GHOST" ? (vs !== null && vs <= 0 ? MINT : AMBER) : CREAM;
     ctx.textAlign = "right";
     ctx.fillText(v, x + pw - 28 * u, ry + 3 * u);
   });

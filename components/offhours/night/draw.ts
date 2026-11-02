@@ -668,7 +668,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
       look.alpha = behind ? 0.35 * Math.max(0, Math.min(1, (d - 3) / Math.max(1, dCar - 3))) : 1;
       if (look.alpha < 0.03) continue;
       drawCar(ctx, v, gp, look);
-      if (!behind && d > 7 && d < 140) tag(ctx, v, gp, g.kind === 0 ? "TARGET" : "YOUR BEST", g.kind === 0 ? "#8ad9a8" : "#f2ead7", d);
+      if (!behind && d > 7 && d < 140) tag(ctx, v, gp, g.kind === 0 ? "GHOST" : "YOUR BEST", g.kind === 0 ? "#8ad9a8" : "#f2ead7", d);
     }
   }
   drawSparks(ctx, sc, v);

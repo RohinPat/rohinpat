@@ -97,7 +97,8 @@ describe("the tracks", () => {
     expect(t.road).toBe(r);
     expect(t.ghost.time).toBeCloseTo(134.3, 0);
     expect(t.startS).toBe(21.5);
-    expect(t.bonusS).toEqual([17, 13.5, 12.5, 12.5, 17, 20.5, 20, 0]);
+    // the pilot (night/ai.ts) drives each leg within about a second of what the clock was set on: 113.5 s of bonus in all, where it was 113
+    expect(t.bonusS).toEqual([18, 13.5, 12.5, 12, 16, 21, 20.5, 0]);
     expect(TRACKS.canyon.run).toBe(ENGINE_CAL.run);
     expect(TRACKS.canyon.driftPay).toBe(1);
     // a tunnel and a bridge, as ever
