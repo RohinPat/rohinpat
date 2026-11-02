@@ -536,7 +536,7 @@ export class CourseGame {
     const club = CLUBS[this.club];
     const e = at(sh, sh.restT);
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
-    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop);
+    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt);
     const def = this.hole.def;
     let msg = `${club.name}: ${Math.round(sh.carry)} yards carry, ${Math.round(sh.total)} total`;
     this.dropped = !!drop;

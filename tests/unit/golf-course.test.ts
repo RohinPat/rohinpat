@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
 import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { GH, GW, zone } from "@/components/offhours/golf/green";
-import { LIE_ORDER, dropFor, lieFor } from "@/components/offhours/golf/lie";
+import { DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
 import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound, shouldPickUp, toPar } from "@/components/offhours/golf/score";
 
@@ -62,6 +62,28 @@ describe("course data", () => {
         // downrange is up the screen: further from the tee is a smaller y
         expect(b.toGreen(x, z + 1)[1]).toBeLessThan(gy);
         expect(b.toGreen(x + 1, z)[0]).toBeGreaterThan(gx);
+      });
+      it("draws no range scenery: no range boards, no target greens, one green with no target rings", () => {
+        expect(b.world.boards).toEqual([]);
+        expect(b.world.greens).toHaveLength(1);
+        expect(b.world.greens[0].plain).toBe(true);
+        expect(b.world.flagMin).toBeGreaterThanOrEqual(30);
+      });
+      it("yardage markers are 100, 150 and 200 yd from the middle of the green, on the edge of the fairway, clear of every hazard", () => {
+        const cz = def.green.c[1];
+        for (const m of b.world.markers ?? []) {
+          const d = Number(m.label);
+          expect([100, 150, 200]).toContain(d);
+          expect(m.z / YD).toBeCloseTo(cz - d, 6);
+          expect(["fairway", "rough"]).toContain(b.surfaceAt(m.x, m.z));
+          expect(waterWithin(b.surfaceAt, m.x, m.z, 3)).toBeNull();
+          for (let a = 0; a < 12; a++) for (const r of [1, 2.5]) expect(["bunker", "water", "out"]).not.toContain(b.surfaceAt(m.x + Math.cos(a) * r, m.z + Math.sin(a) * r));
+          // on the edge of the fairway: past it, not far out
+          expect(Math.abs(m.x)).toBeGreaterThan(b.fairHalfAt(m.z));
+          expect(Math.abs(m.x)).toBeLessThan(b.fairHalfAt(m.z) + 6);
+        }
+        // hole 1 has them (a 340 yd hole; the left-hand 100 would stand in the bunker, so it is left out), hole 2 has the 100 only
+        expect((b.world.markers ?? []).map((m) => m.label).sort()).toEqual(def.n === 1 ? ["100", "150", "150", "200", "200"] : ["100", "100"]);
       });
       it("the wind is the same every time", () => {
         expect(buildHole(def).wind).toEqual(b.wind);
@@ -128,6 +150,31 @@ describe("the lie table", () => {
       expect(d.say).toMatch(/water/i);
       expect(pond(d.x, d.z)).toBe("fairway");
       expect(d.z).toBeGreaterThan(80);
+    });
+    it("the drop is on dry ground, fairway or rough, at least 2 m from the water, back along the flight line", () => {
+      const b = buildHole(HOLE_DEFS[1]);
+      const sw = (x: number, z: number) => b.surfaceAt(x, z);
+      const d = HOLE_DEFS[1].water[0];
+      let seen = 0;
+      for (const club of [3, 4]) {
+        for (const aimX of [-24, -17, -12]) {
+          for (const sp of [0.8, 0.9, 1.0]) {
+            const s = simulate({ club: CLUBS[club], speed: sp, yaw: Math.atan2(aimX, d.z), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: sw });
+            if (s.surface !== "water") continue;
+            seen++;
+            const dr = dropFor(s, s.surface, b.edgeDrop, sw)!;
+            expect(sw(dr.x, dr.z), `${club} ${aimX} ${sp}`).not.toBe("water");
+            expect(["fairway", "rough"]).toContain(sw(dr.x, dr.z));
+            expect(waterWithin(sw, dr.x, dr.z, DROP_CLEAR)).toBeNull();
+            // back toward the tee, and on the line the ball flew
+            expect(dr.z).toBeLessThan(s.bounces[s.bounces.length - 1].z);
+            let on = 1e9;
+            for (let i = 0; i < s.n; i++) on = Math.min(on, Math.hypot(s.pts[i * 4 + 1] - dr.x, s.pts[i * 4 + 3] - dr.z));
+            expect(on).toBeLessThan(0.3);
+          }
+        }
+      }
+      expect(seen).toBeGreaterThanOrEqual(6);
     });
     it("the woods: one stroke, dropped by the edge function", () => {
       const s = simulate({ club: CLUBS[3], speed: 1, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: () => "out" });

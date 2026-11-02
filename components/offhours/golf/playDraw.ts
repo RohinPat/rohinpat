@@ -2,7 +2,7 @@ import { display, mono } from "../font";
 import { CLUBS, at } from "./flight";
 import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
-import { CourseGame, REST_HOLD, swingLen } from "./play";
+import { CourseGame, swingLen } from "./play";
 import { YD, drawWorld, prepare, project, type Cam, type Drawable, type P2 } from "./scene";
 import { fullCarry } from "./swing";
 import { bestRound, overUnder, toPar } from "./score";
@@ -53,59 +53,91 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
 }
 
 // ------------------------------------------------------------ camera
+type Rig = { dx: number; dy: number; dz: number; tx: number; ty: number; tz: number; F: number };
+
+/** how much the camera rises for a shot to a target this far away (yd): none from 200 yd or more, all of it inside 150 */
+export const liftFor = (yd: number) => smooth(clamp((200 - yd) / 50, 0, 1));
+/** the height of the raised camera, m, and how far behind the ball it stands */
+const HIGH = 44, HIGH_BACK = 16;
+/** the raised camera is zoomed until the green is this tall on screen, px, as far as the width allows (about 52 m across) */
+const GREEN_PX = 72, SPAN_M = 52, GREEN_DEPTH_M = 12.5;
+
+/**
+ * Where the camera stands to take a shot from (bx, bz) at `yd` yards to the target. A long shot: behind the golfer at eye
+ * height, looking far down the hole. A short one: it rises and pitches down onto the target, zoomed, so the green and what
+ * guards it sit well above the horizon.
+ */
+function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number, h: number): Rig {
+  const yaw = g.yaw;
+  const a: V = [Math.sin(yaw), 0, Math.cos(yaw)];
+  const rt: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  const F0 = Math.max(w * 0.9, h * 1.1);
+  const off = w / h > 1.2 ? 1.7 : 0.7;
+  const dm = yd * YD;
+  // the long-shot camera (the range's)
+  const back = yd < 60 ? 5 : 8.4;
+  const ahead = clamp(dm + 12, 30, 70);
+  const lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
+  const k = liftFor(yd);
+  if (k <= 0) return { dx: bx + lo.ex, dy: lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lo.ty, tz: bz + lo.tz, F: lo.F };
+  // the raised one
+  const D = dm + HIGH_BACK;
+  const rng = Math.hypot(HIGH, D);
+  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 3600);
+  const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
+  const m = (p: number, q: number) => p + (q - p) * k;
+  return { dx: bx + m(lo.ex, hi.ex), dy: m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx: bx + m(lo.tx, hi.tx), ty: m(lo.ty, hi.ty), tz: bz + m(lo.tz, hi.tz), F: m(lo.F, hi.F) };
+}
+
 function updateCamera(g: CourseGame, dt: number, w: number, h: number) {
   const c = g.cam;
   const yaw = g.yaw;
   const a: V = [Math.sin(yaw), 0, Math.cos(yaw)];
   const rt: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
-  const [bx, bz] = g.ball;
   const F0 = Math.max(w * 0.9, h * 1.1);
-  const off = w / h > 1.2 ? 1.7 : 0.7;
-  // a short shot gets the camera in close so a wedge reads
-  const toTarget = g.yardsToTarget();
-  const back = toTarget < 60 ? 5 : 8.4;
-  const ahead = clamp(toTarget * YD + 12, 30, 70);
-  let dx = bx - a[0] * back + rt[0] * off, dy = 1.9, dz = bz - a[2] * back + rt[2] * off;
-  let tx = bx + a[0] * ahead, ty = 0.9, tz = bz + a[2] * ahead;
-  let F = F0;
-  let posRate = 3, tgtRate = 3;
   const sh = g.shot;
-  if (sh && (g.phase === "fly" || (g.phase === "rest" && g.restT < REST_HOLD))) {
-    const ball = at(sh, g.phase === "fly" ? g.shotT : sh.restT);
-    const bw: V = [sh.ox + ball[0], ball[1], sh.oz + ball[2]];
-    const land: V = sh.bounces[0] ? [sh.ox + sh.bounces[0].x, 0, sh.oz + sh.bounces[0].z] : [bw[0], 0, bw[2]];
-    const dist = Math.hypot(land[0] - sh.ox, land[2] - sh.oz);
-    const e = dist < 30 ? 0 : smooth(clamp((g.shotT - sh.apexT * 0.55) / Math.max(0.5, sh.landT - sh.apexT * 0.55), 0, 1));
-    const bk = Math.min(58, 12 + dist * 0.26);
-    const sd = Math.min(16, 4 + dist * 0.06);
-    const c1: V = [land[0] - a[0] * bk + rt[0] * sd, 6, land[2] - a[2] * bk + rt[2] * sd];
-    const c0: V = [dx, dy, dz];
-    dx = c0[0] + (c1[0] - c0[0]) * e;
-    dy = c0[1] + (c1[1] - c0[1]) * e;
-    dz = c0[2] + (c1[2] - c0[2]) * e;
-    tx = bw[0];
-    ty = bw[1] * 0.9 + 0.5;
-    tz = bw[2];
-    // never tilt up more than about 22 degrees
-    const hd = Math.hypot(tx - dx, tz - dz);
-    ty = Math.min(ty, dy + hd * 0.4);
-    const d = Math.hypot(tx - dx, ty - dy, tz - dz);
-    F = F0 * clamp(1 + (d - 40) / 90, 1, 1.9);
-    posRate = 3.2;
-    tgtRate = g.phase === "fly" && g.shotT < 0.5 ? 7 : 5;
-    if (g.phase === "fly" && g.fast) {
-      posRate *= 2.5;
-      tgtRate *= 2.5;
+  let rig = addressRig(g, g.ball[0], g.ball[1], g.yardsToTarget(), w, h);
+  let posRate = 3, tgtRate = 3;
+  if (g.phase === "fly" && sh) {
+    const [tx0, tz0] = g.target();
+    const yd0 = Math.hypot(tx0 - sh.ox, tz0 - sh.oz) / YD;
+    if (liftFor(yd0) > 0.5) {
+      // a short shot is watched from the raised camera, which stays where it was
+      rig = addressRig(g, sh.ox, sh.oz, yd0, w, h);
+    } else {
+      // a long one is followed: the camera dollies down the hole to where it lands
+      const ball = at(sh, g.shotT);
+      const bw: V = [sh.ox + ball[0], ball[1], sh.oz + ball[2]];
+      const land: V = sh.bounces[0] ? [sh.ox + sh.bounces[0].x, 0, sh.oz + sh.bounces[0].z] : [bw[0], 0, bw[2]];
+      const dist = Math.hypot(land[0] - sh.ox, land[2] - sh.oz);
+      const e = dist < 30 ? 0 : smooth(clamp((g.shotT - sh.apexT * 0.55) / Math.max(0.5, sh.landT - sh.apexT * 0.55), 0, 1));
+      const bk = Math.min(58, 12 + dist * 0.26);
+      const sd = Math.min(16, 4 + dist * 0.06);
+      const c1: V = [land[0] - a[0] * bk + rt[0] * sd, 6, land[2] - a[2] * bk + rt[2] * sd];
+      const c0: V = [rig.dx, rig.dy, rig.dz];
+      const dx = c0[0] + (c1[0] - c0[0]) * e, dy = c0[1] + (c1[1] - c0[1]) * e, dz = c0[2] + (c1[2] - c0[2]) * e;
+      const tx = bw[0], tz = bw[2];
+      let ty = bw[1] * 0.9 + 0.5;
+      // never tilt up more than about 22 degrees
+      ty = Math.min(ty, dy + Math.hypot(tx - dx, tz - dz) * 0.4);
+      const d = Math.hypot(tx - dx, ty - dy, tz - dz);
+      rig = { dx, dy, dz, tx, ty, tz, F: F0 * clamp(1 + (d - 40) / 90, 1, 1.9) };
+      posRate = 3.2;
+      tgtRate = g.shotT < 0.5 ? 7 : 5;
+      if (g.fast) {
+        posRate *= 2.5;
+        tgtRate *= 2.5;
+      }
     }
   }
   if (!g.camReady) {
-    c.x = dx; c.y = dy; c.z = dz; c.tx = tx; c.ty = ty; c.tz = tz; c.F = F;
+    c.x = rig.dx; c.y = rig.dy; c.z = rig.dz; c.tx = rig.tx; c.ty = rig.ty; c.tz = rig.tz; c.F = rig.F;
     g.camReady = true;
   } else {
     const kp = 1 - Math.exp(-posRate * dt), kt = 1 - Math.exp(-tgtRate * dt), kf = 1 - Math.exp(-2.6 * dt);
-    c.x += (dx - c.x) * kp; c.y += (dy - c.y) * kp; c.z += (dz - c.z) * kp;
-    c.tx += (tx - c.tx) * kt; c.ty += (ty - c.ty) * kt; c.tz += (tz - c.tz) * kt;
-    c.F += (F - c.F) * kf;
+    c.x += (rig.dx - c.x) * kp; c.y += (rig.dy - c.y) * kp; c.z += (rig.dz - c.z) * kp;
+    c.tx += (rig.tx - c.tx) * kt; c.ty += (rig.ty - c.ty) * kt; c.tz += (rig.tz - c.tz) * kt;
+    c.F += (rig.F - c.F) * kf;
   }
 }
 

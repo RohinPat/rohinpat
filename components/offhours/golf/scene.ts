@@ -121,8 +121,8 @@ export function poly(ctx: CanvasRenderingContext2D, c: Cam, pts: V3[], fill: str
 
 // ---------------------------------------------------------------- colour
 
-type RGB = [number, number, number];
-const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+export type RGB = [number, number, number];
+export const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 export const HAZE = hex("#cfe3e4");
 export function mixc(a: RGB, b: RGB, t: number) {
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
@@ -156,6 +156,8 @@ export type Green = {
   ring: (rad: number) => V3[];
   /** how far the fringe reaches past the edge, m */
   fringe: number;
+  /** no target rings on it: a green of the course is a green, not a target */
+  plain?: boolean;
   /** where the flag stands (default the centre) */
   pin?: [number, number];
   /** a distance sign beside the flag */
@@ -179,8 +181,14 @@ export type World = {
   water: [number, number][][];
   greens: Green[];
   trees: Tree[];
-  /** yardage boards down both sides, at these distances (yd) */
+  /** yardage boards down both sides, at these distances from the tee (yd) */
   boards: number[];
+  /** yardage markers placed one by one (the course puts them where there is no hazard) */
+  markers?: { x: number; z: number; label: string }[];
+  /** the flag is drawn at least this tall, px, so it can be found from a long way off (default: true size) */
+  flagMin?: number;
+  /** colours of the ground (default: the range's) */
+  palette?: { deep: RGB; green: RGB; greenB: RGB; fringe: RGB };
   /** the fairway's half width at a distance, for placing the boards */
   halfW?: (z: number) => number;
 };
@@ -448,7 +456,7 @@ export function drawWorld(
   ctx.fillRect(0, hor - 90, w, 92);
 
   // ---- ground
-  ctx.fillStyle = mixc(C.deep, HAZE, 0.55);
+  ctx.fillStyle = world.palette ? mixc(world.palette.deep, HAZE, 0.3) : mixc(C.deep, HAZE, 0.55);
   ctx.fillRect(0, Math.max(0, hor), w, h);
   world.ground(ctx, cam);
   // the tee: a mown pad, a mat, and a line
@@ -512,9 +520,14 @@ export function drawWorld(
   // greens
   world.greens.forEach((tg, idx) => {
     const fg = fogAt(tg.z - cam.z);
-    poly(ctx, cam, tg.ring(tg.r + tg.fringe), mixc(C.fringe, HAZE, fg));
-    poly(ctx, cam, tg.ring(tg.r), mixc(idx % 2 ? C.green : C.greenB, HAZE, fg));
+    const pal = world.palette;
+    poly(ctx, cam, tg.ring(tg.r + tg.fringe), mixc(pal ? pal.fringe : C.fringe, HAZE, fg));
+    poly(ctx, cam, tg.ring(tg.r), mixc(pal ? (idx % 2 ? pal.green : pal.greenB) : idx % 2 ? C.green : C.greenB, HAZE, fg));
     const hl = opts.highlight === idx;
+    if (tg.plain) {
+      poly(ctx, cam, tg.ring(tg.r), "rgba(0,0,0,0)", mixc(hex("#2f7a3a"), HAZE, fg), 1.2);
+      return;
+    }
     poly(ctx, cam, tg.ring(tg.r * 0.55), "rgba(0,0,0,0)", hl ? "rgba(255,255,255,0.9)" : mixc(hex("#e9f6dc"), HAZE, fg + 0.2), hl ? 2.2 : 1.1);
     poly(ctx, cam, tg.ring(tg.r), "rgba(0,0,0,0)", hl ? "#ffffff" : mixc(hex("#e9f6dc"), HAZE, fg + 0.1), hl ? 2.6 : 1.2);
   });
@@ -550,37 +563,38 @@ export function drawWorld(
       },
     });
   }
-  // yardage boards on both sides
-  for (const yd of world.boards) {
-    for (const side of [-1, 1]) {
-      const bx = side * ((world.halfW ?? halfW)(yd * YD) + 3.5), bz = yd * YD;
-      if (!project(cam, bx, 0, bz, p3)) continue;
-      const d = p3.d, k = p3.s, sx = p3.x, sy = p3.y;
-      items.push({
-        d,
-        draw: () => {
-          const bw = 1.7 * k, bh = 1.15 * k;
-          const fg = fogAt(d);
-          ctx.fillStyle = mixc(hex("#6d6a60"), HAZE, fg);
-          ctx.fillRect(sx - 0.05 * k, sy - 1.9 * k, 0.1 * k, 1.9 * k);
-          ctx.fillStyle = mixc(hex("#f2ead7"), HAZE, fg * 0.8);
-          ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh);
-          ctx.fillStyle = mixc(hex("#1d5e3f"), HAZE, fg * 0.8);
-          ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh * 0.12);
-          ctx.textAlign = "center";
-          display(ctx, Math.max(6, bh * 0.62), 800);
-          ctx.fillText(String(yd), sx, sy - 1.9 * k + bh * 0.72);
-          ctx.textAlign = "left";
-        },
-      });
-    }
+  // yardage boards: down both sides of the range, or markers set one by one on a hole
+  const boards: { bx: number; bz: number; label: string }[] = [];
+  for (const yd of world.boards) for (const side of [-1, 1]) boards.push({ bx: side * ((world.halfW ?? halfW)(yd * YD) + 3.5), bz: yd * YD, label: String(yd) });
+  for (const m of world.markers ?? []) boards.push({ bx: m.x, bz: m.z, label: m.label });
+  for (const { bx, bz, label } of boards) {
+    if (!project(cam, bx, 0, bz, p3)) continue;
+    const d = p3.d, k = p3.s, sx = p3.x, sy = p3.y;
+    items.push({
+      d,
+      draw: () => {
+        const bw = 1.7 * k, bh = 1.15 * k;
+        const fg = fogAt(d);
+        ctx.fillStyle = mixc(hex("#6d6a60"), HAZE, fg);
+        ctx.fillRect(sx - 0.05 * k, sy - 1.9 * k, 0.1 * k, 1.9 * k);
+        ctx.fillStyle = mixc(hex("#f2ead7"), HAZE, fg * 0.8);
+        ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh);
+        ctx.fillStyle = mixc(hex("#1d5e3f"), HAZE, fg * 0.8);
+        ctx.fillRect(sx - bw / 2, sy - 1.9 * k - bh * 0.1, bw, bh * 0.12);
+        ctx.textAlign = "center";
+        display(ctx, Math.max(6, bh * 0.62), 800);
+        ctx.fillText(label, sx, sy - 1.9 * k + bh * 0.72);
+        ctx.textAlign = "left";
+      },
+    });
   }
   // flags
   world.greens.forEach((tg, idx) => {
     const [fx, fz] = tg.pin ?? [tg.x, tg.z];
     if (!project(cam, fx, 0, fz, p3)) return;
     const d = p3.d;
-    const sx = p3.x, sy = p3.y, k = p3.s;
+    // a course flag is at least `flagMin` px tall, so it can be found from the tee (the range's is its true size)
+    const sx = p3.x, sy = p3.y, k = Math.max(p3.s, (world.flagMin ?? 0) / 2.4);
     items.push({
       d: d - 0.1,
       draw: () => {

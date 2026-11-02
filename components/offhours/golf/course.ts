@@ -1,7 +1,7 @@
 import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
-import { C, YD, fogAt, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
+import { YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
 // The course: hand-authored holes (the decision on each hole is the design) and
 // what buildHole makes of one: where the ball stops (surfaceAt), the ground,
@@ -12,6 +12,18 @@ import { C, YD, fogAt, mixc, poly, HAZE, type Cam, type Tree, type World } from 
 // seeds. Holes 3-9 are a later drop; the format takes nine.
 
 type V3 = [number, number, number];
+
+// The course's ground, three tones that read apart at any distance: the fairway light and mown in clear stripes, the
+// rough darker with no stripes, the woods darker again. The green is lighter than the fairway, with a fringe between.
+const FAIR_A = hex("#a2d870");
+const FAIR_B = hex("#86bf5a");
+const ROUGH = hex("#3f7a3b");
+const DEEP = hex("#21472a");
+const GREEN = hex("#c4f092");
+const GREEN_B = hex("#b8ea85");
+const FRINGE = hex("#8ccb64");
+/** the flag is at least this tall on screen, px */
+const FLAG_MIN_PX = 34;
 
 export type Blob = { x: number; z: number; rx: number; rz: number; rot?: number };
 
@@ -192,7 +204,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     for (const i of order) {
       const a = samples[i], b = samples[i + 1];
       const fg = fogAt(mid(i));
-      const rc = mixc(C.rough, HAZE, fg);
+      const rc = mixc(ROUGH, HAZE, fg);
       for (const s of [-1, 1])
         poly(ctx, cam, [
           [a.x + s * a.nx * a.hw, 0, a.z + s * a.nz * a.hw],
@@ -205,7 +217,7 @@ export function buildHole(def: HoleDef): BuiltHole {
         [a.x + a.nx * a.hw, 0, a.z + a.nz * a.hw],
         [b.x + b.nx * b.hw, 0, b.z + b.nz * b.hw],
         [b.x - b.nx * b.hw, 0, b.z - b.nz * b.hw],
-      ] as V3[], mixc(Math.floor(i / 2) % 2 ? C.fairB : C.fairA, HAZE, fg));
+      ] as V3[], mixc(Math.floor(i / 2) % 2 ? FAIR_B : FAIR_A, HAZE, fg));
     }
   };
 
@@ -244,6 +256,19 @@ export function buildHole(def: HoleDef): BuiltHole {
     return o;
   };
 
+  // yardage markers at 100, 150 and 200 yd from the middle of the green, on the edge of the fairway, never in a hazard
+  const markers: { x: number; z: number; label: string }[] = [];
+  for (const d of [100, 150, 200]) {
+    const z = cz - d * YD;
+    if (z < 12 * YD) continue;
+    for (const side of [-1, 1]) {
+      const x = side * (fairHalfAt(z) + 3.5);
+      let clear = true;
+      for (let a = 0; a < 12 && clear; a++) for (const r of [0, 2.5]) if (!["fairway", "rough"].includes(surfaceAt(x + Math.cos(a) * r, z + Math.sin(a) * r))) clear = false;
+      if (clear) markers.push({ x, z, label: String(d) });
+    }
+  }
+
   const world: World = {
     surfaceAt,
     ground,
@@ -251,10 +276,12 @@ export function buildHole(def: HoleDef): BuiltHole {
     bunkers: [],
     sand: def.bunkers.map((b) => blobRing(b)),
     water: def.water.map((b) => blobRing(b)),
-    greens: [{ x: cx, z: cz, r: GH / 2, ring: greenRing, fringe: 0.6, pin }],
+    greens: [{ x: cx, z: cz, r: GH / 2, ring: greenRing, fringe: 0.7, pin, plain: true }],
     trees,
-    boards: def.yards >= 250 ? [100, 150, 200, 250, 300] : [50, 100],
-    halfW: fairHalfAt,
+    boards: [],
+    markers,
+    flagMin: FLAG_MIN_PX,
+    palette: { deep: DEEP, green: GREEN, greenB: GREEN_B, fringe: FRINGE },
   };
 
   const edgeDrop = (x: number, z: number): [number, number] => {

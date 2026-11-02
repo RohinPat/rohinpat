@@ -4,7 +4,8 @@ import { CLUBS } from "@/components/offhours/golf/flight";
 import { buildHole, HOLE_DEFS } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { fullCarry, powerFor } from "@/components/offhours/golf/swing";
-import { paint, playDraw } from "@/components/offhours/golf/playDraw";
+import { liftFor, paint, playDraw } from "@/components/offhours/golf/playDraw";
+import { RANGE_WORLD, project } from "@/components/offhours/golf/scene";
 import { puttPowerFor } from "@/components/offhours/golf/green";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
@@ -418,6 +419,87 @@ describe("drawing, with no screen", () => {
       expect(t.length, t).toBeLessThanOrEqual(70);
       if (/[a-z]/.test(t) && !/^\d/.test(t)) expect(t, "capitals on the canvas").toBe(t.toUpperCase());
     }
+  });
+});
+
+describe("reading the hole from the tee", () => {
+  const ptr = { x: 0, y: 0, inside: false };
+  /** the green's edge on screen, px tall, from the camera the game has drawn with */
+  function greenPx(g: CourseGame, w: number, h: number) {
+    g.w = w;
+    g.h = h;
+    paint(fakeCtx(), g, w, h, 1 / 60, ptr);
+    const gr = g.hole.world.greens[0];
+    const p = { x: 0, y: 0, d: 0, s: 0 };
+    let y0 = 1e9, y1 = -1e9;
+    for (const [x, , z] of gr.ring(gr.r)) {
+      expect(project(g.cam, x, 0, z, p)).toBe(true);
+      y0 = Math.min(y0, p.y);
+      y1 = Math.max(y1, p.y);
+    }
+    return { px: y1 - y0, top: y0, bottom: y1 };
+  }
+  it("from hole 2 the green is at least 60 px tall at 1440x900 and in the dialog (1406x698), with the pond and the sand on screen", () => {
+    for (const [w, h] of [[1440, 900], [1406, 698]]) {
+      const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+      const r = greenPx(g, w, h);
+      expect(r.px, `${w}x${h}`).toBeGreaterThanOrEqual(60);
+      expect(r.bottom).toBeLessThan(h);
+      expect(r.top).toBeGreaterThan(0);
+      const p = { x: 0, y: 0, d: 0, s: 0 };
+      for (const [x, z] of [[-17, 108], [17, 134]]) {
+        expect(project(g.cam, x * YD, 0, z * YD, p)).toBe(true);
+        expect(p.x).toBeGreaterThan(0);
+        expect(p.x).toBeLessThan(w);
+        expect(p.y).toBeGreaterThan(0);
+        expect(p.y).toBeLessThan(h);
+      }
+    }
+  });
+  it("the tee shot on hole 1 keeps the long-shot camera, and a short shot from the fairway raises it", () => {
+    const g = new CourseGame({ seed: 5 });
+    paint(fakeCtx(), g, 1440, 900, 1 / 60, ptr);
+    expect(g.cam.y).toBeCloseTo(1.9, 6);
+    expect(liftFor(252)).toBe(0);
+    expect(liftFor(135)).toBe(1);
+    expect(liftFor(75)).toBe(1);
+    expect(liftFor(175)).toBeGreaterThan(0);
+    expect(liftFor(175)).toBeLessThan(1);
+    g.key({ key: " " }, true);
+    g.wind = [0, 0];
+    g.remoteSwing(PURE);
+    run(g, () => g.phase === "ready");
+    for (let i = 0; i < 240; i++) paint(fakeCtx(), g, 1440, 900, 1 / 60, ptr);
+    expect(g.cam.y).toBeGreaterThan(30);
+  });
+  it("at phone size the raised camera still has the pond, the sand and the green in the picture", () => {
+    const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+    const r = greenPx(g, 390, 700);
+    expect(r.px).toBeGreaterThan(20);
+    const p = { x: 0, y: 0, d: 0, s: 0 };
+    for (const [x, z] of [[-17, 108], [17, 134], [0, 137]]) {
+      expect(project(g.cam, x * YD, 0, z * YD, p)).toBe(true);
+      expect(p.x).toBeGreaterThan(0);
+      expect(p.x).toBeLessThan(390);
+    }
+  });
+  it("after a shot the camera goes to the address view for the next one, so the rest view shows the hole", () => {
+    const g = new CourseGame({ seed: 5 });
+    g.key({ key: " " }, true);
+    g.wind = [0, 0];
+    g.setClub(0);
+    g.remoteSwing(PURE);
+    run(g, () => g.phase === "rest");
+    for (let i = 0; i < 70; i++) paint(fakeCtx(), g, 390, 844, 1 / 60, ptr);
+    // the ball is about 75 yd from the pin: the camera is rising, looking down the line to it
+    expect(g.cam.y).toBeGreaterThan(5);
+  });
+  it("the course's flag is drawn at least 34 px tall, and the range's flags are untouched", () => {
+    const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+    expect(g.hole.world.flagMin).toBe(34);
+    expect(RANGE_WORLD.flagMin).toBeUndefined();
+    expect(RANGE_WORLD.markers).toBeUndefined();
+    expect(RANGE_WORLD.palette).toBeUndefined();
   });
 });
 
