@@ -165,7 +165,7 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       case "end": {
         const r = e.result;
         setStatus(
-          `${r.finished ? tr.clearedSpoken : "Out of time."} Distance ${r.miles.toFixed(2)} miles. Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${secs(r.railS).replace(" S", "")} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${tr.medals[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
+          `${r.finished ? tr.clearedSpoken : "Out of time."} Distance ${r.miles.toFixed(2)} miles.${r.vsGhostS === null ? "" : r.vsGhostS === 0 ? " Level with the ghost." : ` ${Math.abs(r.vsGhostS).toFixed(1)} seconds ${r.vsGhostS < 0 ? "ahead of" : "behind"} the ghost.`} Best drift ${grouped(r.bestDrift)}. ${r.rails === 0 ? "No rail hits" : `${r.rails} rail hit${r.rails > 1 ? "s" : ""}, ${secs(r.railS).replace(" S", "")} seconds`}. ${r.cleanLegs} clean legs of ${r.checkpoints}. ${adviceFor(r, touchRef.current).toLowerCase()}. Total score ${grouped(r.score)}.${r.medals > 0 ? ` ${tr.medals[r.medals - 1].name.toLowerCase()} medal.` : ""}${r.newBest ? " A new best run: it will race you next time." : ""}`,
         );
         s?.silence();
         tellPhone(true);

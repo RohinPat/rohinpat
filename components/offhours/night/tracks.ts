@@ -25,6 +25,8 @@ export type Track = {
   run: typeof ENGINE_CAL.run;
   /** how the target driver drives it (ENGINE_CAL.pilot, with what the track changes) */
   pilot: typeof ENGINE_CAL.pilot;
+  /** the rival (the ghost on the road): the pilot at a pace a player can race, and how it drives */
+  rival: { pace: number; pilot: typeof ENGINE_CAL.pilot };
   /** what a slide pays, as a multiple of the canyon's (a road of slower corners pays more, since the pay grows with the square of the speed) */
   driftPay: number;
 };
@@ -40,6 +42,7 @@ export const TRACKS: Record<TrackId, Track> = {
     medals: MEDALS,
     run: ENGINE_CAL.run,
     pilot: ENGINE_CAL.pilot,
+    rival: { pace: ENGINE_CAL.rival.pace, pilot: { ...ENGINE_CAL.pilot, ...ENGINE_CAL.rival.pilot } },
     driftPay: 1,
   },
   climb: {
@@ -52,6 +55,7 @@ export const TRACKS: Record<TrackId, Track> = {
     medals: CLIMB_MEDALS,
     run: { ...ENGINE_CAL.run, ...ENGINE_CAL.climb.run },
     pilot: { ...ENGINE_CAL.pilot, ...ENGINE_CAL.climb.pilot },
+    rival: { pace: ENGINE_CAL.climb.rival.pace, pilot: { ...ENGINE_CAL.pilot, ...ENGINE_CAL.rival.pilot, ...ENGINE_CAL.climb.rival.pilot } },
     driftPay: ENGINE_CAL.climb.driftPay,
   },
 };

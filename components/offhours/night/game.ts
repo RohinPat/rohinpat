@@ -81,8 +81,10 @@ export type Result = {
   /** the best score of this visit including this run, and the best before it (0 on the first run) */
   bestScore: number;
   prevBestScore: number;
-  /** seconds behind (+) or ahead (-) of the target driver at the finish, rail penalties counted, or null if the run did not finish */
+  /** seconds behind (+) or ahead (-) of the target driver at the finish, rail penalties counted (what the clock is calibrated on), or null if the run did not finish */
   vsTargetS: number | null;
+  /** seconds behind (+) or ahead (-) of the rival ghost at the finish, by the clock on the car and nothing added, or null if the run did not finish */
+  vsGhostS: number | null;
   /** medals this run earned (0 to 3), the most any run of this visit has, and the next one to go for from the visit's best (null at the top) */
   medals: number;
   bestMedals: number;
@@ -179,7 +181,7 @@ export class NightGame {
   /** the run is ending: the car coasts for this long, why */
   endT = 0;
   endWhy: "time" | "finish" | null = null;
-  /** seconds ahead (-) or behind (+) the target driver at this point of the road, and metres */
+  /** seconds ahead (-) or behind (+) the rival ghost at this point of the road (the clock on the car, no penalties), and metres (+ is the ghost ahead) */
   deltaS = 0;
   gapM = 0;
   deltaOn = false;
@@ -703,6 +705,7 @@ export class NightGame {
       bestScore,
       prevBestScore,
       vsTargetS: finished ? run.time + this.railS - this.target.ghost.time : null,
+      vsGhostS: finished ? run.time - this.target.rival.time : null,
       medals: medalsAt(score, this.track.medals),
       bestMedals: medalsAt(bestScore, this.track.medals),
       next: nextMedal(bestScore, this.track.medals),
@@ -737,7 +740,7 @@ export class NightGame {
 
     const t = this.phase === "run" || this.phase === "done" ? this.clock : 0;
     const tg = sc.ghosts[0];
-    samplePose(this.target.ghost, t, tg.pose);
+    samplePose(this.target.rival, t, tg.pose);
     tg.show = true;
     tg.alpha = 1;
     pointAt(this.road, tg.pose.s, tg.pose.lat, tg.world);
@@ -751,10 +754,10 @@ export class NightGame {
 
     // against the target: time at this point of the road, and the gap
     if (this.phase === "run" && this.endWhy === null) {
-      const tt = timeAt(this.target.ghost, c.s);
+      const tt = timeAt(this.target.rival, c.s);
       this.deltaOn = tt !== null && c.s > START_S + 30;
       if (tt !== null) {
-        this.deltaS = this.clock + this.railS - tt;
+        this.deltaS = this.clock - tt;
         this.gapM = tg.pose.s - c.s;
       }
     }

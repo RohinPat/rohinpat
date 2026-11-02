@@ -26,10 +26,14 @@ type Run = {
   handFrames: number;
 };
 
-/** drive the pilot round a track and measure it (the steering is read at 60 Hz, as the game's input is) */
-function measure(track: TrackId): Run {
+type Which = "target" | "rival";
+
+/** drive the pilot round a track (as the target, or as the rival) and measure it (the steering is read at 60 Hz, as the game's input is) */
+function measure(track: TrackId, which: Which = "target"): Run {
   const t = getTarget(track);
   const road = t.road;
+  const style = which === "target" ? TRACKS[track].pilot : TRACKS[track].rival.pilot;
+  const pilot = which === "target" ? t.pilot : buildPilot(road, style, TRACKS[track].rival.pace);
   const steer: number[] = [];
   const slides: Run["slides"] = [];
   let rails = 0;
@@ -40,7 +44,7 @@ function measure(track: TrackId): Run {
   let sn = 0;
   let hand = 0;
   let n = 0;
-  recordAI(road, t.pilot, TRACKS[track].pilot, (c, inp, time) => {
+  const ghost = recordAI(road, pilot, style, (c, inp, time) => {
     if (c.s >= road.finish) return;
     if (c.scrape && !was) rails++;
     was = c.scrape;
@@ -69,7 +73,7 @@ function measure(track: TrackId): Run {
   const jerk: number[] = [];
   for (let i = 1; i < rate.length; i++) jerk.push((rate[i] - rate[i - 1]) / dt);
   return {
-    time: t.ghost.time,
+    time: ghost.time,
     rails,
     minClear,
     slides: slides.filter((s) => s.t1 - s.t0 > 0.15),
@@ -83,6 +87,7 @@ function measure(track: TrackId): Run {
 }
 
 const runs: Record<TrackId, Run> = { canyon: measure("canyon"), climb: measure("climb") };
+const rivals: Record<TrackId, Run> = { canyon: measure("canyon", "rival"), climb: measure("climb", "rival") };
 
 describe("the target driver's time", () => {
   it("is what the clock was calibrated on: the canyon about 134.3 s and the climb about 94.4 s, to within 2 s", () => {
@@ -133,13 +138,18 @@ describe("the target driver's driving", () => {
     }
   });
 
-  it("records the same run every time", () => {
+  it("records the same run every time, the target's and the rival's", () => {
     for (const track of ["canyon", "climb"] as const) {
       const t = getTarget(track);
       const again = recordAI(t.road, buildPilot(t.road, TRACKS[track].pilot, TRACKS[track].run.targetPace), TRACKS[track].pilot);
       expect(again.n).toBe(t.ghost.n);
       expect(again.time).toBe(t.ghost.time);
       expect(Array.from(again.data)).toEqual(Array.from(t.ghost.data));
+      const r = TRACKS[track].rival;
+      const rival = recordAI(t.road, buildPilot(t.road, r.pilot, r.pace), r.pilot);
+      expect(rival.n).toBe(t.rival.n);
+      expect(rival.time).toBe(t.rival.time);
+      expect(Array.from(rival.data)).toEqual(Array.from(t.rival.data));
     }
   });
 
@@ -203,9 +213,56 @@ describe("the racing line", () => {
   });
 });
 
+describe("the rival run (the ghost on the road)", () => {
+  it("is a faster run of the same pilot: the canyon about 108 s and the climb about 68.5 s, with the target run unchanged behind it", () => {
+    expect(Math.abs(rivals.canyon.time - 108)).toBeLessThan(2);
+    expect(Math.abs(rivals.climb.time - 68.5)).toBeLessThan(2);
+    for (const track of ["canyon", "climb"] as const) {
+      const t = getTarget(track);
+      expect(t.rival).not.toBe(t.ghost);
+      expect(t.rival.time).toBeLessThan(t.ghost.time * 0.85);
+    }
+  });
+
+  it("never touches a rail, with most of a metre to spare, and its hands are smooth", () => {
+    for (const r of Object.values(rivals)) {
+      expect(r.rails).toBe(0);
+      expect(r.minClear).toBeGreaterThan(0.7);
+      expect(r.jerkRms).toBeLessThan(3);
+      expect(r.jerkMax).toBeLessThan(120);
+      expect(Math.max(...r.rate.map(Math.abs))).toBeLessThan(4);
+    }
+  });
+
+  it("slides more and wider than the target: six slides on the canyon (over 20 degrees at the widest) and six on the climb, with the handbrake a flick each time", () => {
+    expect(rivals.canyon.slides.length).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...rivals.canyon.slides.map((s) => s.peak))).toBeGreaterThan(20);
+    expect(rivals.canyon.slides.length).toBeGreaterThan(runs.canyon.slides.length);
+    expect(rivals.climb.slides.length).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...rivals.climb.slides.map((s) => s.peak))).toBeGreaterThan(15);
+    expect(runs.climb.slides).toHaveLength(0);
+    for (const r of Object.values(rivals)) expect(r.handFrames / 120).toBeLessThan(2.5);
+  });
+
+  it("is smooth sample to sample, and runs past the line", () => {
+    for (const track of ["canyon", "climb"] as const) {
+      const g = getTarget(track).rival;
+      let worst = 0;
+      for (let i = 1; i < g.n; i++) {
+        const o = i * GHOST_STRIDE;
+        const moved = Math.hypot(g.data[o] - g.data[o - GHOST_STRIDE], g.data[o + 1] - g.data[o + 1 - GHOST_STRIDE]);
+        worst = Math.max(worst, moved * GHOST_HZ - Math.max(g.data[o + 3], g.data[o + 3 - GHOST_STRIDE]));
+      }
+      expect(worst).toBeLessThan(8);
+      expect(g.finished).toBe(true);
+      expect(g.dist).toBeGreaterThan(getRoad(track).finish);
+    }
+  });
+});
+
 describe("the tile", () => {
-  it("loops a stretch with a slide over fifteen degrees in it, replayed from the same run", () => {
-    const g = getTarget().ghost;
+  it("loops a stretch with a slide over fifteen degrees in it, replayed from the rival's run", () => {
+    const g = getTarget().rival;
     const t = widestSlide(g);
     expect(Math.abs(g.data[Math.round(t * GHOST_HZ) * GHOST_STRIDE + 4])).toBeGreaterThan(15 * DEG);
     const w = attractWindow(g);

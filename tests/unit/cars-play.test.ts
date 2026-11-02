@@ -367,17 +367,17 @@ describe("cars: the countdown and the end card", () => {
     forgetBestRun();
   });
 
-  const base: AdviceInput = { finished: true, checkpoints: 8, rails: 0, railS: 0, spins: 0, driftTotal: 9000, bestDrift: 2000, score: 20000, vsTargetS: -2 };
+  const base: AdviceInput = { finished: true, checkpoints: 8, rails: 0, railS: 0, spins: 0, driftTotal: 9000, bestDrift: 2000, score: 20000, vsGhostS: -2 };
   it("gives one short line, the first thing that went wrong", () => {
     expect(adviceFor({ ...base, rails: MANY_RAILS, railS: 7.5 }, false)).toMatch(/RAIL HITS TOOK 7\.5 S/);
     expect(adviceFor({ ...base, finished: false, checkpoints: 5 }, false)).toMatch(/BRAKE LATER/);
     expect(adviceFor({ ...base, spins: 2 }, false)).toMatch(/SPIN/);
     expect(adviceFor({ ...base, driftTotal: 1000 }, false)).toMatch(/SHIFT/);
     expect(adviceFor({ ...base, driftTotal: 1000 }, true)).toMatch(/DRIFT/);
-    expect(adviceFor({ ...base, vsTargetS: 8 }, false)).toMatch(/TARGET WAS 8 S AHEAD/);
+    expect(adviceFor({ ...base, vsGhostS: 8 }, false)).toMatch(/GHOST WAS 8 S AHEAD/);
     expect(adviceFor({ ...base, rails: 2, railS: 3 }, false)).toMatch(/2 RAIL HITS TOOK 3 S/);
     expect(adviceFor(base, false)).toMatch(/CLEAN/);
-    for (const r of [base, { ...base, rails: 9, railS: 13.5 }, { ...base, vsTargetS: 11 }]) expect(adviceFor(r, false).length).toBeLessThanOrEqual(48);
+    for (const r of [base, { ...base, rails: 9, railS: 13.5 }, { ...base, vsGhostS: 11 }]) expect(adviceFor(r, false).length).toBeLessThanOrEqual(48);
   });
 
   it("puts the rail hits, the clean legs and the advice in the result a finished run hands the page", () => {
@@ -396,10 +396,10 @@ describe("cars: the countdown and the end card", () => {
 describe("cars: the tile", () => {
   it("loops the stretch with the biggest slide in it, not the opening straight", () => {
     const t = getTarget();
-    const w = attractWindow(t.ghost);
+    const w = attractWindow(t.rival);
     expect(w.from).toBeGreaterThanOrEqual(6);
     expect(w.to - w.from).toBeLessThanOrEqual(36);
-    expect(w.to).toBeLessThanOrEqual(t.ghost.time + 1.6);
+    expect(w.to).toBeLessThanOrEqual(t.rival.time + 1.6);
     expect(w.to).toBeGreaterThan(w.from + 10);
   });
 });

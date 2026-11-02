@@ -195,6 +195,27 @@ export const ENGINE_CAL = {
     run: { startShare: 1.0, startFlatS: 2, legShare: 0.8, legFlatS: 0.5, finishSecondPoints: 100, targetPace: 0.425 },
     /** every corner is a hairpin: the target driver does not slide here, and takes each one on its line */
     pilot: { topMs: 42, brakeMs2: 5.8, slides: false, legTrim: [0.711, 1.013, 0.999, 1.006, 0.997, 1.054, 1.119] as number[] },
+    /** the climb's rival (ENGINE_CAL.rival, with what the climb changes) */
+    rival: {
+      pace: 0.674,
+      pilot: {
+        topMs: 40.962,
+        brakeMs2: 6.576,
+        marginM: 2.756,
+        steerS: 0.086,
+        slides: true,
+        slidePace: 0.615,
+        handS: 0.257,
+        leadS: 0.524,
+        slideThrottle: 0.3,
+        slideHoldRad: 0.194,
+        slideGain: 1.384,
+        slideSteerS: 0.2,
+        slideMaxR: 121.649,
+        slideMinR: 40,
+        legTrim: [] as number[],
+      },
+    },
     driftPay: 2,
   },
 
@@ -265,6 +286,33 @@ export const ENGINE_CAL = {
     slideSteerS: 0.144,
     /** a share of its pace for each leg (between two gates), so that every leg takes about what the clock was set on */
     legTrim: [1.017, 1.043, 1.086, 0.795, 0.903, 1.017, 1.052, 1.08] as number[],
+  },
+
+  // ------------------------------------------------------- night run: the rival
+  /**
+   * The ghost on the road: the same pilot, recorded at a pace a good player can race. The target run above is the clock's
+   * yardstick and stays slow; the rival is the one that is drawn, that the gap box reads, and that the tile replays. `pace` is its
+   * cornering share of the line's limit and `pilot` what is different about its driving (the rest is ENGINE_CAL.pilot, without the
+   * leg trim). The pace is set from the scripted drivers (tests/unit/cars-rival.test.ts pins the share of runs each one beats it by).
+   */
+  rival: {
+    pace: 0.6,
+    pilot: {
+      topMs: 48.241,
+      brakeMs2: 7.494,
+      marginM: 2.332,
+      steerS: 0.097,
+      slidePace: 0.66,
+      handS: 0.257,
+      leadS: 0.727,
+      slideThrottle: 0.325,
+      slideHoldRad: 0.165,
+      slideGain: 1.728,
+      slideSteerS: 0.178,
+      slideMaxR: 148.567,
+      slideMinR: 40,
+      legTrim: [] as number[],
+    },
   },
 
   // ------------------------------------------------------------- night run: drifting

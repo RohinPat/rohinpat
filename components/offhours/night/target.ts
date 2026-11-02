@@ -5,11 +5,13 @@ import { createRecorder, newPose, timeAt, type Ghost, type Pose } from "./ghost"
 import { getRoad, type Road } from "./road";
 import { TRACKS, type TrackId } from "./tracks";
 
-// The target driver's run, recorded once from the AI (ai.ts: the pilot, which drives
-// a racing line and slides the medium corners). It is the ghost to chase, the tile's attract mode, and the yardstick
-// for the clock: the time on offer at the start and at each checkpoint is a
-// share of what this driver needs for the leg, so a driver as good as the
-// target always has a little in hand, and a ragged one runs out.
+// Two runs of the same driver (ai.ts: the pilot, on a racing line, sliding its medium
+// corners), each recorded once: the road and the pilot are fixed, so the same run comes
+// out every time. The target run is the slow one and is the yardstick for the clock:
+// the time on offer at the start and at each checkpoint is a share of what it needs
+// for the leg, so a driver as good as the target always has a little in hand, and a
+// ragged one runs out. The rival run is the same pilot at a pace a player can race:
+// it is the ghost on the road, the reference for the gap box and the tile's attract mode.
 
 const STEP = 1 / 120;
 /** how long the car coasts on after the finish, s (so the ghost does not vanish at the line) */
@@ -20,7 +22,10 @@ export type Target = {
   /** the tyres' limit at each node (the corner warning reads it) and the pilot's own line and speeds */
   plan: Plan;
   pilot: Pilot;
+  /** the target's own run: the clock's yardstick (the start time, the gate bonuses and the medals come from it) */
   ghost: Ghost;
+  /** the rival's run: the ghost drawn on the road, the gap box's reference and the tile's attract mode */
+  rival: Ghost;
   /** seconds on the clock at the start, and added at each checkpoint (the last gives none) */
   startS: number;
   bonusS: number[];
@@ -86,5 +91,7 @@ export function getTarget(track: TrackId = "canyon"): Target {
     bonusS.push(k + 1 < road.checks.length ? Math.round((next * run.legShare + run.legFlatS) * 2) / 2 : 0);
   }
   const startS = Math.round((legT[0] * run.startShare + run.startFlatS) * 2) / 2;
-  return (cached[track] = { road, plan, pilot, ghost, startS, bonusS, legT });
+  const rivalStyle = TRACKS[track].rival.pilot;
+  const rival = recordAI(road, buildPilot(road, rivalStyle, TRACKS[track].rival.pace), rivalStyle);
+  return (cached[track] = { road, plan, pilot, ghost, rival, startS, bonusS, legT });
 }

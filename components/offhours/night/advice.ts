@@ -10,7 +10,8 @@ export type AdviceInput = {
   driftTotal: number;
   bestDrift: number;
   score: number;
-  vsTargetS: number | null;
+  /** seconds behind (+) or ahead (-) of the ghost at the finish */
+  vsGhostS: number | null;
 };
 
 /** this many rail incidents in a run is what the advice is about */
@@ -25,7 +26,7 @@ export function adviceFor(r: AdviceInput, touch: boolean): string {
   if (!r.finished) return "BRAKE LATER AND GET BACK ON THE GAS SOONER";
   if (r.spins >= 2) return "TWO SPINS. LESS HANDBRAKE, MORE COUNTER-STEER";
   if (r.score > 0 && r.driftTotal < r.score * 0.22) return touch ? "TAP DRIFT AS YOU TURN IN TO SLIDE FOR POINTS" : "TAP SHIFT AS YOU TURN IN TO SLIDE FOR POINTS";
-  if (r.vsTargetS !== null && r.vsTargetS > 3) return `THE TARGET WAS ${secs(r.vsTargetS)} AHEAD. BRAKE LATER`;
+  if (r.vsGhostS !== null && r.vsGhostS > 3) return `THE GHOST WAS ${secs(r.vsGhostS)} AHEAD. BRAKE LATER`;
   if (r.rails >= 1) return `${r.rails} RAIL HIT${r.rails > 1 ? "S" : ""} TOOK ${secs(r.railS)}. CLEAN LEGS PAY EXTRA`;
   return "A CLEAN RUN. LONGER SLIDES BANK MORE";
 }
