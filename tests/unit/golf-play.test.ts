@@ -3,8 +3,8 @@ import { CourseGame, REST_HOLD, STEP, type Phase } from "@/components/offhours/g
 import { CLUBS } from "@/components/offhours/golf/flight";
 import { buildHole, HOLE_DEFS } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
-import { fullCarry, powerFor } from "@/components/offhours/golf/swing";
-import { liftFor, paint, playDraw } from "@/components/offhours/golf/playDraw";
+import { carryAtPower, fullCarry, powerFor } from "@/components/offhours/golf/swing";
+import { carryRing, liftFor, paint, playDraw } from "@/components/offhours/golf/playDraw";
 import { RANGE_WORLD, project } from "@/components/offhours/golf/scene";
 import { puttPowerFor } from "@/components/offhours/golf/green";
 import { forgetBest } from "@/components/offhours/golf/score";
@@ -500,6 +500,110 @@ describe("reading the hole from the tee", () => {
     expect(RANGE_WORLD.flagMin).toBeUndefined();
     expect(RANGE_WORLD.markers).toBeUndefined();
     expect(RANGE_WORLD.palette).toBeUndefined();
+  });
+});
+
+describe("the aim line and the carry ring", () => {
+  const ptr = { x: 0, y: 0, inside: false };
+  const yardsFrom = (g: CourseGame, r: { x: number; z: number }) => Math.hypot(r.x - g.ball[0], r.z - g.ball[1]) / YD;
+
+  it("the ring is where the selected club carries with no wind: within 1 yd of the club table at aim 0, for every club", () => {
+    const g = new CourseGame({ seed: 5 });
+    g.key({ key: " " }, true);
+    g.setAim(0);
+    for (let c = 0; c < CLUBS.length; c++) {
+      g.setClub(c);
+      const r = carryRing(g);
+      expect(Math.abs(yardsFrom(g, r) - fullCarry(c)), CLUBS[c].name).toBeLessThan(1);
+      expect(r.x).toBeCloseTo(0, 6);
+      expect(Math.abs(r.yd - fullCarry(c))).toBeLessThan(1);
+      // and a ball that is flown pure, calm, at that aim comes down on it
+    }
+    g.setClub(3);
+    g.wind = [0, 0];
+    g.remoteSwing(PURE);
+    run(g, () => g.phase === "fly");
+    const land = g.shot!.bounces[0];
+    const ring = { x: 0, z: fullCarry(3) * YD };
+    expect(Math.hypot(land.x - ring.x, land.z - ring.z) / YD).toBeLessThan(1);
+  });
+  it("it moves with the aim and with the club, and shortens with a swing drawn back only part way", () => {
+    const g = new CourseGame({ seed: 5 });
+    g.key({ key: " " }, true);
+    g.setAim(0);
+    g.setClub(0);
+    const a = carryRing(g);
+    g.key({ key: "ArrowRight", shiftKey: true }, true);
+    for (let i = 0; i < 90; i++) g.step(STEP);
+    const b = carryRing(g);
+    expect(b.x).toBeGreaterThan(a.x + 5);
+    expect(Math.abs(b.yd - a.yd)).toBeLessThan(1e-6);
+    g.key({ key: "ArrowDown" }, true);
+    expect(carryRing(g).yd).toBeCloseTo(fullCarry(1), 6);
+    // a swing drawn back to half power: the ring comes in to that carry
+    g.h = 900;
+    g.pointer("down", 700, 300);
+    g.pointer("move", 700, 300 + 0.5 * 230 * 0.9);
+    const half = carryRing(g).yd;
+    expect(half).toBeLessThan(fullCarry(1) * 0.8);
+    expect(half).toBeCloseTo(carryAtPower(1, g.sw.b), 6);
+  });
+  it("it is drawn while the ball waits and while swinging, with the yards, and gone in flight and at rest", () => {
+    const g = new CourseGame({ seed: 5 });
+    g.key({ key: " " }, true);
+    g.w = 1440;
+    g.h = 900;
+    g.setAim(0);
+    const label = `${Math.round(fullCarry(g.club))} YD`;
+    const rec = recordingCtx();
+    paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
+    expect(rec.texts).toContain(label);
+    g.wind = [0, 0];
+    g.remoteSwing(PURE);
+    run(g, () => g.phase === "fly");
+    rec.clear();
+    paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
+    expect(rec.texts).not.toContain(label);
+    run(g, () => g.phase === "rest");
+    rec.clear();
+    paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
+    expect(rec.texts).not.toContain(label);
+  });
+  it("draws the same with reduced motion (nothing in it moves)", () => {
+    const a = recordingCtx(), b = recordingCtx();
+    const ga = new CourseGame({ seed: 5 }), gb = new CourseGame({ seed: 5, reduce: true });
+    for (const [g, r] of [[ga, a], [gb, b]] as const) {
+      g.key({ key: " " }, true);
+      g.w = 1440;
+      g.h = 900;
+      for (let i = 0; i < 30; i++) paint(r.ctx, g, 1440, 900, 1 / 60, ptr);
+    }
+    expect(b.texts).toEqual(a.texts);
+    expect(b.arcs.length).toBe(a.arcs.length);
+  });
+  it("a marker says where the ball is when the raised camera has it below the picture, with how far back it lies; not on the long-shot view", () => {
+    const rec = recordingCtx();
+    const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+    g.key({ key: " " }, true);
+    g.w = 1440;
+    g.h = 900;
+    paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
+    expect(rec.texts).toContain("BALL · 135 YD BACK");
+    const t = recordingCtx();
+    const tee = new CourseGame({ seed: 5 });
+    tee.key({ key: " " }, true);
+    tee.w = 1440;
+    tee.h = 900;
+    paint(t.ctx, tee, 1440, 900, 1 / 60, ptr);
+    expect(t.texts.some((x) => x.startsWith("BALL"))).toBe(false);
+    // and at phone size
+    const m = recordingCtx();
+    const ph = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+    ph.key({ key: " " }, true);
+    ph.w = 390;
+    ph.h = 700;
+    paint(m.ctx, ph, 390, 700, 1 / 60, ptr);
+    expect(m.texts).toContain("BALL · 135 YD BACK");
   });
 });
 

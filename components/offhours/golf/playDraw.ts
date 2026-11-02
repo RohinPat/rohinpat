@@ -4,7 +4,7 @@ import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
 import { CourseGame, swingLen } from "./play";
 import { YD, drawWorld, prepare, project, type Cam, type Drawable, type P2 } from "./scene";
-import { fullCarry } from "./swing";
+import { carryAtPower, fullCarry } from "./swing";
 import { bestRound, overUnder, toPar } from "./score";
 import { trace } from "./tracer";
 
@@ -170,6 +170,8 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   const gd = golferDrawable(ctx, cam, [bx, 0.02, bz], g.yaw, club, g.pose, g.trail);
   if (gd) extra.push(gd);
   drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce });
+  if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w);
+  if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h);
 
   // ---- the flight
   if (sh && (g.phase === "fly" || g.phase === "rest")) {
@@ -228,6 +230,89 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       if (fade > 0 && project(cam, sh.ox + b0.x, 0, sh.oz + b0.z, pp)) tag(ctx, pp.x, pp.y - Math.max(18, 4 * pp.s), `${Math.round(sh.carry)} YD CARRY`, fade, w);
     }
   }
+}
+
+/**
+ * Where the selected club's carry lands with no wind, along the aim (metres, in the hole's frame). Full swing when the
+ * ball is waiting; while a swing is being drawn back, the power so far.
+ */
+export function carryRing(g: CourseGame): { x: number; z: number; yd: number } {
+  const s = g.sw;
+  const power = g.phase === "swing" ? clamp(s.sub === "back" ? s.b : s.peak, 0.05, 1) : 1;
+  const yd = power >= 1 ? fullCarry(g.club) : carryAtPower(g.club, power);
+  return { x: g.ball[0] + Math.sin(g.yaw) * yd * YD, z: g.ball[1] + Math.cos(g.yaw) * yd * YD, yd };
+}
+
+/** a thin dashed line along the aim from the ball, and a ring where the club's carry comes down (the look of the range's flight line and the putt's pace ring) */
+function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number) {
+  const ring = carryRing(g);
+  const [bx, bz] = g.ball;
+  const len = Math.hypot(ring.x - bx, ring.z - bz);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(242,234,215,0.85)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([2, 7]);
+  ctx.beginPath();
+  let pen = false;
+  for (let d = 0; d <= len; d += 1.5) {
+    const u = d / len;
+    if (!project(cam, bx + (ring.x - bx) * u, 0.03, bz + (ring.z - bz) * u, pp)) {
+      pen = false;
+      continue;
+    }
+    if (pen) ctx.lineTo(pp.x, pp.y);
+    else ctx.moveTo(pp.x, pp.y);
+    pen = true;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // the ring, flat on the ground
+  ctx.strokeStyle = MINT;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  let ok = true;
+  for (let i = 0; i <= 28 && ok; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    if (!project(cam, ring.x + Math.cos(a) * 2.2, 0.03, ring.z + Math.sin(a) * 2.2, pp)) ok = false;
+    else if (i) ctx.lineTo(pp.x, pp.y);
+    else ctx.moveTo(pp.x, pp.y);
+  }
+  if (ok) ctx.stroke();
+  if (project(cam, ring.x, 0.03, ring.z, pp) && pp.y > 40) tag(ctx, pp.x, pp.y - Math.max(10, 3 * pp.s), `${Math.round(ring.yd)} YD`, 1, w);
+}
+
+/** when the ball is below the bottom of the picture (the raised camera), a marker where it is, with how far back it lies */
+function ballMarker(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number, h: number) {
+  const seen = project(cam, g.ball[0], 0.03, g.ball[1], pp);
+  if (seen && pp.y < h - 96 && pp.y > 0 && pp.x > 0 && pp.x < w) return;
+  const x = clamp(seen ? pp.x : w / 2, 110, w - 110);
+  const y = h - 150;
+  const text = `BALL · ${Math.round(g.yardsToPin())} YD BACK`;
+  mono(ctx, 10);
+  const tw = ctx.measureText(text).width + 34;
+  ctx.fillStyle = "rgba(13,16,14,0.82)";
+  ctx.beginPath();
+  ctx.roundRect(x - tw / 2, y - 12, tw, 24, 5);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // a ball and a pointer down at it
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(x - tw / 2 + 13, y, 4, 0, 7);
+  ctx.fill();
+  ctx.fillStyle = PAPER;
+  ctx.textAlign = "left";
+  ctx.fillText(text, x - tw / 2 + 24, y + 4);
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 12);
+  ctx.lineTo(x + 6, y + 12);
+  ctx.lineTo(x, y + 20);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(13,16,14,0.82)";
+  ctx.fill();
+  ctx.stroke();
 }
 
 function tag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, a: number, w: number) {

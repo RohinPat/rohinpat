@@ -28,6 +28,8 @@ function carryFor(club: number, sf: number): number {
   return v;
 }
 export const fullCarry = (club: number) => carryFor(club, 1);
+/** the no-wind carry (yd) of a swing of `power` (a backswing fraction, 0..1) with this club, in steps of 2% so a drag does not fill the cache */
+export const carryAtPower = (club: number, power: number) => carryFor(club, sfOf(Math.round(clamp(power, 0, 1) * 50) / 50));
 /** the swing fraction (0..1 backswing) that carries `yd` with this club, or null if it can't */
 export function powerFor(club: number, yd: number): number | null {
   if (yd > fullCarry(club) + 1) return null;
