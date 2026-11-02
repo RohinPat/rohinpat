@@ -446,7 +446,7 @@ function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: num
   ctx.fillText(`HOLE ${d.n} · PAR ${d.par} · ${d.yards} YD`, w / 2, y + 68);
   mono(ctx, 10);
   ctx.fillStyle = DIM;
-  ctx.fillText(g.phaseT < 0.6 ? "" : "ANY KEY TO START", w / 2, y + 98);
+  ctx.fillText(g.phaseT < 0.6 ? "" : w < 560 ? "TAP TO START" : "ANY KEY TO START", w / 2, y + 98);
   ctx.textAlign = "left";
 }
 
@@ -473,7 +473,8 @@ function holeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   ctx.fillText(`ROUND ${total} · ${toPar(total, par)}`, w / 2, y + 134);
   ctx.fillStyle = PAPER;
   const last = g.idx + 1 >= g.defs.length;
-  ctx.fillText(g.phaseT < 0.5 ? "" : last ? "ANY KEY FOR THE SCORECARD" : `ANY KEY FOR HOLE ${d.n + 1}`, w / 2, y + 170);
+  const go = w < 560 ? "TAP" : "ANY KEY";
+  ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${d.n + 1}`, w / 2, y + 170);
   ctx.textAlign = "left";
 }
 
@@ -536,6 +537,6 @@ function roundCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: n
   ctx.fillStyle = DIM;
   ctx.fillText(best === null ? "" : r.isBest ? (r.previous === null ? `BEST THIS VISIT ${best}` : `NEW BEST THIS VISIT ${best}`) : `BEST THIS VISIT ${best}`, w / 2, y + 204);
   ctx.fillStyle = PAPER;
-  ctx.fillText(g.phaseT < 0.8 ? "" : "ANY KEY TO PLAY AGAIN", w / 2, y + 238);
+  ctx.fillText(g.phaseT < 0.8 ? "" : w < 560 ? "TAP TO PLAY AGAIN" : "ANY KEY TO PLAY AGAIN", w / 2, y + 238);
   ctx.textAlign = "left";
 }

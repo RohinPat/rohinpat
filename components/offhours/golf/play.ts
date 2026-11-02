@@ -555,7 +555,6 @@ export class CourseGame {
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} feet` : `${Math.round(toPin)} yards`} to the pin.`;
     }
     this.say(msg);
-    void def;
     this.setPhase("rest");
     this.restT = 0;
     this.fast = false;

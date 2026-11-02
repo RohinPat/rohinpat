@@ -414,7 +414,7 @@ describe("drawing, with no screen", () => {
       p.tick();
       if (n % 11 === 0) paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
     }
-    for (const t of new Set(rec.texts)) {
+    for (const t of Array.from(new Set(rec.texts))) {
       expect(t.length, t).toBeLessThanOrEqual(70);
       if (/[a-z]/.test(t) && !/^\d/.test(t)) expect(t, "capitals on the canvas").toBe(t.toUpperCase());
     }
