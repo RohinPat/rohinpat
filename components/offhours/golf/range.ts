@@ -4,6 +4,7 @@ import { CLUBS, at, simulate, type Club, type Shot } from "./flight";
 import { TARGETS, YD, drawWorld, newCam, prepare, project, surfaceAt, halfW, type Cam, type Drawable, type P2 } from "./scene";
 import { ballLocal, blend, clubHeadWorld, golferDrawable, poseFor, type Pose } from "./golfer";
 import { sfx } from "./sound";
+import { trace } from "./tracer";
 import type { RemoteShot } from "./remoteSwing";
 import { OVER_CARRY, fullCarry, meterFace, powerFor, strikeNumbers, suggest } from "./swing";
 
@@ -686,81 +687,17 @@ export function rangeDraw(ctx: CanvasRenderingContext2D, r: Range, w: number, h:
 
   const sh = r.shot;
   // ---- tracers
-  const trace = (pts: Float32Array, n: number, upTo: number, glow: number, core: number, col: string) => {
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    const draw = (lw: number, style: string) => {
-      ctx.strokeStyle = style;
-      ctx.lineWidth = lw;
-      ctx.beginPath();
-      // camera-space polyline, clipped against the near plane so nothing behind
-      // (or beside) the camera can wrap around the screen
-      const NEARZ = 1.2;
-      let prev: V | null = null;
-      let pen = false;
-      const emit = (c: V, first: boolean) => {
-        const k = cam.F / c[2];
-        const x = cam.cx + c[0] * k, y = cam.cy - c[1] * k;
-        if (first) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      };
-      const toCam = (x: number, y: number, z: number): V => {
-        const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
-        return [dx * cam.rx + dy * cam.ry + dz * cam.rz, dx * cam.ux + dy * cam.uy + dz * cam.uz, dx * cam.fx + dy * cam.fy + dz * cam.fz];
-      };
-      const feed = (x: number, y: number, z: number) => {
-        const c = toCam(x, Math.max(0, y), z);
-        if (prev) {
-          const a = prev, inA = a[2] >= NEARZ, inB = c[2] >= NEARZ;
-          if (inA !== inB) {
-            const u = (NEARZ - a[2]) / (c[2] - a[2]);
-            const m: V = [a[0] + (c[0] - a[0]) * u, a[1] + (c[1] - a[1]) * u, NEARZ];
-            if (inA) {
-              if (!pen) emit(a, true);
-              emit(m, false);
-              pen = false;
-            } else {
-              emit(m, true);
-              pen = true;
-            }
-          }
-          if (inB) {
-            if (!pen) {
-              emit(c, true);
-              pen = true;
-            } else emit(c, false);
-          } else pen = false;
-        } else if (c[2] >= NEARZ) {
-          emit(c, true);
-          pen = true;
-        }
-        prev = c;
-      };
-      for (let i = 0; i < n; i++) {
-        const i4 = i * 4;
-        if (pts[i4] > upTo) break;
-        feed(pts[i4 + 1], pts[i4 + 2], pts[i4 + 3]);
-      }
-      if (upTo < pts[(n - 1) * 4]) {
-        const e = at(sh!, upTo);
-        feed(e[0], e[1], e[2]);
-      }
-      ctx.stroke();
-    };
-    if (glow) draw(glow, "rgba(255,70,50,0.22)");
-    draw(core, col);
-  };
   for (const q of r.past) {
     if (q.shot === sh && (r.phase === "fly" || r.phase === "rest")) continue;
     const a = Math.max(0, 0.3 - q.age * 0.02);
-    if (a > 0 && r.phase !== "fly") trace(q.shot.pts, q.shot.n, 99, 0, 1.4, `rgba(255,255,255,${a})`);
+    if (a > 0 && r.phase !== "fly") trace(ctx, cam, q.shot, 99, 0, 1.4, `rgba(255,255,255,${a})`);
   }
   if (sh && (r.phase === "fly" || r.phase === "rest")) {
     const upTo = r.phase === "fly" ? r.shotT : sh.restT;
     const fadeA = r.phase === "rest" ? clamp(1 - (r.restT - 0.7) / 0.8, 0, 1) : 1;
     ctx.globalAlpha = fadeA;
-    trace(sh.pts, sh.n, upTo, 7, 3, "#ff5a4a");
-    trace(sh.pts, sh.n, upTo, 0, 1.3, "#fff1e6");
+    trace(ctx, cam, sh, upTo, 7, 3, "#ff5a4a");
+    trace(ctx, cam, sh, upTo, 0, 1.3, "#fff1e6");
     ctx.globalAlpha = 1;
     // the ball itself
     const ball = at(sh, upTo);

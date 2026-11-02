@@ -173,6 +173,8 @@ export type World = {
   /** a mown pad and a mat at the origin */
   tee: boolean;
   bunkers: [number, number, number][];
+  /** more sand, as outlines on the ground (x, z) */
+  sand?: [number, number][][];
   /** ponds, as outlines on the ground (x, z) */
   water: [number, number][][];
   greens: Green[];
@@ -464,6 +466,12 @@ export function drawWorld(
     }
     const fg = fogAt(bz - cam.z);
     poly(ctx, cam, ring, mixc(C.sand, HAZE, fg), mixc(hex("#b8a56d"), HAZE, fg), 1);
+  }
+  for (const outline of world.sand ?? []) {
+    let cz = 0;
+    for (const [, pz] of outline) cz += pz / outline.length;
+    const fg = fogAt(cz - cam.z);
+    poly(ctx, cam, outline.map(([x, z]) => [x, 0.012, z] as V3), mixc(C.sand, HAZE, fg), mixc(hex("#b8a56d"), HAZE, fg), 1);
   }
   // ponds: flat water with two bands of light that drift (held still under reduced motion)
   for (const pond of world.water) {

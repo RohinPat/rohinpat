@@ -403,7 +403,7 @@ export function puttRead(p: Putt, on: boolean) {
 
 // ---------------------------------------------------------------- mapping
 
-function layout(p: Putt, w: number, h: number, play: boolean) {
+export function puttLayout(p: Putt, w: number, h: number, play: boolean) {
   const bottom = play && !p.course ? (w < 560 ? 62 : 66) : 0;
   const rot = h > w * 1.1;
   const uh = h - bottom;
@@ -675,7 +675,7 @@ export function puttStep(p: Putt, dt: number, t: number, env: PuttEnv) {
 }
 
 export function puttDraw(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, dt: number, t: number, env: PuttEnv, pointer: { x: number; y: number; inside: boolean }) {
-  layout(p, w, h, env.play);
+  puttLayout(p, w, h, env.play);
   update(p, dt, t, env);
   puttPaint(ctx, p, w, h, t, env, pointer);
 }
