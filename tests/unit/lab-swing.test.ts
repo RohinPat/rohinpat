@@ -32,9 +32,9 @@ import {
   mulberry32,
 } from "./lab-swing-traces";
 
-// these sweeps simulate hundreds of traces; under a full parallel run they
-// can pass 5 s, so give the whole file room
-vi.setConfig({ testTimeout: 30_000 });
+// these sweeps simulate hundreds of traces; under coverage on a slow CI runner
+// one took 30.7 s, so give the whole file room
+vi.setConfig({ testTimeout: 90_000 });
 
 // ---------------------------------------------------------------- helpers
 const quantile = (xs: number[], p: number) => {
