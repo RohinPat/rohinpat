@@ -202,6 +202,8 @@ export default function Powder({ mode, paused }: PieceProps) {
           k.keyAt = performance.now();
           k.ax = k.px;
           k.ay = k.py;
+          // a steer at the gate drops in: it's the first key most people try
+          if (down && !e.repeat && game().phase === "ready") drop();
         }
         if (key === "ArrowLeft" || key === "a" || key === "A") {
           k.left = down;

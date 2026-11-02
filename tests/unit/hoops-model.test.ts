@@ -185,3 +185,31 @@ describe("hoops: why a shot missed", () => {
     expect(shot(0, 1).res.made).toBe(true);
   });
 });
+
+describe("hoops: how fast a swipe has to be", () => {
+  /** swipes aimed at a still hoop at one speed (canvas heights a second), with a little sideways wobble */
+  const rate = (v: number, seed = 5) => {
+    const r = rng(seed);
+    let made = 0;
+    const n = 400;
+    for (let i = 0; i < n; i++) {
+      const hoop: Hoop = { x: 0, t: 0 };
+      const ball = { x: (r() - 0.5) * 0.6, y: START.y, z: START.z };
+      const vx = (-ball.x / (4.4 - START.z)) * v + gauss(r) * 0.04 * v;
+      const sh = swipeShot(vx, -v, ball.x, ball.z, 4.4)!;
+      const f = newFlight(ball);
+      f.vel = launch(ball, hoop, 0, sh.aimX, sh.power).vel;
+      if (fly(f, hoop, 0).made) made++;
+    }
+    return made / n;
+  };
+
+  it("drops across about a doubling of speed, so a quick mouse flick still scores", () => {
+    for (const v of [1.3, 1.6, 2.0, 2.4]) expect(rate(v), `${v} heights/s`).toBeGreaterThan(0.6);
+  });
+
+  it("a crawl or a slam still misses", () => {
+    expect(rate(0.8)).toBeLessThan(0.3);
+    expect(rate(3.2)).toBeLessThan(0.3);
+  });
+});

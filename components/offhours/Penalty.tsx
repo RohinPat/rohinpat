@@ -555,6 +555,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
           if (done) {
             if (play) {
               s.phase = "over";
+              s.pending = false;
               bestFive = Math.max(bestFive, s.kicks.slice(0, 5).filter((x) => x === "goal").length);
             } else {
               s.kicks = [];
@@ -652,12 +653,14 @@ export default function Penalty({ mode, paused }: PieceProps) {
           return;
         }
         if (s.phase === "after") {
-          // seen the result: on to the next aim
+          // seen the result: on to the next aim, and a press still held there charges the next kick
           if (s.now - s.resultT > SKIP_AFTER) {
             s.timer = 99;
             s.slowT = 0;
             s.ts = 1;
             s.shake = 0;
+            s.pending = true;
+            s.downAt = s.touch ? s.now : s.now - TOUCH_HOLD;
           }
           return;
         }

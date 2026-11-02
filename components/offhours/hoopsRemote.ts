@@ -12,8 +12,10 @@
 export const HOOPS_CAL = {
   /** swipe speed, in pad heights per second, that is a perfect shot (the mouse swipe uses 1.6 canvas heights) */
   swipePerfect: 1.6,
-  /** game power per doubling of swipe speed (shoot()'s power 1 is perfect) */
-  swipeSlope: 0.45,
+  /** game power per doubling of swipe speed (shoot()'s power 1 is perfect), slower than perfect */
+  swipeSlope: 0.3,
+  /** the same, faster than perfect: gentler, since a long shot meets the back rim sooner than a short one meets the front and people flick hard */
+  swipeSlopeFast: 0.2,
   /** slower than this (pad heights per second), or not upward, and it isn't a shot */
   swipeMin: 0.5,
   /**
@@ -50,7 +52,8 @@ export function swipeShot(vx: number, vy: number, ballX: number, ballZ: number, 
   vy *= gain;
   if (!Number.isFinite(vx) || !Number.isFinite(vy) || -vy < c.swipeMin) return null;
   // a natural flick is "right"; much faster or slower drifts long/short, on a log scale so the sweet spot is wide
-  const power = 1 + c.swipeSlope * Math.log2(-vy / c.swipePerfect);
+  const lg = Math.log2(-vy / c.swipePerfect);
+  const power = 1 + (lg > 0 ? c.swipeSlopeFast : c.swipeSlope) * lg;
   return { power, aimX: ballX + (vx / -vy) * (hoopZ - ballZ) };
 }
 
