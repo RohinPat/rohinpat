@@ -63,7 +63,7 @@ describe("what a learner sees", () => {
     const x = sense(c, road, newSenses());
     expect(x).toHaveLength(N_IN);
     expect(x[1]).toBe(0);
-    for (const v of x) expect(Math.abs(v)).toBeLessThanOrEqual(2);
+    for (const v of Array.from(x)) expect(Math.abs(v)).toBeLessThanOrEqual(2);
     // far across the road, and fast, reads as such
     c.lat = 4;
     c.u = 40;

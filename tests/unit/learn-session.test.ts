@@ -46,6 +46,11 @@ describe("the session's messages", () => {
       expect(c.n).toBeGreaterThan(0);
       expect(c.data.length).toBe(c.n * 7);
     }
+    // in the first generation every car is new; in later ones the elite (three) are carried over
+    const g1 = drive([{ type: "start", seed: 1 }, { type: "step", gens: 1, trace: true }]).out;
+    expect(gens(g1)[0].fresh).toEqual(Array(24).fill(true));
+    expect(g[2].fresh).toHaveLength(24);
+    expect(g[2].fresh?.filter((f) => !f)).toHaveLength(3);
     expect(g[0].improved).toBe(true);
     expect(g[2].reasons).toHaveLength(24);
     // the numbers are what the generation did

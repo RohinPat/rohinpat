@@ -34,6 +34,8 @@ import { TRACKS, TRACK_IDS, type TrackId } from "./night/tracks";
 export type NightProps = PieceProps & {
   remote: Remote;
   bus: React.MutableRefObject<RemoteHandlers>;
+  /** opened by Learn's Race it: the run starts at once (its ghost is the learner's best car) */
+  race?: boolean;
 };
 
 const C = ENGINE_CAL;
@@ -43,7 +45,7 @@ const PAD_LIFT = 112;
 type Held = { left: boolean; right: boolean; gas: boolean; space: boolean; brake: boolean; hand: boolean };
 type Pads = { left: boolean; right: boolean; gas: boolean; brake: boolean; hand: boolean; steer: number };
 
-export default function NightRun({ mode, paused, remote, bus }: NightProps) {
+export default function NightRun({ mode, paused, remote, bus, race }: NightProps) {
   const play = mode === "play";
   const gameRef = useRef<NightGame | null>(null);
   const attractRef = useRef<Attract | null>(null);
@@ -183,6 +185,10 @@ export default function NightRun({ mode, paused, remote, bus }: NightProps) {
       if ((g.phase as string) === "count") setStatus("Race starting. Three, two, one.");
     }
   };
+  useEffect(() => {
+    if (play && race) startOrAgain();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const mine: RemoteHandlers = {
     axis: (name, v) => {
       if (!play) return;

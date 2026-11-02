@@ -41,7 +41,7 @@ export type Champion = { fitness: number; dist: number; finished: boolean; time:
 
 export type Res =
   | { type: "ready"; seed: number; capS: number; length: number; targetS: number; pop: number }
-  | { type: "gen"; stat: GenStat; champion: Champion; improved: boolean; cars?: Ghost[]; reasons?: string[] }
+  | { type: "gen"; stat: GenStat; champion: Champion; improved: boolean; cars?: Ghost[]; /** with `cars`: for each, whether it is a new car (not an elite carried over unchanged), and why its run ended */ fresh?: boolean[]; reasons?: string[] }
   | { type: "best"; ghost: Ghost | null; champion: Champion | null }
   | { type: "stopped" };
 
@@ -120,6 +120,7 @@ export class Session {
     const ev = this.ev as Evolution;
     const outs: Outcome[] = w.runs.map((r) => r.outcome());
     const fits = outs.map((o) => o.fitness);
+    const first = ev.gen === 0;
     const order = ev.breed(fits);
     const top = outs[order[0]];
     let improved = false;
@@ -145,7 +146,9 @@ export class Session {
     if (job.left <= 0) this.job = null;
     if (w.trace) {
       const cars = order.map((i) => w.runs[i].ghost() as Ghost);
-      this.post({ type: "gen", stat, champion: this.champ as Champion, improved, cars, reasons: order.map((i) => outs[i].why) }, cars.map((g) => g.data.buffer));
+      // the elite are the first few of the population and come through unchanged: only after the first generation are they not new
+      const fresh = order.map((i) => first || i >= ev.params.elite);
+      this.post({ type: "gen", stat, champion: this.champ as Champion, improved, cars, fresh, reasons: order.map((i) => outs[i].why) }, cars.map((g) => g.data.buffer));
     } else this.post({ type: "gen", stat, champion: this.champ as Champion, improved });
   }
 

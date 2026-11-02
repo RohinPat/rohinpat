@@ -54,7 +54,7 @@ export type Cam = {
 
 export const newCam = (): Cam => ({ x: 0, y: 0, z: 0, heading: 0, pitch: 0, fov: (CAM.fovDeg * Math.PI) / 180, shake: 0, kick: 0, lean: 0, fresh: true });
 
-export type GhostDraw = { pose: Pose; world: Point; /** 0 the target, 1 your best */ kind: 0 | 1; show: boolean; alpha: number };
+export type GhostDraw = { pose: Pose; world: Point; /** 0 the target, 1 your best, 2 one of Learn mode's cars, 3 the learner you are racing */ kind: 0 | 1 | 2 | 3; show: boolean; alpha: number };
 
 export type Scene = {
   road: Road;

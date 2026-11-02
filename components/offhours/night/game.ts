@@ -100,6 +100,11 @@ let runsDone = 0;
 /** What a rail incident costs, s: a base, and more the harder the first touch (`into`, m/s, the speed into the rail), at most the cap. A brush costs about the base and a flat-out hit seconds. */
 export const railPenalty = (run: { railPenaltyS: number; railPerMs2: number; railPenaltyMaxS: number }, into: number) => Math.min(run.railPenaltyMaxS, run.railPenaltyS + run.railPerMs2 * into * into);
 export const getBestRun = (track: TrackId = "canyon") => bestRuns[track] ?? null;
+/** A run to race in place of your best: the best car Learn mode has bred (memory only; the Cars piece sets it and clears it). */
+let rival: { track: TrackId; ghost: Ghost } | null = null;
+export const setRival = (ghost: Ghost | null, track: TrackId = "canyon") => {
+  rival = ghost ? { track, ghost } : null;
+};
 export const getBestScore = (track: TrackId = "canyon") => bestScores[track] ?? 0;
 export const forgetBestRun = () => {
   delete bestRuns.canyon;
@@ -742,7 +747,9 @@ export class NightGame {
     tg.alpha = 1;
     pointAt(this.road, tg.pose.s, tg.pose.lat, tg.world);
     const bg = sc.ghosts[1];
-    const best = bestRuns[this.track.id] ?? null;
+    const racing = rival && rival.track === this.track.id ? rival.ghost : null;
+    const best = racing ?? bestRuns[this.track.id] ?? null;
+    bg.kind = racing ? 3 : 1;
     bg.show = !!best;
     if (best) {
       samplePose(best, t, bg.pose);
