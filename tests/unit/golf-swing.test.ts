@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as M from "@/components/offhours/golf/range";
+import * as S from "@/components/offhours/golf/swing";
 import { makeSim, seedRandom, stubScratchCanvas, type Sim } from "./golf-headless";
 
 // The swing's numbers: what a gesture, a two-press meter swing, an over-the-top swing and a phone's swing turn into
@@ -295,3 +296,71 @@ const GOLDEN: Record<string, ReturnType<typeof summary>> = {
     "timing": null
   }
 };
+
+describe("strikeNumbers, on its own", () => {
+  const base = { src: "remote" as const, peak: 1, x0: 0, xTop: 0, xNow: 0, lastL: 160, td: 0.3, autoFace: 0, remote: null, over: false };
+
+  it("a phone's swing passes its face, curve and contact through", () => {
+    const k = S.strikeNumbers({ ...base, remote: { power: 1, face: 0.2, curve: -0.3, contact: 0.95 } }, 3);
+    expect([k.face, k.curve, k.contact, k.label, k.lift, k.speed]).toEqual([0.2, -0.3, 0.95, "PURE", 1, 1]);
+  });
+  it("a poor strike is thin or fat as the injected hand says, and never asks Math.random", () => {
+    const spy = vi.spyOn(Math, "random");
+    const poor = { ...base, remote: { power: 1, face: 0, curve: 0, contact: 0.5 } };
+    const thin = S.strikeNumbers(poor, 3, () => 0.9);
+    const fat = S.strikeNumbers(poor, 3, () => 0.1);
+    expect(spy).not.toHaveBeenCalled();
+    expect([thin.label, thin.lift, thin.contact]).toEqual(["THIN", 0.55, 0.5]);
+    expect([fat.label, fat.lift]).toEqual(["FAT", 1.15]);
+    expect(fat.contact).toBeCloseTo(0.44, 6);
+  });
+  it("a square gesture at a good tempo is pure; rushing it or dawdling costs contact", () => {
+    const g = { ...base, src: "gesture" as const, peak: 0.7 };
+    expect(S.strikeNumbers(g, 3).contact).toBe(1);
+    expect(S.strikeNumbers({ ...g, td: 0.04 }, 3).contact).toBeCloseTo(0.85, 6);
+    expect(S.strikeNumbers({ ...g, td: 1.0 }, 3, () => 0.9).contact).toBeLessThan(0.7);
+    // a drag that ends to the right of where it began starts the ball right and bends it
+    const open = S.strikeNumbers({ ...g, xNow: 40, xTop: 0 }, 3);
+    expect(open.face).toBeGreaterThan(0);
+    expect(open.curve).toBeGreaterThan(0);
+  });
+  it("a meter swing: the line is pure, an early press closes the face, a late one opens it the other way", () => {
+    const m = { ...base, src: "meter" as const };
+    expect(S.strikeNumbers(m, 3).contact).toBe(1);
+    expect(S.meterFace(-0.07)).toBeCloseTo(-0.5, 6);
+    expect(S.meterFace(0.5)).toBe(1);
+    expect(S.strikeNumbers({ ...m, autoFace: -1 }, 3, () => 0.9).face).toBeCloseTo(-0.6, 6);
+  });
+  it("over the top is the same poor, hooked strike with every club, at a speed that carries about 70%", () => {
+    for (let c = 0; c < 6; c++) {
+      const k = S.strikeNumbers({ ...base, src: "meter", over: true, peak: 1.15 }, c, () => 0.9);
+      expect(k.overTop).toBe(true);
+      expect(k.contact).toBeLessThanOrEqual(S.OVER_CONTACT);
+      expect(k.speed).toBe(S.overSpeed(c));
+    }
+    // the same swing as a gesture is not an over-the-top swing
+    expect(S.strikeNumbers({ ...base, src: "gesture", over: true }, 3).overTop).toBe(false);
+  });
+  it("power past full costs contact", () => {
+    expect(S.strikeNumbers({ ...base, remote: { power: 1.1, face: 0, curve: 0, contact: 1 }, peak: 1.1 }, 3, () => 0.9).contact).toBeLessThan(0.9);
+  });
+  it("the club table: the suggestion carries what was asked, with a little in hand", () => {
+    for (const yd of [60, 90, 135, 180, 230]) {
+      const sg = S.suggest(yd);
+      expect(S.fullCarry(sg.club)).toBeGreaterThanOrEqual(yd - 1);
+      expect(sg.power).toBeGreaterThanOrEqual(0.62);
+      expect(S.suggestCourse(yd)).toEqual(sg);
+    }
+    expect(S.suggest(135).club).toBe(3);
+    expect(S.powerFor(0, 300)).toBeNull();
+  });
+  it("a chip is a sand wedge at the swing that carries it, where the range's suggestion would reach for a driver", () => {
+    expect(S.suggest(30).club).toBe(0);
+    for (const yd of [10, 30, 45]) {
+      const sg = S.suggestCourse(yd);
+      expect(sg.club).toBe(5);
+      expect(sg.power).toBeGreaterThan(0);
+      expect(sg.power).toBeLessThan(0.62);
+    }
+  });
+});
