@@ -40,11 +40,7 @@ const DRAG_HOW = [
   "Shift when the lights go blue. Three runs make a set, and its best run races you. Space or a tap goes again",
 ];
 
-const LEARN_HOW = [
-  "24 cars start with random controls and keep what worked",
-  "Skip ahead breeds generations faster and replays the best car so far",
-  "Race it puts the best car in a Night run as a ghost",
-];
+const LEARN_HOW = ["They start random and keep what works", "Skip ahead to breed faster", "Race the best one"];
 
 export default function EnginePiece({ mode, paused }: PieceProps) {
   const play = mode === "play";

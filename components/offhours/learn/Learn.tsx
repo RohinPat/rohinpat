@@ -51,6 +51,8 @@ type Sess = {
   dirty: boolean;
   /** the visit's first finisher has been announced */
   told: boolean;
+  /** the canvas clock when this session was first drawn (the opening line is timed from it); -1 until then */
+  since: number;
 };
 
 function openSession(seed: number, local: boolean, onTell: (s: string) => void): Sess {
@@ -74,6 +76,7 @@ function openSession(seed: number, local: boolean, onTell: (s: string) => void):
     asking: false,
     dirty: false,
     told: false,
+    since: -1,
   };
   const ask = () => {
     if (s.asking) s.dirty = true;
@@ -150,7 +153,7 @@ export default function Learn({ paused, onRace }: { paused?: boolean; onRace: (g
   const skipRef = useRef(false);
   const lastData = useRef(0);
   const raceShown = useRef(false);
-  const hud = useRef<LearnHud>({ gen: 1, best: "BEST -", sub: "", bestSeries: [], meanSeries: [], n: 0, intro: 1 });
+  const hud = useRef<LearnHud>({ gen: 1, best: "BEST -", sub: "", bestSeries: [], meanSeries: [], n: 0, intro: 0, fast: false });
 
   const [skip, setSkip] = useState(false);
   const [canRace, setCanRace] = useState(false);
@@ -205,7 +208,7 @@ export default function Learn({ paused, onRace }: { paused?: boolean; onRace: (g
             s.playing = s.shown = s.queue.shift() as Gen;
             pb.set(s.playing.cars, 0, s.playing.fresh);
           }
-          pb.update(dt);
+          pb.update(dt, true);
           if (s.playing && pb.over) s.playing = null;
         } else {
           // the best so far on a loop; a newer one takes over at the end of the lap, or ten seconds in (a generation left over from Watch gives way at once)
@@ -245,7 +248,11 @@ export default function Learn({ paused, onRace }: { paused?: boolean; onRace: (g
           }
         }
       } else pb.update(dt);
-      H.intro = t < 6 ? 1 : Math.max(0, 1 - (t - 6) / 1.5);
+      // the opening line: the first generation of a fresh session, about 3 s, then it fades (under reduced motion it just goes)
+      if (s && s.since < 0) s.since = t;
+      const age = s ? t - s.since : 99;
+      H.intro = skipping || (s?.shown && s.shown.stat.gen > 1) ? 0 : age < 3 ? 1 : reduce ? 0 : Math.max(0, 1 - (age - 3) / 0.6);
+      H.fast = !skipping && pb.rate > 1;
 
       drawScene(ctx, a, pb.scene, Math.min(q.level, 2), q.level);
       drawLearnHud(ctx, w, h, H);

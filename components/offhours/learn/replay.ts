@@ -23,6 +23,13 @@ const FADE_S = 0.9;
 const HOLD_S = 0.8;
 const FOCUS_HOLD_S = 3;
 const MIN_S = 6;
+/**
+ * Watch plays the rest of a generation at FAST_RATE once only FAST_LEFT cars or fewer are still driving and it has run
+ * FAST_AFTER_S. A display speed only: the cars' drives are not touched, only how fast the clock walks along them.
+ */
+const FAST_AFTER_S = 15;
+const FAST_LEFT = 2;
+export const FAST_RATE = 4;
 
 export class Playback {
   readonly road: Road;
@@ -31,6 +38,8 @@ export class Playback {
   /** which of the cars are new this generation (the rest are the elite, carried over) */
   private fresh: boolean[] = [];
   t = 0;
+  /** the playback speed now: 1, or FAST_RATE */
+  rate = 1;
   private pose = newPose();
   private lastSpeed = 0;
   private learners: GhostDraw[] = [];
@@ -76,9 +85,12 @@ export class Playback {
     return n;
   }
 
-  update(dt: number) {
-    this.t += dt;
-    this.place(dt);
+  /** Move on `dt` seconds. With `allowFast` (Watch), the tail of a long generation goes by at FAST_RATE. */
+  update(dt: number, allowFast = false) {
+    const d = allowFast && this.t > FAST_AFTER_S && this.driving > 0 && this.driving <= FAST_LEFT ? dt * FAST_RATE : dt;
+    this.rate = d > dt ? FAST_RATE : 1;
+    this.t += d;
+    this.place(d);
   }
 
   private place(dt: number) {

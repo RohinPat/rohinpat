@@ -22,6 +22,8 @@ export type LearnHud = {
   n: number;
   /** the opening line is up while this is above zero (0..1: it fades) */
   intro: number;
+  /** the generation is playing at 4x */
+  fast: boolean;
 };
 
 type Stretchy = CanvasRenderingContext2D & { fontStretch?: string; letterSpacing?: string };
@@ -53,18 +55,29 @@ export function drawLearnHud(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillStyle = MUTED;
   ctx.fillText(hud.sub, 16, (narrow ? 70 : 78) + y0);
   drawChart(ctx, 16, (narrow ? 82 : 90) + y0, narrow ? 140 : 180, narrow ? 40 : 52, hud);
+  if (hud.fast) {
+    // a small tag after the status line
+    font(ctx, "m", 10, 500);
+    const sw = ctx.measureText(hud.sub).width;
+    const tx = 16 + sw + 12;
+    const ty = (narrow ? 70 : 78) + y0;
+    ctx.fillStyle = AMBER;
+    ctx.fillRect(tx, ty - 11, 28, 15);
+    ctx.fillStyle = "#0d100e";
+    ctx.fillText("4×", tx + 4, ty);
+  }
   if (hud.intro > 0) {
-    const size = narrow ? 24 : 40;
+    // one line, a strip near the top of the road
+    const size = narrow ? 14 : 20;
     font(ctx, "d", size, 800);
     ctx.textAlign = "center";
-    const tw = ctx.measureText(INTRO).width;
-    const lines = tw > w - 32 ? 2 : 1;
+    const lines = ctx.measureText(INTRO).width > w - 40 ? 2 : 1;
     const text = lines === 1 ? [INTRO] : [INTRO.slice(0, INTRO.indexOf(".") + 1), INTRO.slice(INTRO.indexOf(".") + 2)];
-    const y = h * 0.34;
+    const y = narrow ? y0 + 150 : 64;
     ctx.globalAlpha = hud.intro;
     ctx.fillStyle = INK;
-    const bw = Math.min(w - 24, Math.max(...text.map((t) => ctx.measureText(t).width)) + 36);
-    ctx.fillRect(w / 2 - bw / 2, y - size - 6, bw, size * lines * 1.25 + 22);
+    const bw = Math.min(w - 24, Math.max(...text.map((t) => ctx.measureText(t).width)) + 28);
+    ctx.fillRect(w / 2 - bw / 2, y - size - 4, bw, size * lines * 1.2 + 14);
     ctx.fillStyle = CREAM;
     text.forEach((t, i) => ctx.fillText(t, w / 2, y + i * size * 1.2));
     ctx.globalAlpha = 1;

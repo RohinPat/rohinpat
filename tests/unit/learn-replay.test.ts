@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRecorder, newPose, type Ghost } from "@/components/offhours/night/ghost";
-import { Playback } from "@/components/offhours/learn/replay";
+import { FAST_RATE, Playback } from "@/components/offhours/learn/replay";
+import { Session, type Res } from "@/components/offhours/learn/session";
 
 /** a car that drives straight down the road at 20 m/s for `time` seconds */
 function drive(time: number): Ghost {
@@ -90,5 +91,80 @@ describe("playing a generation back", () => {
     pb.set([drive(20)]);
     expect(pb.t).toBe(0);
     expect(pb.scene.car.s).toBeCloseTo(12, 0);
+  });
+
+  describe("the 4x tail", () => {
+    const play = (pb: Playback, fast: boolean) => {
+      let frames = 0;
+      while (!pb.over && frames < 100_000) {
+        pb.update(0.05, fast);
+        frames++;
+      }
+      return frames;
+    };
+
+    it("starts only once a long generation is down to a couple of cars, and only in Watch", () => {
+      const slow = new Playback(true);
+      slow.set([drive(60), drive(3)]);
+      slow.update(14, true);
+      expect(slow.rate).toBe(1);
+      slow.update(2, true);
+      slow.update(0.05, true);
+      expect(slow.rate).toBe(FAST_RATE);
+      // not in the skip replay, which does not ask for it
+      const still = new Playback(true);
+      still.set([drive(60)]);
+      still.update(20);
+      expect(still.rate).toBe(1);
+      // three cars still driving: no
+      const crowd = new Playback(true);
+      crowd.set([drive(60), drive(50), drive(40)]);
+      crowd.update(20, true);
+      expect(crowd.rate).toBe(1);
+      // and none after they have all stopped
+      const done = new Playback(true);
+      done.set([drive(20)]);
+      done.update(21, true);
+      expect(done.rate).toBe(1);
+    });
+
+    it("plays the same drives to the same end, in a quarter of the frames, and touches nothing it plays", () => {
+      const cars = () => [drive(60), drive(3)];
+      const data = cars().map((g) => Array.from(g.data));
+      const a = new Playback(true);
+      const b = new Playback(true);
+      const ca = cars();
+      const cb = cars();
+      a.set(ca, 0, [true, true]);
+      b.set(cb, 0, [true, true]);
+      const slow = play(a, false);
+      const fast = play(b, true);
+      expect(fast).toBeLessThan(slow * 0.6);
+      expect(b.scene.car.s).toBeCloseTo(a.scene.car.s, 6);
+      expect(ca.map((g) => Array.from(g.data))).toEqual(data);
+      expect(cb.map((g) => Array.from(g.data))).toEqual(data);
+    });
+
+    it("leaves what the session simulated alone: the same seed gives the same generations whether or not they were played fast", { timeout: 60_000 }, () => {
+      const run = (fast: boolean) => {
+        const s = new Session();
+        const out: Res[] = [];
+        s.post = (r) => out.push(r);
+        s.request({ type: "start", seed: 5 });
+        const stats: unknown[] = [];
+        const pb = new Playback(true);
+        for (let g = 0; g < 4; g++) {
+          s.request({ type: "step", gens: 1, trace: true });
+          while (s.work(1000));
+          const r = out[out.length - 1];
+          if (r.type !== "gen" || !r.cars) throw new Error("no generation");
+          stats.push({ stat: r.stat, champion: r.champion, times: r.cars.map((c) => c.time), dists: r.cars.map((c) => c.dist) });
+          pb.set(r.cars, 0, r.fresh);
+          play(pb, fast);
+        }
+        return stats;
+      };
+      expect(run(true)).toEqual(run(false));
+    });
   });
 });
