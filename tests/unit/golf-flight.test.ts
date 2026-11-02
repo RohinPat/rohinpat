@@ -39,6 +39,101 @@ describe("golden values from before", () => {
   });
 });
 
+
+/** a pond: water for 100 < z < 140 and |x| < 30, fairway everywhere else */
+const pond = (x: number, z: number): Surface => (z > 100 && z < 140 && Math.abs(x) < 30 ? "water" : "fairway");
+
+describe("an origin", () => {
+  it("no origin is the origin (0, 0)", () => {
+    for (const [k, v] of Object.entries(CASES)) expect(sum({ ...v, origin: [0, 0] }), k).toEqual(sum(v));
+  });
+  it("a shot struck from anywhere flies the same when the ground under it is moved with it", () => {
+    for (const [ox, oz] of [[40, 90], [-250, 600], [3.3, -17]] as [number, number][]) {
+      for (const [k, v] of Object.entries(CASES)) {
+        const moved = sum({ ...v, origin: [ox, oz], surfaceAt: (x, z) => v.surfaceAt(x - ox, z - oz) });
+        expect(moved, `${k} from ${ox},${oz}`).toEqual(sum(v));
+      }
+    }
+  });
+  it("the surface is looked up in world coordinates, and the shot comes back relative to the origin", () => {
+    const seen: [number, number][] = [];
+    const s = simulate({ ...base, club: CLUBS[3], origin: [100, 200], surfaceAt: (x, z) => (seen.push([x, z]), "fairway") });
+    expect(s.ox).toBe(100);
+    expect(s.oz).toBe(200);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const [x, z] of seen) expect(z).toBeGreaterThanOrEqual(200 - 1);
+    expect(s.carry).toBeCloseTo(simulate({ ...base, club: CLUBS[3] }).carry, 9);
+  });
+});
+
+describe("water", () => {
+  it("a shot that comes down in a pond ends there: one splash, no roll", () => {
+    const sw = simulate({ ...base, club: CLUBS[3], speed: 0.85, surfaceAt: (x, z) => (z > 90 && z < 140 ? "water" : "fairway") });
+    expect(sw.surface).toBe("water");
+    expect(sw.bounces).toHaveLength(1);
+    expect(sw.bounces[0].surface).toBe("water");
+    expect(sw.total).toBeCloseTo(sw.carry, 1);
+    // it stops where it landed
+    const end = at(sw, sw.restT);
+    expect(end[0]).toBeCloseTo(sw.bounces[0].x, 1);
+    expect(end[2]).toBeCloseTo(sw.bounces[0].z, 1);
+    expect(sw.restT - sw.landT).toBeLessThan(0.1);
+  });
+  it("the drop is the last dry ground it passed over, on the near side of the water", () => {
+    const sw = simulate({ ...base, club: CLUBS[3], speed: 0.85, surfaceAt: (x, z) => (z > 90 && z < 140 ? "water" : "fairway") });
+    expect(sw.drop).not.toBeNull();
+    expect(sw.drop!.z).toBeLessThanOrEqual(90);
+    expect(sw.drop!.z).toBeGreaterThan(90 - 1.5);
+  });
+  it("a ball that rolls into a pond ends in it", () => {
+    // the driver carries about 225 m and rolls out to about 240: water from 236 m is reached on the roll
+    const t = simulate({ ...base, club: CLUBS[0], speed: 1, surfaceAt: (x, z) => (z > 236 ? "water" : "fairway") });
+    expect(t.bounces.length).toBeGreaterThan(1);
+    expect(t.surface).toBe("water");
+    expect(t.bounces[t.bounces.length - 1].surface).toBe("water");
+    expect(t.drop!.z).toBeLessThanOrEqual(236);
+  });
+  it("a shot that stays dry has no drop, and the range never sees water", () => {
+    expect(simulate({ ...base, club: CLUBS[3] }).drop).toBeNull();
+    // a sand wedge carries about 74 m: short of the pond
+    expect(simulate({ ...base, club: CLUBS[5], surfaceAt: pond }).drop).toBeNull();
+  });
+});
+
+describe("lies and the hand", () => {
+  it("no lie is no change", () => {
+    for (const [k, v] of Object.entries(CASES)) expect(sum({ ...v, lie: {} }), k).toEqual(sum(v));
+  });
+  it("speed and spin multipliers shorten the shot, in order", () => {
+    const carry = (m: number) => simulate({ ...base, club: CLUBS[3], lie: { speed: m } }).carry;
+    expect(carry(1)).toBeGreaterThan(carry(0.9));
+    expect(carry(0.9)).toBeGreaterThan(carry(0.82));
+    expect(carry(0.82)).toBeGreaterThan(carry(0.5));
+  });
+  it("a contact cap holds a pure strike down, and leaves a poor one alone", () => {
+    const pure = simulate({ ...base, club: CLUBS[3], lie: { contactCap: 0.6 } });
+    expect(pure.carry).toBeCloseTo(simulate({ ...base, club: CLUBS[3], contact: 0.6 }).carry, 9);
+    const poor = simulate({ ...base, club: CLUBS[3], contact: 0.4, lie: { contactCap: 0.6 } });
+    expect(poor.carry).toBeCloseTo(simulate({ ...base, club: CLUBS[3], contact: 0.4 }).carry, 9);
+  });
+  it("a wandering face uses the hand it is given, and repeats with the same one", () => {
+    const hand = (v: number) => () => v;
+    const a = simulate({ ...base, club: CLUBS[3], lie: { faceNoise: 0.2 }, rng: hand(0.9) });
+    const b = simulate({ ...base, club: CLUBS[3], lie: { faceNoise: 0.2 }, rng: hand(0.9) });
+    const c = simulate({ ...base, club: CLUBS[3], lie: { faceNoise: 0.2 }, rng: hand(0.1) });
+    expect(a.side).toBe(b.side);
+    expect(a.side).toBeGreaterThan(0);
+    expect(c.side).toBeLessThan(0);
+    expect(a.side).toBeCloseTo(-c.side, 6);
+  });
+  it("without a lie nothing asks for a random number", () => {
+    const rng = () => {
+      throw new Error("asked");
+    };
+    expect(() => simulate({ ...base, club: CLUBS[3], rng })).not.toThrow();
+  });
+});
+
 const GOLDEN: Record<string, ReturnType<typeof sum>> = {
   "driver, flat": {
     "carry": 246.04,
