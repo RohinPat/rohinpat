@@ -352,7 +352,7 @@ export function puttBegin(p: Putt, hole: Hole, ball: [number, number], strokes: 
   p.kAngle = Math.atan2(hole.cup[1] - ball[1], hole.cup[0] - ball[0]);
   p.kPower = 0;
   p.kCharging = false;
-  p.kTouched = t;
+  p.kTouched = -9;
   p.aiming = false;
   p.startT = t;
   p.fade = reduce ? 1 : 0;

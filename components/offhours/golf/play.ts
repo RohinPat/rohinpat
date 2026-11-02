@@ -116,6 +116,8 @@ export class CourseGame {
   splash: { x: number; z: number; t: number } | null = null;
   /** the one-line result of the last shot, for the HUD */
   result = "";
+  /** the last shot ended in water or the trees: the ball is where it was dropped, not where it stopped */
+  dropped = false;
   timing: number | null = null;
   /** the shots struck this visit (hints go after a few) */
   taken = 0;
@@ -130,6 +132,7 @@ export class CourseGame {
   w = 1440;
   h = 900;
 
+  private puttRolling = false;
   private rng: () => number;
   private seed: number;
   private acc = 0;
@@ -454,9 +457,17 @@ export class CourseGame {
         if (this.trail.length) this.trail.shift();
         if (this.restT >= REST_HOLD) this.afterRest();
         break;
-      case "putt":
+      case "putt": {
         puttStep(this.putt, dt, this.t, this.penv);
+        // a putt that has stopped short of the cup says how far is left
+        const ps = this.puttState();
+        if (this.puttRolling && !ps.rolling && this.putt.strokes > this.strokes) {
+          this.strokes = this.putt.strokes;
+          this.say(`${Math.round(ps.dist * 3.281)} feet to the pin.`);
+        }
+        this.puttRolling = ps.rolling;
         break;
+      }
       default:
         break;
     }
@@ -528,6 +539,7 @@ export class CourseGame {
     const drop = dropFor(sh, sh.surface, this.hole.edgeDrop);
     const def = this.hole.def;
     let msg = `${club.name}: ${Math.round(sh.carry)} yards carry, ${Math.round(sh.total)} total`;
+    this.dropped = !!drop;
     if (drop) {
       this.ball = [drop.x, drop.z];
       this.strokes += drop.penalty;
@@ -558,6 +570,7 @@ export class CourseGame {
     if (shouldPickUp(this.strokes, def.par)) return this.holeDone(this.strokes, true);
     if (this.lie === "green" || this.lie === "fringe") {
       const [gx, gy] = this.hole.toGreen(this.ball[0], this.ball[1]);
+      this.puttRolling = false;
       puttBegin(this.putt, this.hole.green, [gx, gy], this.strokes, { pickUp: def.par + PICK_UP_OVER, onDone: (s, up) => this.holeDone(s, up) }, this.t, this.opts.reduce);
       this.setPhase("putt");
       return;
