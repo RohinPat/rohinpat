@@ -57,7 +57,7 @@ export const SHOTS: ShotDef[] = [
   },
   {
     id: "driven", name: "Driven", blurb: "Low and hard, struck through the ball. Hold near the top: the keeper has no time.",
-    sweet: 0.86, width: 0.13, tSlow: 0.6, tFast: 0.35, grav: 1.6, curl: 0, dip: 0, wob: 0, err: 0.3, hide: 0.05, aware: 0, spin: [26, 0, 0],
+    sweet: 0.86, width: 0.13, tSlow: 0.6, tFast: 0.35, grav: 1.6, curl: 0, dip: 0, wob: 0, err: 0.34, hide: 0.05, aware: 0, spin: [26, 0, 0],
   },
   {
     id: "curlL", name: "Curl ↶", blurb: "Bend it left. It starts right of your aim and swings in; keepers dive for where it starts.",
@@ -101,6 +101,8 @@ export type Strike = {
   end: Vec;
   /** where a keeper who ignored curl, dip and wobble would think it ends */
   naive: Vec;
+  /** the same two guesses at the keeper's own plane (z = KEEPER_Z), which is where he has to meet it */
+  seen: { naive: Vec; target: Vec };
   T: number;
   h: number;
   v: [number, number, number];
@@ -172,6 +174,9 @@ export function makeStrike(shot: ShotDef, aim: Vec, power: number, rnd: Rnd): St
   const plain = integrate(base, n, h, vx, vy, { curl: false, wob: false });
   const wobOnly = wob ? integrate(base, n, h, 0, 0, { curl: false, wob: true }, 0, 0) : { x: 0, y: 0 };
   const end = { x: tx + wobOnly.x, y: ty + wobOnly.y };
+  const nK = Math.round(n * ((KEEPER_Z - SPOT_Z) / (GOAL_Z - SPOT_Z)));
+  const atK = integrate(base, nK, h, vx, vy, { curl: true, wob: false });
+  const plainK = integrate(base, nK, h, vx, vy, { curl: false, wob: false });
   return {
     shot,
     power,
@@ -179,6 +184,7 @@ export function makeStrike(shot: ShotDef, aim: Vec, power: number, rnd: Rnd): St
     target: { x: tx, y: ty },
     end,
     naive: { x: plain.x, y: plain.y },
+    seen: { naive: { x: plainK.x, y: plainK.y }, target: { x: atK.x, y: atK.y } },
     T,
     h,
     v: [vx, vy, (GOAL_Z - SPOT_Z) / T],
@@ -257,6 +263,8 @@ const THIGH = 0.47;
 const SHIN = 0.47;
 const ARM = UA + FA;
 export const MAX_DIVE = 2.45; // furthest his hips travel
+/** furthest a glove can be from his hips, stretched out */
+export const ARM_REACH = TORSO + ARM;
 
 /** A pose, as numbers so it can be blended: hip, lean, two hands, two feet, gaze. */
 export type Pose = number[];
@@ -318,22 +326,50 @@ export function solve(p: Pose): Joints {
   };
 }
 
-/** crouched on the line, hands up, weight forward */
-export function readyPose(x: number, phase: number, lean: number, step: number): Pose {
-  const bob = Math.sin(phase * 6.5) * 0.015;
+/**
+ * On the line before a kick: hands up, weight forward. `crouch` (0 to 1) sinks
+ * him into the set position as the kicker arrives: knees bent, feet and hands wider.
+ */
+export function readyPose(x: number, phase: number, lean: number, step: number, crouch = 0): Pose {
+  const bob = Math.sin(phase * 6.5) * 0.015 * (1 - crouch);
   const lift = Math.max(0, Math.sin(phase * 13)) * Math.min(1, Math.abs(step) * 3);
   const lx = lean * 0.12;
+  const hw = 0.6 + 0.1 * crouch;
+  const hy = 1.12 + bob - 0.12 * crouch;
+  const fw = 0.34 + 0.1 * crouch;
   return [
-    x + lx * 0.5, 0.88 + bob, lean * 0.1,
-    x + 0.6 + lx, 1.12 + bob, x - 0.6 + lx, 1.12 + bob,
-    x + 0.34 + lx * 0.3, 0.02 + (step > 0 ? lift * 0.07 : 0), x - 0.34 + lx * 0.3, 0.02 + (step < 0 ? lift * 0.07 : 0),
+    x + lx * 0.5, 0.88 + bob - 0.1 * crouch, lean * 0.1,
+    x + hw + lx, hy, x - hw + lx, hy,
+    x + fw + lx * 0.3, 0.02 + (step > 0 ? lift * 0.07 : 0), x - fw + lx * 0.3, 0.02 + (step < 0 ? lift * 0.07 : 0),
     lean,
   ];
 }
 
-/** up on his toes, arms and legs wide: making himself big */
-export function bigPose(x: number): Pose {
-  return [x, 0.86, 0, x + 1.0, 2.2, x - 1.0, 2.2, x + 0.52, 0.03, x - 0.52, 0.03, 0];
+/**
+ * Staying up for a ball: a step toward it (no more than 0.7 m), sunk for a low
+ * one or up on his toes for a high one, both gloves together on the spot.
+ */
+export function holdPose(x0: number, P: Vec): Pose {
+  const hx = x0 + clamp(P.x - x0, -0.7, 0.7);
+  const hy = P.y < 0.9 ? 0.88 - (0.9 - P.y) * 0.5 : 0.88 + Math.max(0, P.y - 1.7) * 0.22;
+  const th = clamp((P.x - hx) / 1.5, -0.5, 0.5) * 0.7;
+  const fw = 0.38;
+  return [
+    hx, hy, th,
+    P.x + 0.13, P.y, P.x - 0.13, P.y,
+    hx + fw, 0.02, hx - fw, 0.02,
+    clamp((P.x - hx) / 1.5, -1, 1),
+  ];
+}
+
+/** one knee down, a hand on the turf: the middle of getting up from a dive */
+export function kneelPose(x: number, dir: number): Pose {
+  return [
+    x, 0.5, dir * 0.4,
+    x + dir * 0.45, 0.32, x - dir * 0.2, 0.72,
+    x + dir * 0.3, 0.02, x - dir * 0.28, 0.07,
+    dir * 0.3,
+  ];
 }
 
 const THETA_BY_Y: [number, number][] = [[0.3, 1.42], [0.9, 1.2], [1.5, 0.92], [2.0, 0.64], [2.6, 0.42]];
@@ -347,12 +383,16 @@ function thetaForHeight(y: number) {
   return THETA_BY_Y[THETA_BY_Y.length - 1][1];
 }
 
+/** how one dive differs from another: the body angle, and how far apart the gloves sit */
+export type Build = { jump: number; th: number; spread: number };
+const PLAIN: Build = { jump: 1, th: 0, spread: 0.3 };
+
 /** laid out full stretch toward (P.x, P.y), hands leading and legs trailing */
-export function divePose(x0: number, P: Vec): Pose {
+export function divePose(x0: number, P: Vec, v: Build = PLAIN): Pose {
   const dx = P.x - x0;
   const dir = dx < 0 ? -1 : 1;
   const adx = Math.abs(dx);
-  const thAbs = thetaForHeight(P.y) * Math.min(1, 0.28 + adx / 1.3);
+  const thAbs = clamp(thetaForHeight(P.y) + v.th, 0.2, 1.5) * Math.min(1, 0.28 + adx / 1.3);
   const th = dir * thAbs;
   const ax = Math.sin(th), ay = Math.cos(th);
   const th2 = dir * Math.min(1.5, thAbs + 0.16);
@@ -365,16 +405,15 @@ export function divePose(x0: number, P: Vec): Pose {
   if (Math.abs(hx - x0) > MAX_DIVE) hx = x0 + dir * MAX_DIVE;
   sx = hx + ax * TORSO;
   sy = hy + ay * TORSO;
-  // second glove sits beside the first, across the line of the arms
-  const qx = dY, qy = -dX;
-  const spread = 0.3;
+  // second glove sits just under the first, across the line of the arms (the same for a dive either way)
+  const spread = v.spread;
   const px = Math.cos(th), py = -Math.sin(th);
   const shA: P2 = [sx + px * SW, sy + py * SW];
   const shB: P2 = [sx - px * SW, sy - py * SW];
   const dA = Math.hypot(shA[0] - P.x, shA[1] - P.y);
   const dB = Math.hypot(shB[0] - P.x, shB[1] - P.y);
   const lead: P2 = [P.x, P.y];
-  const trail: P2 = [P.x + qx * spread * (dA <= dB ? 1 : -1) * dir, Math.max(0.06, P.y + qy * spread * (dA <= dB ? 1 : -1) * dir)];
+  const trail: P2 = [P.x + dir * dY * spread, Math.max(0.06, P.y - Math.abs(dX) * spread)];
   const hA = dA <= dB ? lead : trail;
   const hB = dA <= dB ? trail : lead;
   const back = 0.84;
@@ -454,13 +493,18 @@ export function contact(j: Joints, bx: number, by: number): Contact | null {
 
 // ───────────────────────────── the keeper's mind ─────────────────────────────
 
-export type Seen = { side: -1 | 0 | 1; high: boolean; shot: ShotId };
+/** one kick of this shootout, as he remembers it: which side, how high, what with */
+export type Seen = { side: -1 | 0 | 1; high: boolean; shot: ShotId; /** where it crossed (or was stopped), when known */ x?: number; y?: number };
 export type Brain = { hist: Seen[] };
 
 export type Plan = {
   mode: "dive" | "stand";
-  /** why: a guess before the strike, a read of the ball, a guess after a glimpse, a wait */
-  style: "gamble" | "read" | "guess" | "wait";
+  /**
+   * why: a bet before the kick (gamble), your settled reticle (read), the ball
+   * once it had left the boot (react), a lob he held for (wait), or a lean he
+   * showed you that he didn't mean (bait)
+   */
+  style: "gamble" | "read" | "react" | "wait" | "bait";
   /** seconds from the start of the run-up when he commits */
   tc: number;
   D: number;
@@ -468,77 +512,148 @@ export type Plan = {
   P: Vec;
   start: Pose | null;
   final: Pose | null;
+  /** how this dive differs from the last one */
+  v: Build;
+  /** the way his weight goes just before he commits (-1 left, 1 right, 0 none): the last thing you can see */
+  tip: -1 | 0 | 1;
 };
+
+/** what he is showing you while you aim: a bait lean, left or right, or none */
+export type Stance = { bait: -1 | 0 | 1 };
 
 const sideOf = (x: number): -1 | 0 | 1 => (x < -1.05 ? -1 : x > 1.05 ? 1 : 0);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+/** how much of your aim he has made out: nothing until the reticle has sat still a moment, all of it after about three seconds */
+export const tellOf = (dwell: number) => clamp((dwell - 0.6) / 2.2, 0, 1);
+
 export function diveTime(x0: number, P: Vec) {
-  return 0.3 + 0.115 * Math.abs(P.x - x0) + 0.07 * Math.max(0, P.y - 1) + (P.y < 0.45 ? 0.04 : 0);
+  return 0.38 + 0.13 * Math.abs(P.x - x0) + 0.07 * Math.max(0, P.y - 1) + (P.y < 0.45 ? 0.04 : 0);
+}
+
+export type Memory = {
+  /** how likely he thinks left, middle, right: even to start with, and leaning toward where you have been shooting */
+  side: [number, number, number];
+  /** how likely he thinks high */
+  high: number;
+  /** Panenkas he has seen this shootout */
+  pan: number;
+  /** kicks in a row to the same side, ending with the last */
+  streak: number;
+  /** the last kick was one that bends or wobbles, so he is watching for it */
+  bend: boolean;
+};
+
+/** What he has noticed this shootout. It lives only in the Brain (no storage) and goes when the shootout does. */
+export function memoryOf(brain: Brain, diff: number): Memory {
+  const recent = brain.hist.slice(-8);
+  const n = recent.length;
+  const side: [number, number, number] = [1, 0.35, 1];
+  let hs = 0, hw = 0, pan = 0;
+  recent.forEach((h, i) => {
+    const w = 0.6 + (0.4 * (i + 1)) / n;
+    side[h.side + 1] += (0.9 + 2.4 * diff) * w;
+    hs += (h.high ? 1 : 0) * w;
+    hw += w;
+    if (h.shot === "panenka") pan++;
+  });
+  let streak = 0;
+  for (let i = n - 1; i >= 0 && n && recent[i].side === recent[n - 1].side && recent[n - 1].side !== 0; i--) streak++;
+  const last = n ? recent[n - 1].shot : null;
+  return { side, high: (hs + 0.5) / (hw + 1), pan, streak, bend: !!last && ["curlL", "curlR", "dipper", "knuckle"].includes(last) };
+}
+
+/** which way he leans while you aim, -1..1: toward where you have been shooting, and nowhere with no history */
+export function favourite(brain: Brain, diff: number) {
+  const [l, m, r] = memoryOf(brain, diff).side;
+  return (r - l) / (l + m + r);
 }
 
 /**
- * What the keeper does about a kick. `diff` runs 0 to 1, `tell` is how long you
- * hovered on one spot (he reads that, a little), `x0` is where he's standing.
+ * What the keeper does about a kick. `diff` runs 0 to 1. `tell` (0 to 1) is how
+ * long your reticle sat still: the only thing he knows of your aim, and only
+ * as well as he saw it. `x0` is where he is standing.
+ *
+ * He knows four things, and nothing else: where you have been shooting this
+ * shootout (a bet, made before the kick), your reticle if it was settled (a
+ * read, made as you strike), the ball once it has left the boot (a reaction,
+ * which is late, and as good as his eye and his reach), and what he showed you
+ * himself. How he plays a kick is decided from draws made up front, before he
+ * looks at the ball, so a bet or a read can never see where the kick goes.
  */
-export function think(brain: Brain, diff: number, st: Strike, tell: number, x0: number, rnd: Rnd): Plan {
+export function think(brain: Brain, diff: number, st: Strike, tell: number, x0: number, rnd: Rnd, stance: Stance = { bait: 0 }): Plan {
   const shot = st.shot;
-  const recent = brain.hist.slice(-6);
-  // tendencies: where you've been shooting (and what with)
-  const w = [1, 1, 1];
-  recent.forEach((h, i) => {
-    w[h.side + 1] += (0.5 + 0.9 * diff) * (0.5 + i / recent.length);
+  const mem = memoryOf(brain, diff);
+  const U = Array.from({ length: 20 }, () => rnd());
+  const g = (i: number) => (U[i] + U[i + 1] + U[i + 2] - 1.5) * 2; // ~N(0,1)
+  const v: Build = { jump: 0.8 + 0.4 * U[8], th: (U[9] - 0.5) * 0.2, spread: 0.22 + 0.16 * U[10] };
+  const dScale = 0.94 + 0.12 * U[11];
+  const pan = shot.id === "panenka";
+
+  const stand = (style: Plan["style"], tc: number, P: Vec): Plan => ({
+    mode: "stand", style, tc, D: 0.3, x0, P: { x: clamp(P.x, -GW, GW), y: clamp(P.y, 0.2, 2.3) }, start: null, final: null, v, tip: 0,
   });
-  const lastBend = recent.length && ["curlL", "curlR", "dipper", "knuckle"].includes(recent[recent.length - 1].shot);
+  const dive = (style: Plan["style"], tc: number, P: Vec, tip: -1 | 0 | 1): Plan => {
+    const Pc = { x: clamp(P.x, -GW - 0.3, GW + 0.3), y: clamp(P.y, 0.12, 2.85) };
+    return { mode: "dive", style, tc, D: diveTime(x0, Pc) * dScale, x0, P: Pc, start: null, final: null, v, tip };
+  };
+  // where he thinks it goes on a side: where your kicks there have gone (the more of them, the closer he gets), else a corner
+  const corner = (side: -1 | 1): Vec => {
+    const seen = brain.hist.slice(-6).filter((h) => h.side === side && h.x !== undefined && h.y !== undefined);
+    if (!seen.length) return { x: side * (1.8 + U[5] * 1.4), y: U[4] < mem.high ? 1.3 + U[6] : 0.2 + U[6] * 0.6 };
+    let wx = 0, wy = 0, ww = 0;
+    seen.forEach((h, i) => {
+      const w = 1 + i;
+      wx += h.x! * w;
+      wy += h.y! * w;
+      ww += w;
+    });
+    const sd = 0.22 + 0.6 / seen.length;
+    return { x: wx / ww + (U[5] - 0.5) * 2 * sd, y: wy / ww + (U[6] - 0.5) * 2 * sd * 0.8 };
+  };
   const pickSide = (): -1 | 0 | 1 => {
-    const tot = w[0] + w[1] + w[2];
-    let r = rnd() * tot;
+    const tot = mem.side[0] + mem.side[1] + mem.side[2];
+    let r = U[3] * tot;
     for (let i = 0; i < 3; i++) {
-      r -= w[i];
+      r -= mem.side[i];
       if (r <= 0) return (i - 1) as -1 | 0 | 1;
     }
     return 0;
   };
-  const highBias = recent.length ? recent.filter((h) => h.high).length / recent.length : 0.4;
-  const aware = clamp(shot.aware + (shot.aware > 0 ? 0.3 * diff : 0) + (lastBend ? 0.18 : 0), 0, 0.9);
-  const sigma = 0.3 * (1.35 - diff);
-  const seenX = st.naive.x + (st.target.x - st.naive.x) * aware + gauss(rnd) * sigma;
-  const seenY = st.naive.y + (st.target.y - st.naive.y) * aware + gauss(rnd) * sigma * 0.8;
-  const conf = clamp(0.3 + 0.4 * diff + 0.16 * tell - shot.hide, 0.08, 0.9);
-  const sameSide = recent.length >= 2 && recent[recent.length - 1].side === recent[recent.length - 2].side && recent[recent.length - 1].side !== 0;
-  const pGamble = 0.07 + 0.1 * diff + (sameSide ? 0.06 + 0.1 * diff : 0);
-  const react = 0.3 - 0.13 * diff + (rnd() - 0.5) * 0.08;
 
-  const stand = (style: Plan["style"], tc: number): Plan => ({ mode: "stand", style, tc, D: 0.3, x0, P: { x: x0, y: 1.2 }, start: null, final: null });
-  const dive = (style: Plan["style"], tc: number, P: Vec): Plan => {
-    const Pc = { x: clamp(P.x, -GW - 0.3, GW + 0.3), y: clamp(P.y, 0.12, 2.85) };
-    return { mode: "dive", style, tc, D: diveTime(x0, Pc), x0, P: Pc, start: null, final: null };
-  };
-  const corner = (side: number): Vec => ({ x: side * (1.7 + rnd() * 1.5), y: rnd() < 0.5 + (highBias - 0.4) * 0.5 ? 0.9 + rnd() * 1.3 : 0.2 + rnd() * 0.6 });
-
-  const roll = rnd();
-  if (roll < pGamble) {
+  // 1. he leaned one way to bait you, and means to go the other
+  if (stance.bait !== 0 && U[0] < 0.5) {
+    const side = (-stance.bait) as -1 | 1;
+    return dive("bait", RUNUP - 0.08 - 0.08 * U[7], corner(side), side);
+  }
+  // 2. your reticle sat still long enough for him to make it out
+  const pRead = clamp(0.03 + 0.5 * tell + 0.08 * diff - 0.5 * shot.hide, 0, 0.8);
+  if (U[1] < pRead) {
+    const sg = 0.36 * (1.5 - diff - 0.4 * tell);
+    const P = { x: st.aim.x + g(12) * sg, y: st.aim.y + g(15) * sg * 0.8 };
+    const tc = RUNUP - 0.03 + 0.07 * U[7];
+    return Math.abs(P.x) < 0.7 && P.y < 1.7 ? stand("read", tc, P) : dive("read", tc, P, Math.sign(P.x - x0) as -1 | 0 | 1);
+  }
+  // 3. a bet before the kick, on where you have been shooting. Against a Panenka the bet is a dive, and it is the one he loses.
+  const pWait = clamp(0.12 + 0.45 * diff + 0.15 * Math.min(2, mem.pan), 0.1, 0.85);
+  const pEarly = pan ? 1 - pWait : clamp(0.14 + 0.26 * diff + 0.14 * Math.min(4, mem.streak), 0.1, 0.85);
+  if (U[2] < pEarly) {
     const side = pickSide();
-    const tc = RUNUP - 0.04 - rnd() * 0.1;
-    return side === 0 ? stand("gamble", tc) : dive("gamble", tc, corner(side));
+    const tc = RUNUP - 0.05 - 0.12 * U[7];
+    return side === 0 ? stand("gamble", tc, { x: 0, y: mem.high > 0.5 ? 1.5 : 0.7 }) : dive("gamble", tc, corner(side), side);
   }
-  if (rnd() < conf) {
-    // he sees it clearly
-    if (shot.id === "panenka") {
-      // he can tell it's a lob. Does he have the nerve to wait for it?
-      if (rnd() < 0.28 + 0.4 * diff) return stand("wait", RUNUP + react + 0.08);
-      const side = rnd() < 0.5 ? -1 : 1;
-      return dive("guess", RUNUP + react, corner(pickSide() || side));
-    }
-    if (Math.abs(seenX) < 0.75 && seenY < 2.05) return rnd() < 0.82 ? stand("read", RUNUP + react) : dive("read", RUNUP + react, { x: seenX, y: seenY });
-    return dive("read", RUNUP + react, { x: seenX, y: seenY });
-  }
-  // a glimpse: probably the right side
-  const seenSide = sideOf(seenX);
-  const side = rnd() < 0.45 + 0.25 * diff ? seenSide : pickSide();
-  if (side === 0) return stand("guess", RUNUP + react + 0.04);
-  const c = corner(side);
-  return dive("guess", RUNUP + react + 0.04, { x: c.x, y: rnd() < 0.5 ? c.y : (c.y + seenY) / 2 });
+  // 4. he waits for the ball, and reacts to what it does. His eye is worse for a fast ball; a lob he can wait on longer.
+  const react = 0.29 - 0.07 * diff + (U[7] - 0.5) * 0.08 + (pan ? 0.14 : 0);
+  const aware = clamp(shot.aware + (shot.aware > 0 ? 0.3 * diff : 0) + (mem.bend ? 0.18 : 0), 0, 0.7);
+  const sg = (0.02 + 0.01 * (GOAL_Z / st.T)) * (1.5 - diff) * (pan ? 0.6 : 1);
+  const P = {
+    x: st.seen.naive.x + (st.seen.target.x - st.seen.naive.x) * aware + g(12) * sg,
+    y: st.seen.naive.y + (st.seen.target.y - st.seen.naive.y) * aware + g(15) * sg * 0.8,
+  };
+  const style = pan ? "wait" : "react";
+  const tc = RUNUP + react;
+  const near = pan ? 1.5 : 0.8;
+  return Math.abs(P.x - x0) < near && P.y < 1.9 ? stand(style, tc, P) : dive(style, tc, P, 0);
 }
 
 // ───────────────────────────── the keeper in time ─────────────────────────────
@@ -554,40 +669,108 @@ export type KeeperState = {
   joints: Joints;
   /** he has tipped, parried or grabbed it: freeze the dive where it is */
   done: boolean;
+  /** getting up after a dive, 0 (on the ground) to 1 (on his feet), and the pose he lay in */
+  rise: number;
+  lie: Pose | null;
+  /** seconds he has spent watching you aim this kick, and when (if ever) he'll show a bait lean */
+  aimT: number;
+  baitAt: number;
+  baitEnd: number;
+  bait: -1 | 0 | 1;
+  rolled: boolean;
 };
 
 export function newKeeper(): KeeperState {
   const cur = readyPose(0, 0, 0, 0);
-  return { x: 0, vx: 0, lean: 0, ph: 0, plan: null, tk: 0, cur, joints: solve(cur), done: false };
+  return { x: 0, vx: 0, lean: 0, ph: 0, plan: null, tk: 0, cur, joints: solve(cur), done: false, rise: 1, lie: null, aimT: 0, baitAt: Infinity, baitEnd: 0, bait: 0, rolled: false };
 }
 
 const easeOut = (u: number) => 1 - (1 - u) * (1 - u);
 const easeOut3 = (u: number) => 1 - Math.pow(1 - u, 3);
 const easeIO = (u: number) => u * u * (3 - 2 * u);
+const same = (e: number) => ({ hip: e, hands: e, feet: e, th: e });
+const RISE = 0.95; // seconds to get up from a dive
 
-/** on the line before a kick: shuffling, leaning toward where you seem to be aiming */
-export function keeperIdle(k: KeeperState, dt: number, aimX: number, tell: number, active: boolean) {
+export type IdleOpts = {
+  /** -1..1: where he has noticed you shoot (see favourite()); he stands a little that way */
+  bias?: number;
+  /** for his one bait lean per kick; without it he never baits */
+  rnd?: Rnd;
+};
+
+/** on the line before a kick: shuffling, leaning toward where you seem to be aiming and where you usually do */
+export function keeperIdle(k: KeeperState, dt: number, aimX: number, tell: number, active: boolean, o: IdleOpts = {}) {
   k.ph += dt;
+  if (k.plan) {
+    // the kick is over: if he went to ground, he gets up from where he lies
+    if (k.plan.start && k.plan.mode === "dive") {
+      k.lie = k.cur;
+      k.rise = 0;
+      k.x = k.cur[I.hx];
+      k.vx = 0;
+    }
+    k.plan = null;
+    k.done = false;
+    k.aimT = 0;
+    k.bait = 0;
+    k.baitAt = Infinity;
+    k.rolled = false;
+  }
+  if (!k.rolled && o.rnd) {
+    k.rolled = true;
+    k.baitAt = o.rnd() < 0.4 ? 1.3 + o.rnd() * 1.3 : Infinity;
+  }
+  if (active) k.aimT += dt;
+  if (active && k.bait === 0 && k.aimT > k.baitAt) {
+    k.bait = Math.abs(aimX) > 0.8 ? ((-Math.sign(aimX)) as -1 | 1) : o.rnd && o.rnd() < 0.5 ? -1 : 1;
+    k.baitEnd = k.aimT + 1.4;
+    k.baitAt = Infinity;
+  }
+  if (k.bait !== 0 && (!active || k.aimT > k.baitEnd)) k.bait = 0;
+
+  const bias = o.bias ?? 0;
   const wander = Math.sin(k.ph * 1.15) * 0.34 + Math.sin(k.ph * 0.47 + 1) * 0.14;
   const readX = active ? clamp(aimX / GW, -1, 1) * (0.5 * tell) : 0;
-  const goal = wander * (1 - 0.6 * tell) + readX * 0.6;
+  let goal = wander * (1 - 0.6 * tell) + readX * 0.6 + bias * 0.3;
+  let leanGoal = clamp(readX * 1.4 + bias * 0.5 + k.vx * 0.6, -1, 1);
+  // the bait is a step and a lean, quicker than his usual shuffle so it reads as a choice
+  const rate = k.bait !== 0 ? 4.5 : 2.2;
+  if (k.bait !== 0) {
+    goal = k.bait * 0.65;
+    leanGoal = k.bait;
+  }
+
+  if (k.rise < 1 && k.lie) {
+    k.rise = Math.min(1, k.rise + dt / RISE);
+    const r = k.rise;
+    const prev = k.x;
+    // on his feet he walks back toward where he stands
+    if (r > 0.5) k.x += clamp(goal - k.x, -1.7 * dt, 1.7 * dt);
+    k.vx = (k.x - prev) / Math.max(dt, 1e-3);
+    const rdy = readyPose(k.x, k.ph, 0, k.vx);
+    const kneel = kneelPose(k.x, k.lie[I.th] < 0 ? -1 : 1);
+    k.cur = r < 0.42 ? lerpPose(k.lie, kneel, same(easeIO(r / 0.42))) : lerpPose(kneel, rdy, same(easeOut((r - 0.42) / 0.58)));
+    k.joints = solve(k.cur);
+    if (r >= 1) k.lie = null;
+    return;
+  }
+
   const prev = k.x;
-  k.x += (goal - k.x) * Math.min(1, dt * 2.2);
+  k.x += (goal - k.x) * Math.min(1, dt * rate);
   k.vx = (k.x - prev) / Math.max(dt, 1e-3);
-  k.lean += (clamp(readX * 1.4 + k.vx * 0.6, -1, 1) - k.lean) * Math.min(1, dt * 3);
+  k.lean += (leanGoal - k.lean) * Math.min(1, dt * 3);
   const rdy = readyPose(k.x, k.ph, k.lean, k.vx);
-  // settle back from wherever the last dive left him
+  // settle back from wherever the last kick left him
   const f = Math.min(1, dt * 4.5);
   k.cur = k.cur.map((v, i) => v + (rdy[i] - v) * f);
   k.joints = solve(k.cur);
-  k.plan = null;
-  k.done = false;
 }
 
 export function keeperStartPlan(k: KeeperState, plan: Plan) {
   k.plan = plan;
   k.tk = 0;
   k.done = false;
+  k.bait = 0;
 }
 
 /** advance a plan by dt and set his pose */
@@ -597,24 +780,24 @@ export function keeperRun(k: KeeperState, dt: number) {
   const p = k.plan;
   if (!p || k.done) return;
   if (k.tk < p.tc) {
-    // still reading: shuffle on, watching the ball
-    const goal = Math.sin(k.ph * 1.6) * 0.1;
-    const prev = k.x;
-    k.x += (goal - k.x) * Math.min(1, dt * 2);
-    k.vx = (k.x - prev) / Math.max(dt, 1e-3);
-    const rdy = readyPose(k.x, k.ph, k.lean, k.vx);
-    k.cur = rdy;
-    k.joints = solve(rdy);
+    // still deciding: he sinks into the set position as the kicker arrives, and if he has made up his mind, his weight goes that way
+    const set = easeOut(clamp(k.tk / (RUNUP * 0.9), 0, 1));
+    const shift = p.tip * easeIO(clamp((k.tk - (p.tc - 0.12)) / 0.12, 0, 1));
+    const sway = Math.sin(k.ph * 1.6) * 0.03 * (1 - set);
+    k.vx = 0;
+    k.cur = readyPose(k.x + sway, k.ph, k.lean * (1 - set) + shift * 0.9, 0, set);
+    k.joints = solve(k.cur);
     return;
   }
   if (!p.start) {
     p.start = k.cur;
-    p.final = p.mode === "stand" ? bigPose(k.x) : divePose(k.x, p.P);
+    p.final = p.mode === "stand" ? holdPose(k.x, p.P) : divePose(k.x, p.P, p.v);
     p.x0 = k.x;
   }
   const u = clamp((k.tk - p.tc) / p.D, 0, 1);
+  // a dive pushes off first, so the hips start slower than they finish
   const e = {
-    hip: easeOut(u),
+    hip: 0.55 * easeOut(u) + 0.45 * easeIO(u),
     hands: easeOut3(clamp(u * 1.18, 0, 1)),
     feet: easeIO(u) * 0.85 + easeOut(u) * 0.15,
     th: easeOut(u),
@@ -622,7 +805,7 @@ export function keeperRun(k: KeeperState, dt: number) {
   let pose = lerpPose(p.start, p.final!, e);
   if (p.mode === "dive") {
     // a push-off: up before down
-    const jump = (p.P.y > 1.7 ? 0.28 : 0.16) * Math.sin(Math.PI * u) * Math.min(1, Math.abs(p.P.x - p.x0) / 0.8 + 0.5);
+    const jump = (p.P.y > 1.7 ? 0.28 : 0.16) * p.v.jump * Math.sin(Math.PI * u) * Math.min(1, Math.abs(p.P.x - p.x0) / 0.8 + 0.5);
     pose = pose.slice();
     pose[I.hy] += jump;
     pose[I.fay] += jump * 1.1;
@@ -655,4 +838,86 @@ export function missWhy(st: Strike, end: Vec): "TOO HARD" | "TOO SOFT" | "OFF TA
   if (power > shot.sweet + shot.width || (shot.id !== "panenka" && power > 0.88 && end.y > GH)) return "TOO HARD";
   if (power < shot.sweet - shot.width) return "TOO SOFT";
   return "OFF TARGET";
+}
+
+// ───────────────────────────── what a touch or a crossing means ─────────────────────────────
+
+export type Resolution =
+  | { kind: "graze" }
+  | { kind: "stop"; how: "held" | "tip" | "parry" | "foot" | "block"; detail: string; hand: 0 | 1 };
+
+/**
+ * The ball meets some part of him. Fingertips only slow and bend it; a glove
+ * that is slow enough to hold, holds; a hand otherwise parries (or tips it
+ * over); anything else just blocks it. Sets the ball's new velocity.
+ */
+export function resolveContact(b: Ball, st: Strike, j: Joints, c: Contact, grazed: boolean, rnd: Rnd): Resolution {
+  const sp = Math.hypot(b.vx, b.vy, b.vz);
+  const hand = c.kind === "glove" || c.kind === "arm";
+  // the rim of a glove only slows and bends a hard ball; a soft one is knocked away
+  if (c.kind === "glove" && c.edge > 0.8 && !grazed && sp >= 13) {
+    b.vz *= 0.6;
+    b.vx += c.nx * 2.8;
+    b.vy += c.ny * 2.8;
+    return { kind: "graze" };
+  }
+  // a slow ball is held, a hard one is not: the chance of holding it falls from sure at 11 m/s to none at 19
+  if (c.kind === "glove" && c.edge < 0.62 && st.shot.id !== "knuckle" && rnd() < clamp((19 - sp) / 8, 0, 1)) {
+    b.vx = b.vy = b.vz = 0;
+    return { kind: "stop", how: "held", detail: "SAFE HANDS", hand: c.hand };
+  }
+  if (hand) {
+    const tip = b.y > 1.85 && j.hA[1] > 1.9 && c.ny > 0.1;
+    if (tip) {
+      b.vy = 4.2 + rnd() * 1.5;
+      b.vz = -sp * 0.1;
+      b.vx = c.nx * 2 + (b.x > 0 ? 1 : -1) * 1.2;
+      return { kind: "stop", how: "tip", detail: "TIPPED OVER THE BAR", hand: c.hand };
+    }
+    b.vx = c.nx * sp * 0.3 + (b.x > 0 ? 1 : -1) * 1.5;
+    b.vy = c.ny * sp * 0.25 + 1.5;
+    b.vz = -sp * 0.2;
+    return { kind: "stop", how: "parry", detail: st.shot.id === "knuckle" ? "PARRIED, IT MOVED IN HIS HANDS" : "PARRIED AWAY", hand: c.hand };
+  }
+  b.vx = c.nx * sp * 0.22 + (rnd() - 0.5) * 2;
+  b.vy = Math.abs(c.ny) * sp * 0.15 + 1;
+  b.vz = -sp * 0.18;
+  return { kind: "stop", how: c.kind === "leg" ? "foot" : "block", detail: c.kind === "leg" ? "SAVED WITH HIS FOOT" : "BLOCKED", hand: 0 };
+}
+
+/** A kick that was going over the bar or wide was never going in: he cannot save it, so it is a miss whatever his glove does. */
+export function missesFrame(st: Strike) {
+  return Math.abs(st.end.x) > GW + 0.05 || st.end.y > GH + 0.05;
+}
+
+/** What the ball did at the goal line, if nothing stopped it. */
+export function atLineResult(b: { x: number; y: number }, st: Strike, plan: Plan | null, grazed: boolean): { result: "goal" | "post" | "miss"; detail: string } {
+  const onFrame = (Math.abs(Math.abs(b.x) - GW) < 0.16 && b.y < GH + 0.1) || (Math.abs(b.y - GH) < 0.14 && Math.abs(b.x) < GW + 0.1);
+  if (onFrame) return { result: "post", detail: Math.abs(b.y - GH) < 0.14 ? "OFF THE BAR" : "OFF THE POST" };
+  if (Math.abs(b.x) > GW || b.y > GH) return { result: "miss", detail: st.shot.id === "panenka" && b.y > GH ? "TOO MUCH LOFT" : missWhy(st, { x: b.x, y: b.y }) };
+  let d = "";
+  if (grazed) d = "FINGERTIPS, BUT NOT ENOUGH";
+  else if (plan && plan.mode === "dive" && Math.abs(b.x) > 1.05 && Math.sign(plan.P.x - plan.x0) !== Math.sign(b.x)) d = "WRONG-FOOTED";
+  else if (st.shot.id === "panenka") d = plan && plan.mode === "dive" ? "HE WENT EARLY" : "PANENKA";
+  else if (plan && plan.mode === "stand" && Math.abs(b.x) > 1.4) d = "HE NEVER MOVED";
+  else d = { placed: "PLACED", driven: "BLASTED IN", curlL: "BENT IN", curlR: "BENT IN", dipper: "DIPPED UNDER THE BAR", knuckle: "KNUCKLEBALL", panenka: "PANENKA" }[st.shot.id];
+  return { result: "goal", detail: d };
+}
+
+/** he takes note of where a kick went (or was pointed, if it missed the frame) */
+export function remember(brain: Brain, result: "goal" | "save" | "miss" | "post", st: Strike, ballX: number, ballY: number) {
+  if (result !== "miss") brain.hist.push({ side: sideOf(ballX), high: ballY > 1.3, shot: st.shot.id, x: ballX, y: ballY });
+  else brain.hist.push({ side: sideOf(st.aim.x), high: st.aim.y > 1.3, shot: st.shot.id, x: st.aim.x, y: st.aim.y });
+}
+
+/**
+ * What the save says on screen. A read, a lucky guess and a bait each say so,
+ * but only when his dive was where the ball went: a body in the way of a ball
+ * he was not going for is just a block, whatever he had planned.
+ */
+export function saveNote(plan: Plan | null, at: Vec, detail: string): string {
+  if (!plan || plan.style === "react") return detail;
+  const near = Math.hypot(plan.P.x - at.x, plan.P.y - at.y) < 1.1;
+  if (!near) return detail;
+  return { read: "HE READ IT", wait: "HE WAITED FOR IT", bait: "HE BAITED YOU", gamble: "GUESSED RIGHT" }[plan.style];
 }
