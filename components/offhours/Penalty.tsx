@@ -8,8 +8,8 @@ import { useRemote } from "@/lib/link/remote";
 import { isPhoneShot, kickFromSwipe, parseKick, type PhoneShot } from "./penaltyRemote";
 import {
   BALL_R, GH, GOAL_Z, GW, KEEPER_Z, NET_Z, RUNUP, SHOTS, SPOT_Z,
-  clamp, contact, glovePos, keeperIdle, keeperRun, keeperStartPlan, launch, makeStrike, newBall, newKeeper,
-  missWhy, shotById, spinBall, stepBall, think,
+  atLineResult, clamp, contact, favourite, glovePos, keeperIdle, keeperRun, keeperStartPlan, launch, makeStrike, newBall, newKeeper,
+  missesFrame, remember, resolveContact, saveNote, shotById, spinBall, stepBall, tellOf, think,
   type Ball, type Brain, type Contact, type Joints, type ShotId, type Strike,
 } from "./penaltyModel";
 
@@ -197,8 +197,8 @@ export default function Penalty({ mode, paused }: PieceProps) {
     s.wrong = false;
     s.ball = newBall();
     const k = s.keeper;
-    const tell = clamp((s.dwell - 0.8) / 3, 0, 1);
-    keeperStartPlan(k, think(s.brain, difficulty(s), st, play ? tell : 0, k.x, Math.random));
+    // how long the reticle sat still (charging counts: a still hand is a settled aim) is all he knows of where you meant it
+    keeperStartPlan(k, think(s.brain, difficulty(s), st, play ? tellOf(s.dwell) : 0, k.x, Math.random, { bait: k.bait }));
     s.phase = "run";
     s.timer = 0;
     s.acc = 0;
@@ -238,17 +238,15 @@ export default function Penalty({ mode, paused }: PieceProps) {
   function end(s: typeof S.current, r: Kick, t: number, detail: string, bounce = true) {
     s.result = r;
     s.resultT = t;
-    // a save his read decided says so
-    if (r === "save" && s.keeper.plan?.style === "read") detail = "HE READ IT";
+    // a save he planned (a read, a bet that came off, a bait) says so; a body in the way does not
+    if (r === "save") detail = saveNote(s.keeper.plan, { x: s.ball.x, y: s.ball.y }, detail);
     s.detail = detail;
     s.kicks.push(r);
     s.phase = "after";
     s.timer = 0;
     const b = s.ball;
     const st = s.strike!;
-    const side = b.x < -1.05 ? -1 : b.x > 1.05 ? 1 : 0;
-    if (r !== "miss") s.brain.hist.push({ side: side as -1 | 0 | 1, high: s.lastTarget.y > 1.3, shot: st.shot.id });
-    else s.brain.hist.push({ side: (st.aim.x < -1.05 ? -1 : st.aim.x > 1.05 ? 1 : 0) as -1 | 0 | 1, high: st.aim.y > 1.3, shot: st.shot.id });
+    remember(s.brain, r, st, b.x, b.y);
     if (r === "goal") {
       s.flash = 1.4;
       s.shake = 1;
@@ -285,65 +283,22 @@ export default function Penalty({ mode, paused }: PieceProps) {
 
   // the ball meets some part of the keeper
   const resolve = (s: typeof S.current, c: Contact, t: number) => {
-    const b = s.ball;
-    const st = s.strike!;
-    const sp = Math.hypot(b.vx, b.vy, b.vz);
-    const j = s.keeper.joints;
-    const hand = c.kind === "glove" || c.kind === "arm";
-    if (c.kind === "glove" && c.edge > 0.8 && !s.graze) {
+    const r = resolveContact(s.ball, s.strike!, s.keeper.joints, c, s.graze, Math.random);
+    if (r.kind === "graze") {
       // fingertips: slowed and bent, but still going
       s.graze = true;
-      b.vz *= 0.6;
-      b.vx += c.nx * 2.8;
-      b.vy += c.ny * 2.8;
       sfx("glove");
       s.shake = 0.3;
       return;
     }
-    if (c.kind === "glove" && sp < 15.5 && c.edge < 0.62 && st.shot.id !== "knuckle") {
-      s.held = c.hand;
-      b.vx = b.vy = b.vz = 0;
-      end(s, "save", t, "SAFE HANDS", false);
-      return;
-    }
-    if (hand) {
-      const tip = b.y > 1.85 && j.hA[1] > 1.9 && c.ny > 0.1;
-      if (tip) {
-        b.vy = 4.2 + Math.random() * 1.5;
-        b.vz = -sp * 0.1;
-        b.vx = c.nx * 2 + (b.x > 0 ? 1 : -1) * 1.2;
-        end(s, "save", t, "TIPPED OVER THE BAR", false);
-      } else {
-        b.vx = c.nx * sp * 0.3 + (b.x > 0 ? 1 : -1) * 1.5;
-        b.vy = c.ny * sp * 0.25 + 1.5;
-        b.vz = -sp * 0.2;
-        end(s, "save", t, st.shot.id === "knuckle" ? "PARRIED, IT MOVED IN HIS HANDS" : "PARRIED AWAY", false);
-      }
-      return;
-    }
-    b.vx = c.nx * sp * 0.22 + (Math.random() - 0.5) * 2;
-    b.vy = Math.abs(c.ny) * sp * 0.15 + 1;
-    b.vz = -sp * 0.18;
-    end(s, "save", t, c.kind === "leg" ? "SAVED WITH HIS FOOT" : "BLOCKED", false);
+    if (r.how === "held") s.held = r.hand;
+    end(s, "save", t, r.detail, false);
   };
 
   // what happened at the line
   const atLine = (s: typeof S.current, t: number) => {
-    const b = s.ball;
-    const st = s.strike!;
-    const onFrame = (Math.abs(Math.abs(b.x) - GW) < 0.16 && b.y < GH + 0.1) || (Math.abs(b.y - GH) < 0.14 && Math.abs(b.x) < GW + 0.1);
-    if (onFrame) end(s, "post", t, Math.abs(b.y - GH) < 0.14 ? "OFF THE BAR" : "OFF THE POST");
-    else if (Math.abs(b.x) > GW || b.y > GH) end(s, "miss", t, st.shot.id === "panenka" && b.y > GH ? "TOO MUCH LOFT" : missWhy(st, { x: b.x, y: b.y }), false);
-    else {
-      const plan = s.keeper.plan;
-      let d = "";
-      if (s.graze) d = "FINGERTIPS, BUT NOT ENOUGH";
-      else if (plan && plan.mode === "dive" && Math.abs(b.x) > 1.05 && Math.sign(plan.P.x - plan.x0) !== Math.sign(b.x)) d = "WRONG-FOOTED";
-      else if (st.shot.id === "panenka") d = "PANENKA";
-      else if (plan && plan.mode === "stand" && Math.abs(b.x) > 1.4) d = "HE NEVER MOVED";
-      else d = { placed: "PLACED", driven: "BLASTED IN", curlL: "BENT IN", curlR: "BENT IN", dipper: "DIPPED UNDER THE BAR", knuckle: "KNUCKLEBALL" }[st.shot.id];
-      end(s, "goal", t, d, false);
-    }
+    const r = atLineResult(s.ball, s.strike!, s.keeper.plan, s.graze);
+    end(s, r.result, t, r.detail, r.result === "post");
   };
 
   // A linked phone: penalty-kick is a swipe to kick with, penalty-shot its shot
@@ -359,6 +314,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
           // a swipe still in flight when the last kick landed shouldn't skip the result
           if (s.now - s.overT > 1.2) {
             s.kicks = [];
+            s.brain = { hist: [] };
             s.phase = "aim";
             setStatus("New shootout.");
           }
@@ -453,7 +409,8 @@ export default function Penalty({ mode, paused }: PieceProps) {
       }
       if (s.phase === "aim") {
         const moved = Math.hypot(s.aim.x - s.anchor.x, s.aim.y - s.anchor.y);
-        if (moved > 0.4 || s.charging) {
+        // a reticle that stays put is a tell, charging or not: he sees what you settled on
+        if (moved > 0.4) {
           s.anchor = { ...s.aim };
           s.dwell = 0;
         } else s.dwell += dt;
@@ -470,8 +427,9 @@ export default function Penalty({ mode, paused }: PieceProps) {
       // --- the kick
       const k = s.keeper;
       if (s.phase === "aim" || s.phase === "over") {
-        const tell = play ? clamp((s.dwell - 0.8) / 3, 0, 1) : 0;
-        keeperIdle(k, sdt, s.aim.x, tell, play && s.phase === "aim");
+        const tell = play ? tellOf(s.dwell) : 0;
+        // in play he leans toward where you have been shooting this shootout, and now and then shows a bait lean
+        keeperIdle(k, sdt, s.aim.x, tell, play && s.phase === "aim", play ? { bias: favourite(s.brain, difficulty(s)), rnd: Math.random } : {});
         s.dolly = Math.max(0, s.dolly - dt * 1.4);
         // the ball waits on the spot
         if (s.phase === "aim") s.ball = Object.assign(s.ball, { x: 0, y: BALL_R, z: SPOT_Z, vx: 0, vy: 0, vz: 0 });
@@ -498,7 +456,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
           spinBall(b, st.h);
           if (!s.contactDone && pz < KEEPER_Z && b.z >= KEEPER_Z) {
             s.contactDone = true;
-            const c = contact(k.joints, b.x, b.y);
+            const c = missesFrame(st) ? null : contact(k.joints, b.x, b.y);
             if (c) resolve(s, c, t);
           }
           if (s.phase === "fly" && pz < GOAL_Z && b.z >= GOAL_Z) atLine(s, t);
@@ -559,6 +517,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
               bestFive = Math.max(bestFive, s.kicks.slice(0, 5).filter((x) => x === "goal").length);
             } else {
               s.kicks = [];
+              s.brain = { hist: [] };
               s.phase = "aim";
             }
           } else s.phase = "aim";
@@ -648,6 +607,7 @@ export default function Penalty({ mode, paused }: PieceProps) {
           // the screen has to have been seen: a late tap from the last kick doesn't skip it
           if (s.now - s.overT <= OVER_GUARD) return;
           s.kicks = [];
+          s.brain = { hist: [] };
           s.phase = "aim";
           setStatus("New shootout.");
           return;
