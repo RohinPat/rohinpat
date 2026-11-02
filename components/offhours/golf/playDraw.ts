@@ -281,13 +281,13 @@ function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: num
   if (project(cam, ring.x, 0.03, ring.z, pp) && pp.y > 40) tag(ctx, pp.x, pp.y - Math.max(10, 3 * pp.s), `${Math.round(ring.yd)} YD`, 1, w);
 }
 
-/** when the ball is below the bottom of the picture (the raised camera), a marker where it is, with how far back it lies */
+/** when the ball is below the bottom of the picture (the raised camera), a marker pointing down to it */
 function ballMarker(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number, h: number) {
   const seen = project(cam, g.ball[0], 0.03, g.ball[1], pp);
   if (seen && pp.y < h - 96 && pp.y > 0 && pp.x > 0 && pp.x < w) return;
   const x = clamp(seen ? pp.x : w / 2, 110, w - 110);
   const y = h - 150;
-  const text = `BALL · ${Math.round(g.yardsToPin())} YD BACK`;
+  const text = "BALL";
   mono(ctx, 10);
   const tw = ctx.measureText(text).width + 34;
   ctx.fillStyle = "rgba(13,16,14,0.82)";

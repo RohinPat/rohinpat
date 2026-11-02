@@ -581,14 +581,14 @@ describe("the aim line and the carry ring", () => {
     expect(b.texts).toEqual(a.texts);
     expect(b.arcs.length).toBe(a.arcs.length);
   });
-  it("a marker says where the ball is when the raised camera has it below the picture, with how far back it lies; not on the long-shot view", () => {
+  it("a marker points to the ball when the raised camera has it below the picture; not on the long-shot view", () => {
     const rec = recordingCtx();
     const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
     g.key({ key: " " }, true);
     g.w = 1440;
     g.h = 900;
     paint(rec.ctx, g, 1440, 900, 1 / 60, ptr);
-    expect(rec.texts).toContain("BALL · 135 YD BACK");
+    expect(rec.texts).toContain("BALL");
     const t = recordingCtx();
     const tee = new CourseGame({ seed: 5 });
     tee.key({ key: " " }, true);
@@ -603,7 +603,7 @@ describe("the aim line and the carry ring", () => {
     ph.w = 390;
     ph.h = 700;
     paint(m.ctx, ph, 390, 700, 1 / 60, ptr);
-    expect(m.texts).toContain("BALL · 135 YD BACK");
+    expect(m.texts).toContain("BALL");
   });
 });
 
