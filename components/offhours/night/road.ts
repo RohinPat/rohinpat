@@ -1,5 +1,5 @@
 import { ENGINE_CAL } from "../engineRemote";
-import { seeded } from "../useCanvas";
+import { seeded } from "../rng";
 import type { TrackId } from "./tracks";
 
 // The canyon road: built once, from a seed, so every visitor drives the same
