@@ -14,6 +14,8 @@ import type { TrackId } from "../night/tracks";
 
 /** a car's ghost fades out over this long once its run is over, s */
 const FADE_S = 0.9;
+/** how long a generation's cars take to spread out from the line, s */
+const SPREAD_S = 3;
 /**
  * A generation is over this long after its last new car stops. The elite are the same cars as last time, so they do not
  * keep it going: a generation whose children all crash in the first corner is a few seconds, however long the best
@@ -108,7 +110,8 @@ export class Playback {
       const gone = this.t - g.time;
       d.show = gone < FADE_S;
       if (!d.show) continue;
-      d.alpha = gone > 0 ? 1 - gone / FADE_S : 1;
+      // the whole field starts on one spot, and 24 see-through cars there add up to a solid block: they ease in as they spread
+      d.alpha = (gone > 0 ? 1 - gone / FADE_S : 1) * Math.min(1, 0.1 + this.t / SPREAD_S);
       samplePose(g, this.t, d.pose);
       pointAt(road, d.pose.s, d.pose.lat, d.world);
     }
