@@ -218,7 +218,9 @@ test.describe("phone controllers: golf's driving range", () => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
-    // the laptop opens on putting
+    // the laptop opens on Play, where the phone swings; on Putt it does not
+    await expect(host.getByTestId("golf-phone-hint")).toBeVisible(SLOW);
+    await stage(host).getByRole("button", { name: "Putt", exact: true }).click();
     await expect(host.getByTestId("golf-phone-hint")).toHaveCount(0);
     await expect(phone.getByRole("heading", { name: /putting is on the laptop/i })).toBeVisible();
     await stage(host).getByRole("button", { name: "Driving range" }).click();
@@ -232,6 +234,9 @@ test.describe("phone controllers: golf's driving range", () => {
     await phone.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
     const game = phone.getByRole("group", { name: "Game" });
+    // the laptop opens on Play: the phone shows its swing, and its Putt switch takes the laptop to putting
+    await game.getByRole("button", { name: "Putt" }).click();
+    await expect(stage(host).getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
     await expect(game.getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
     await game.getByRole("button", { name: "Driving range" }).click();
     await expect(stage(host).getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");

@@ -18,6 +18,10 @@ const axe = (p: Page) => new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2a
 
 test("putt: Alt+arrow is taken for the fine aim step, axe is clean", async ({ page }) => {
   await openGolf(page);
+  // Play opens first; Putt is practice
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Putt", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Putt", exact: true })).toHaveAttribute("aria-pressed", "true");
   const canvas = page.locator("canvas[data-autofocus]");
   await canvas.focus();
   // Alt+arrow is a fine aim step, so the browser's Alt+Left (back) must not run: the key is taken

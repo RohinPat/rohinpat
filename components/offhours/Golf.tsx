@@ -213,6 +213,11 @@ export default function Golf({ mode, paused }: PieceProps) {
           <button type="button" aria-pressed={kind === "range"} onClick={() => pick("range")} className={chip(kind === "range")}>
             Driving range
           </button>
+          {kind === "play" && phase !== "putt" && (
+            <button type="button" aria-pressed={mapOpen} onClick={() => course.current?.game.toggleMap()} className={sub(mapOpen)}>
+              Map
+            </button>
+          )}
           {kind === "putt" && (
             <div className="flex items-center gap-1 ml-auto">
               <button
@@ -260,10 +265,6 @@ export default function Golf({ mode, paused }: PieceProps) {
                 </button>
               ) : (
                 <>
-                  <button type="button" aria-pressed={mapOpen} onClick={() => course.current?.game.toggleMap()} className={sub(mapOpen)}>
-                    Map
-                  </button>
-                  <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true" />
                   {CLUBS.map((c, i) => (
                     <button
                       key={c.id}
