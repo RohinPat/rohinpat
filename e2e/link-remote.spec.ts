@@ -74,7 +74,7 @@ test.describe("phone controllers: opening games", () => {
 
     await list.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
-    await expect(stage(host).getByRole("heading", { name: "Putt, drive, read" })).toBeVisible();
+    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toBeVisible();
     // it grew out of the tile: the stage opens with a clip-path animation
     await expect(phone.getByTestId("golf-controller")).toBeVisible();
 
@@ -90,11 +90,11 @@ test.describe("phone controllers: opening games", () => {
   test("Back then straight into another game opens it, and it stays open", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host).getByRole("heading", { name: "Putt, drive, read" })).toBeVisible(SLOW);
+    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toBeVisible(SLOW);
     // the phone is back on its list at once, while the laptop is still animating golf away
     await phone.getByTestId("phone-back").click();
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host).getByRole("heading", { name: "Putt, drive, read" })).toHaveCount(0, SLOW);
+    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toHaveCount(0, SLOW);
     await expect(stage(host)).toBeVisible(SLOW);
     await host.waitForTimeout(1500);
     await expect(stage(host)).toBeVisible();

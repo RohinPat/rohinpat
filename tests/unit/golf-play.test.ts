@@ -473,8 +473,9 @@ describe("reading the hole from the tee", () => {
     expect(liftFor(252)).toBe(0);
     expect(liftFor(135)).toBe(1);
     expect(liftFor(75)).toBe(1);
-    expect(liftFor(175)).toBeGreaterThan(0);
-    expect(liftFor(175)).toBeLessThan(1);
+    expect(liftFor(195)).toBeGreaterThan(0);
+    expect(liftFor(195)).toBeLessThan(1);
+    expect(liftFor(175)).toBe(1);
     g.key({ key: " " }, true);
     g.wind = [0, 0];
     g.remoteSwing(PURE);

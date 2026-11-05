@@ -41,6 +41,7 @@ export function playDraw(ctx: CanvasRenderingContext2D, g: CourseGame, w: number
 export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer) {
   const reduce = !!g.opts.reduce;
   if (g.phase === "putt" || (g.phase === "hole-card" && g.putt.course && g.putt.ball.sunk)) {
+    g.mapView = null;
     puttLayout(g.putt, w, h, true);
     puttPaint(ctx, g.putt, w, h, g.t, { play: true, say: () => {}, reduce }, pointer);
     if (g.phase === "putt") puttPrompt(ctx, g, w, h);
@@ -58,8 +59,8 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
 // ------------------------------------------------------------ camera
 type Rig = { dx: number; dy: number; dz: number; tx: number; ty: number; tz: number; F: number };
 
-/** how much the camera rises for a shot to a target this far away (yd): none from 200 yd or more, all of it inside 150 */
-export const liftFor = (yd: number) => smooth(clamp((200 - yd) / 50, 0, 1));
+/** how much the camera rises for a shot to a target this far away (yd): none from 205 yd or more, all of it inside 180 */
+export const liftFor = (yd: number) => smooth(clamp((205 - yd) / 25, 0, 1));
 /** the height of the raised camera, m, and how far behind the ball it stands */
 const HIGH = 44, HIGH_BACK = 16;
 /** the raised camera is zoomed until the green is this tall on screen, px, as far as the width allows (about 52 m across) */
@@ -101,12 +102,13 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
     const look = clamp(hz + 35, 45, Math.max(45, dm));
     lo = { ex: -a[0] * 12 + rt[0] * off, ey: 14, ez: -a[2] * 12 + rt[2] * off, tx: a[0] * look, ty: 0, tz: a[2] * look, F: F0 * 1.1 };
   }
-  const k = liftFor(yd);
+  // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
+  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
   if (k <= 0) return { dx: bx + lo.ex, dy: lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lo.ty, tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
   const rng = Math.hypot(HIGH, D);
-  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 3600);
+  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 4400);
   const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
   const m = (p: number, q: number) => p + (q - p) * k;
   return { dx: bx + m(lo.ex, hi.ex), dy: m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx: bx + m(lo.tx, hi.tx), ty: m(lo.ty, hi.ty), tz: bz + m(lo.tz, hi.tz), F: m(lo.F, hi.F) };
