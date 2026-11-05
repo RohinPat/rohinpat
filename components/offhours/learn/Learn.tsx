@@ -244,6 +244,7 @@ export default function Learn({ paused, onRace }: { paused?: boolean; onRace: (g
             el.dataset.link = s.link.kind;
             el.dataset.dist = String(Math.round(pb.scene.car.s));
             el.dataset.alive = String(pb.driving);
+            el.dataset.rate = String(pb.rate);
             el.dataset.quality = String(q.level);
           }
         }
