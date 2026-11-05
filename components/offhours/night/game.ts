@@ -102,6 +102,11 @@ let runsDone = 0;
 /** What a rail incident costs, s: a base, and more the harder the first touch (`into`, m/s, the speed into the rail), at most the cap. A brush costs about the base and a flat-out hit seconds. */
 export const railPenalty = (run: { railPenaltyS: number; railPerMs2: number; railPenaltyMaxS: number }, into: number) => Math.min(run.railPenaltyMaxS, run.railPenaltyS + run.railPerMs2 * into * into);
 export const getBestRun = (track: TrackId = "canyon") => bestRuns[track] ?? null;
+/** A run to race in place of your best: the best car Learn mode has bred (memory only; the Cars piece sets it and clears it). */
+let rival: { track: TrackId; ghost: Ghost } | null = null;
+export const setRival = (ghost: Ghost | null, track: TrackId = "canyon") => {
+  rival = ghost ? { track, ghost } : null;
+};
 export const getBestScore = (track: TrackId = "canyon") => bestScores[track] ?? 0;
 export const forgetBestRun = () => {
   delete bestRuns.canyon;
@@ -705,7 +710,7 @@ export class NightGame {
       bestScore,
       prevBestScore,
       vsTargetS: finished ? run.time + this.railS - this.target.ghost.time : null,
-      vsGhostS: finished ? run.time - this.target.rival.time : null,
+      vsGhostS: finished ? run.time - this.opponent().time : null,
       medals: medalsAt(score, this.track.medals),
       bestMedals: medalsAt(bestScore, this.track.medals),
       next: nextMedal(bestScore, this.track.medals),
@@ -713,6 +718,11 @@ export class NightGame {
     this.phase = "done";
     this.phaseT = 0;
     this.onEvent({ kind: "end", result: this.result });
+  }
+
+  /** the run the gap box measures against: the learner being raced, else the pilot's rival */
+  private opponent(): Ghost {
+    return rival && rival.track === this.track.id ? rival.ghost : this.target.rival;
   }
 
   /** copy the car and the ghosts into the scene the renderer reads */
@@ -740,12 +750,15 @@ export class NightGame {
 
     const t = this.phase === "run" || this.phase === "done" ? this.clock : 0;
     const tg = sc.ghosts[0];
-    samplePose(this.target.rival, t, tg.pose);
-    tg.show = true;
+    // racing a learner (Learn's Race it): it is the ghost, and the pilot's rival sits this one out
+    const racing = rival && rival.track === this.track.id ? rival.ghost : null;
+    samplePose(racing ?? this.target.rival, t, tg.pose);
+    tg.show = !racing;
     tg.alpha = 1;
     pointAt(this.road, tg.pose.s, tg.pose.lat, tg.world);
     const bg = sc.ghosts[1];
-    const best = bestRuns[this.track.id] ?? null;
+    const best = racing ?? bestRuns[this.track.id] ?? null;
+    bg.kind = racing ? 3 : 1;
     bg.show = !!best;
     if (best) {
       samplePose(best, t, bg.pose);
@@ -754,7 +767,7 @@ export class NightGame {
 
     // against the target: time at this point of the road, and the gap
     if (this.phase === "run" && this.endWhy === null) {
-      const tt = timeAt(this.target.rival, c.s);
+      const tt = timeAt(this.opponent(), c.s);
       this.deltaOn = tt !== null && c.s > START_S + 30;
       if (tt !== null) {
         this.deltaS = this.clock - tt;
