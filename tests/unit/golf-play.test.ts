@@ -252,7 +252,7 @@ describe("the green", () => {
     expect(g.phase).toBe("round-card");
     expect(g.round).not.toBeNull();
     expect(g.round!.total).toBe(r.total);
-    expect(g.round!.par).toBe(7);
+    expect(g.round!.par).toBe(23);
     expect(g.round!.isBest).toBe(true);
     expect(g.round!.previous).toBeNull();
     // a press too soon is ignored (the key that holed it)
@@ -302,38 +302,48 @@ describe("repeatability and the idle player", () => {
 });
 
 describe("the bots: measured bands, pinned", () => {
-  // 30 seeded rounds each over holes 1 and 2 (par 7). The numbers in the PR are these.
+  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these.
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1));
+  const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
+  const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));
 
-  it("skilled (aim off by 0.03 rad, power by 8%): about par to par + 3, never stuck", { timeout: 60_000 }, () => {
+  it("skilled (aim off by 0.03 rad, power by 8%): par + 4 to par + 6, never stuck", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
-    const tot = mean(rs.map((r) => r.total));
-    expect(tot).toBeGreaterThanOrEqual(8.0);
-    expect(tot).toBeLessThanOrEqual(9.2);
-    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(7);
-    expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(14);
-    expect(mean(rs.map((r) => r.holes[0]))).toBeGreaterThanOrEqual(4.2);
-    expect(mean(rs.map((r) => r.holes[0]))).toBeLessThanOrEqual(5.1);
-    expect(mean(rs.map((r) => r.holes[1]))).toBeGreaterThanOrEqual(3.5);
-    expect(mean(rs.map((r) => r.holes[1]))).toBeLessThanOrEqual(4.4);
+    expect(total(rs)).toBeGreaterThanOrEqual(27);
+    expect(total(rs)).toBeLessThanOrEqual(29.5);
+    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(23);
+    expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(36);
+    // every hole is a par plus about one, none out of reach
+    rs[0].pars.forEach((par, h) => {
+      expect(holeMean(rs, h), `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.2);
+      expect(holeMean(rs, h), `hole ${h + 1}`).toBeLessThanOrEqual(par + 2);
+    });
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(2);
   });
 
-  it("the keyboard's three presses, played well: par + 1 to par + 4", { timeout: 60_000 }, () => {
-    const rs = rounds(BOTS.keyboard);
+  it("casual (aim off by 0.08 rad, power by 15%): par + 11 to par + 14, with a few pick-ups", { timeout: 90_000 }, () => {
+    const rs = rounds(BOTS.casual);
     expect(rs.every((r) => r.finished)).toBe(true);
-    const tot = mean(rs.map((r) => r.total));
-    expect(tot).toBeGreaterThanOrEqual(8.0);
-    expect(tot).toBeLessThanOrEqual(11);
+    expect(total(rs)).toBeGreaterThanOrEqual(34);
+    expect(total(rs)).toBeLessThanOrEqual(38);
+    expect(total(rs)).toBeGreaterThan(total(rounds(BOTS.skilled)) + 4);
+    expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(25);
   });
 
-  it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 60_000 }, () => {
+  it("the keyboard's three presses, played well, lands between skilled and casual", { timeout: 90_000 }, () => {
+    const rs = rounds(BOTS.keyboard);
+    expect(rs.every((r) => r.finished)).toBe(true);
+    expect(total(rs)).toBeGreaterThanOrEqual(30);
+    expect(total(rs)).toBeLessThanOrEqual(34);
+  });
+
+  it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.oneButton);
     expect(rs.every((r) => r.finished)).toBe(true);
     for (const r of rs) r.holes.forEach((s, i) => expect(s, `seed ${r.seed} hole ${i + 1}`).toBeLessThanOrEqual(r.pars[i] + 5));
     // the one press is the over-the-top swing: it is a long way from par
-    expect(mean(rs.map((r) => r.total))).toBeGreaterThan(14);
+    expect(total(rs)).toBeGreaterThan(40);
   });
 });
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, buildHole, type HoleDef, type Water } from "@/components/offhours/golf/course";
 import { GH, GW, zone } from "@/components/offhours/golf/green";
 import { DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
@@ -8,13 +8,50 @@ import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound,
 
 // The course's data, the lie table and the scoring: no screen, no clock.
 
+/** a point on a hazard that is inside it, yd */
+const inside = (w: Water): [number, number] => ("path" in w ? w.path[Math.floor(w.path.length / 2)] : [w.x, w.z]);
+/** where along the line (yd) the nearest point to (x, z) is, and how far off it (yd) */
+function along(def: HoleDef, x: number, z: number) {
+  const L = def.line;
+  let cum = 0, best = { s: 0, off: Infinity };
+  for (let i = 0; i < L.length - 1; i++) {
+    const dx = L[i + 1][0] - L[i][0], dz = L[i + 1][1] - L[i][1], l2 = dx * dx + dz * dz;
+    const u = Math.max(0, Math.min(1, ((x - L[i][0]) * dx + (z - L[i][1]) * dz) / l2));
+    const off = Math.hypot(x - (L[i][0] + dx * u), z - (L[i][1] + dz * u));
+    if (off < best.off) best = { s: cum + u * Math.sqrt(l2), off };
+    cum += Math.sqrt(l2);
+  }
+  return best;
+}
+/** the point at arc distance s along the line, yd */
+function pointAt(def: HoleDef, s: number): [number, number] {
+  const L = def.line;
+  for (let i = 0; i < L.length - 1; i++) {
+    const len = Math.hypot(L[i + 1][0] - L[i][0], L[i + 1][1] - L[i][1]);
+    if (s <= len || i === L.length - 2) return [L[i][0] + ((L[i + 1][0] - L[i][0]) * s) / len, L[i][1] + ((L[i + 1][1] - L[i][1]) * s) / len];
+    s -= len;
+  }
+  return L[0];
+}
+const MARKERS: Record<number, string[]> = {
+  1: ["100", "150", "150", "200", "200"],
+  2: ["100", "100"],
+  3: ["100", "100", "150", "200", "200"],
+  4: ["100", "100", "200"],
+  5: ["100", "100", "150", "150"],
+  6: ["100", "100", "150", "150", "200", "200"],
+};
+
 describe("course data", () => {
   for (const def of HOLE_DEFS) {
     const b = buildHole(def);
     describe(`hole ${def.n}, ${def.name}`, () => {
-      it("tee to pin is the yardage it is sold at, within 5 yards", () => {
-        const yd = Math.hypot(b.pin[0], b.pin[1]) / YD;
-        expect(Math.abs(yd - def.yards)).toBeLessThanOrEqual(5);
+      it("tee to pin, along the line, is the yardage it is sold at, within 5 yards (and a dogleg is not much shorter as the crow flies)", () => {
+        const a = along(def, def.pin[0], def.pin[1]);
+        expect(Math.abs(a.s - def.yards)).toBeLessThanOrEqual(5);
+        const crow = Math.hypot(b.pin[0], b.pin[1]) / YD;
+        expect(crow).toBeGreaterThan(def.yards * 0.9);
+        expect(crow).toBeLessThanOrEqual(def.yards + 1);
       });
       it("the pin is on the green, well inside its edge", () => {
         expect(b.surfaceAt(b.pin[0], b.pin[1])).toBe("green");
@@ -29,15 +66,27 @@ describe("course data", () => {
       });
       it("the tee is mown, with no sand or water near it", () => {
         expect(b.surfaceAt(0, 0)).toBe("fairway");
-        for (const blob of [...def.bunkers, ...def.water]) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(60);
+        for (const blob of def.bunkers) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(60);
+        for (const w of def.water) for (const [x, z] of "path" in w ? w.path : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(60);
       });
-      it("the line from tee to green is fairway all the way (no pond across it)", () => {
-        // both holes run straight down z
-        const lz = def.line[def.line.length - 1][1];
-        for (let z = 0; z < (lz - 12) * YD; z += 2) expect(["fairway", "fringe", "green"], `z ${(z / YD).toFixed(0)} yd`).toContain(b.surfaceAt(0, z));
+      it("the line from tee to green is fairway all the way, but for a creek across it and the sand round a green (no pond across it)", () => {
+        const end = along(def, def.pin[0], def.pin[1]).s - 30;
+        let wet = 0;
+        for (let d = 0; d < end; d += 2) {
+          const [x, z] = pointAt(def, d);
+          const sf = b.surfaceAt(x * YD, z * YD);
+          if (sf === "water") wet++;
+          else expect(["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
+        }
+        // only hole 4's creek is across the line, 14 yd of it
+        expect(wet > 0).toBe(def.n === 4);
+        if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
       });
       it("every hazard is where it says it is", () => {
-        for (const w of def.water) expect(b.surfaceAt(w.x * YD, w.z * YD)).toBe("water");
+        for (const w of def.water) {
+          const [x, z] = inside(w);
+          expect(b.surfaceAt(x * YD, z * YD)).toBe("water");
+        }
         for (const s of def.bunkers) expect(b.surfaceAt(s.x * YD, s.z * YD)).toBe("bunker");
         expect(b.world.water).toHaveLength(def.water.length);
         expect(b.world.sand).toHaveLength(def.bunkers.length);
@@ -69,21 +118,21 @@ describe("course data", () => {
         expect(b.world.greens[0].plain).toBe(true);
         expect(b.world.flagMin).toBeGreaterThanOrEqual(30);
       });
-      it("yardage markers are 100, 150 and 200 yd from the middle of the green, on the edge of the fairway, clear of every hazard", () => {
-        const cz = def.green.c[1];
+      it("yardage markers are 100, 150 and 200 yd from the middle of the green along the line, on the edge of the fairway, clear of every hazard", () => {
+        const s0 = along(def, def.green.c[0], def.green.c[1]).s;
         for (const m of b.world.markers ?? []) {
           const d = Number(m.label);
           expect([100, 150, 200]).toContain(d);
-          expect(m.z / YD).toBeCloseTo(cz - d, 6);
+          expect(Math.abs(along(def, m.x / YD, m.z / YD).s - (s0 - d))).toBeLessThan(1.5);
           expect(["fairway", "rough"]).toContain(b.surfaceAt(m.x, m.z));
           expect(waterWithin(b.surfaceAt, m.x, m.z, 3)).toBeNull();
           for (let a = 0; a < 12; a++) for (const r of [1, 2.5]) expect(["bunker", "water", "out"]).not.toContain(b.surfaceAt(m.x + Math.cos(a) * r, m.z + Math.sin(a) * r));
           // on the edge of the fairway: past it, not far out
-          expect(Math.abs(m.x)).toBeGreaterThan(b.fairHalfAt(m.z));
-          expect(Math.abs(m.x)).toBeLessThan(b.fairHalfAt(m.z) + 6);
+          expect(b.margin(m.x, m.z)).toBeGreaterThan(0);
+          expect(b.margin(m.x, m.z)).toBeLessThan(6);
         }
-        // hole 1 has them (a 340 yd hole; the left-hand 100 would stand in the bunker, so it is left out), hole 2 has the 100 only
-        expect((b.world.markers ?? []).map((m) => m.label).sort()).toEqual(def.n === 1 ? ["100", "150", "150", "200", "200"] : ["100", "100"]);
+        // a marker that would stand in a hazard is left out
+        expect((b.world.markers ?? []).map((m) => m.label).sort()).toEqual(MARKERS[def.n]);
       });
       it("the wind is the same every time", () => {
         expect(buildHole(def).wind).toEqual(b.wind);
@@ -92,11 +141,16 @@ describe("course data", () => {
     });
   }
 
-  it("holes are numbered in order, with the par and the yards the plan says", () => {
+  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,015 yd", () => {
     expect(HOLE_DEFS.map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [1, "Open Door", 4, 340],
       [2, "Short Straw", 3, 135],
+      [3, "The Elbow", 4, 365],
+      [4, "Reed Creek", 5, 470],
+      [5, "The Collar", 3, 175],
+      [6, "Last Light", 4, 395],
     ]);
+    expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(23);
   });
   it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {
     const d = HOLE_DEFS[1];
