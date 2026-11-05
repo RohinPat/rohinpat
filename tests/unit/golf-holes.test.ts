@@ -531,8 +531,8 @@ describe("the hole map", () => {
         g.puttShoot(Math.atan2(ps.cup[1] - ps.ball[1], ps.cup[0] - ps.ball[0]), 0.6);
       }
     }
-    for (const p of ["ready", "swing", "fly", "rest"]) expect(seen.has(`${p}:1`), [...seen].join(" ")).toBe(true);
-    expect(seen.has("putt:0"), `${[...seen].join(" ")} t=${g.t.toFixed(0)} strokes=${g.strokes}`).toBe(true);
+    for (const p of ["ready", "swing", "fly", "rest"]) expect(seen.has(`${p}:1`), Array.from(seen).join(" ")).toBe(true);
+    expect(seen.has("putt:0"), `${Array.from(seen).join(" ")} t=${g.t.toFixed(0)} strokes=${g.strokes}`).toBe(true);
     expect(seen.has("hole-card:0")).toBe(true);
     expect(seen.has("putt:1")).toBe(false);
   });
@@ -572,7 +572,7 @@ describe("the round, on all six holes", () => {
       said.push(`Hole ${g.defs[i].n}, ${g.defs[i].yards} yards, par ${g.defs[i].par}.`);
     }
     const rec = recordingCtx();
-    for (const [i, d] of g.defs.entries()) {
+    g.defs.forEach((d, i) => {
       const h = new CourseGame({ seed: 3, holes: [d] });
       h.w = 1440;
       h.h = 900;
@@ -580,6 +580,6 @@ describe("the round, on all six holes", () => {
       expect(rec.texts, `hole ${i + 1}`).toContain(`HOLE ${d.n} · PAR ${d.par} · ${d.yards} YD`);
       expect(rec.texts).toContain(d.name.toUpperCase());
       expect(h.said[0].startsWith(said[i])).toBe(true);
-    }
+    });
   });
 });

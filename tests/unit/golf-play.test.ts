@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CourseGame, REST_HOLD, STEP, type Phase } from "@/components/offhours/golf/play";
 import { CLUBS } from "@/components/offhours/golf/flight";
-import { buildHole, HOLE_DEFS } from "@/components/offhours/golf/course";
+import { buildHole, HOLE_DEFS, type Blob } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { carryAtPower, fullCarry, powerFor } from "@/components/offhours/golf/swing";
 import { carryRing, liftFor, paint, playDraw } from "@/components/offhours/golf/playDraw";
@@ -146,7 +146,7 @@ describe("water, the woods, pick-up", () => {
     const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
     g.key({ key: " " }, true);
     g.wind = [0, 0];
-    const d = HOLE_DEFS[1].water[0];
+    const d = HOLE_DEFS[1].water[0] as Blob;
     const yd = Math.hypot(d.x, d.z);
     g.setAim(Math.atan2(d.x, d.z));
     g.setClub(3);

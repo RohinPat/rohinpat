@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, buildHole, type HoleDef, type Water } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, buildHole, type Blob, type HoleDef, type Water } from "@/components/offhours/golf/course";
 import { GH, GW, zone } from "@/components/offhours/golf/green";
 import { DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
@@ -154,8 +154,9 @@ describe("course data", () => {
   });
   it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {
     const d = HOLE_DEFS[1];
-    expect(d.water[0].x).toBeLessThan(0);
-    expect(d.water[0].z).toBeLessThan(d.pin[1]);
+    const pond = d.water[0] as Blob;
+    expect(pond.x).toBeLessThan(0);
+    expect(pond.z).toBeLessThan(d.pin[1]);
     expect(d.bunkers[0].x).toBeGreaterThan(0);
     const b = buildHole(d);
     expect(Math.abs(b.wind[0])).toBeGreaterThan(Math.abs(b.wind[1]) * 5);
@@ -208,7 +209,7 @@ describe("the lie table", () => {
     it("the drop is on dry ground, fairway or rough, at least 2 m from the water, back along the flight line", () => {
       const b = buildHole(HOLE_DEFS[1]);
       const sw = (x: number, z: number) => b.surfaceAt(x, z);
-      const d = HOLE_DEFS[1].water[0];
+      const d = HOLE_DEFS[1].water[0] as Blob;
       let seen = 0;
       for (const club of [3, 4]) {
         for (const aimX of [-24, -17, -12]) {
