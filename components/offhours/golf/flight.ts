@@ -9,7 +9,7 @@
 // a restitution, and the contact point slides until friction (or the ball
 // rolling) stops the slip, which is how a wedge checks up and a driver runs.
 
-export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "out";
+export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "water" | "out";
 
 export type Club = {
   id: string;
@@ -47,7 +47,23 @@ const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; k
   fairway: { e: 0.28, et: 0.0, mu: 0.6, roll: 2.4, keep: 0.62 },
   rough: { e: 0.12, et: 0, mu: 0.8, roll: 6, keep: 0.4 },
   bunker: { e: 0.05, et: 0, mu: 0.9, roll: 9, keep: 0.1 },
+  // never used to bounce: water ends the shot where it lands
+  water: { e: 0, et: 0, mu: 1, roll: 40, keep: 0 },
   out: { e: 0.05, et: 0, mu: 0.9, roll: 14, keep: 0.1 },
+};
+
+/** how the ball lies changes the strike: multipliers on what the swing gives (see golf/lie.ts) */
+export type Lie = {
+  /** ball speed */
+  speed?: number;
+  /** backspin */
+  spin?: number;
+  /** contact can be no better than this */
+  contactCap?: number;
+  /** launch angle */
+  launch?: number;
+  /** the start line wanders by up to this much either way (the `face` scale, -1..1) */
+  faceNoise?: number;
 };
 
 export type ShotIn = {
@@ -65,7 +81,15 @@ export type ShotIn = {
   /** extra loft multiplier from the contact (fat = higher, thin = lower) */
   lift?: number;
   wind: [number, number];
+  /** asked in world coordinates: the shot's own (x, z) plus `origin` */
   surfaceAt: (x: number, z: number) => Surface;
+  /** where the ball sits in the world. The flight is worked out in a frame that starts at the ball, so it is the same
+   *  from anywhere; this only moves where the surface is looked up. Default (0, 0). */
+  origin?: [number, number];
+  /** how the ball lies */
+  lie?: Lie;
+  /** the hand for anything random in the shot (a lie's wander); default Math.random */
+  rng?: () => number;
 };
 
 export type Shot = {
@@ -85,21 +109,38 @@ export type Shot = {
   launch: number; // degrees
   spin: number; // rpm
   surface: Surface; // where it ended
+  /** the ball's world position when it was struck: pts, bounces and drop are relative to it */
+  ox: number;
+  oz: number;
+  /** a ball that ended in water: the last dry ground it passed over (relative to the origin) */
+  drop: { x: number; z: number } | null;
 };
 
 const YD = 0.9144;
 
 export function simulate(inp: ShotIn): Shot {
   const { club } = inp;
-  const speed = club.speed * inp.speed * (0.78 + 0.22 * inp.contact);
-  const la = ((club.launch * (inp.lift ?? 1)) * Math.PI) / 180;
-  const az = inp.yaw + inp.face * 0.085;
+  const [ox, oz] = inp.origin ?? [0, 0];
+  const surfAt = (x: number, z: number) => inp.surfaceAt(x + ox, z + oz);
+  // a lie changes the swing before it is flown; with none, every number below is the swing's own
+  let sp = inp.speed, contact = inp.contact, face = inp.face, spinMul = 1, launchMul = 1;
+  const lie = inp.lie;
+  if (lie) {
+    sp *= lie.speed ?? 1;
+    spinMul = lie.spin ?? 1;
+    launchMul = lie.launch ?? 1;
+    if (lie.contactCap !== undefined) contact = Math.min(contact, lie.contactCap);
+    if (lie.faceNoise) face += (((inp.rng ?? Math.random)() * 2) - 1) * lie.faceNoise;
+  }
+  const speed = club.speed * sp * (0.78 + 0.22 * contact);
+  const la = ((club.launch * launchMul * (inp.lift ?? 1)) * Math.PI) / 180;
+  const az = inp.yaw + face * 0.085;
   let vx = Math.sin(az) * Math.cos(la) * speed;
   let vy = Math.sin(la) * speed;
   let vz = Math.cos(az) * Math.cos(la) * speed;
   let x = 0, y = 0.04, z = 0;
   // spin in rad/s: back and side
-  const back0 = ((club.spin * (0.7 + 0.3 * inp.contact) * (0.55 + 0.45 * inp.speed)) * 2 * Math.PI) / 60;
+  const back0 = ((club.spin * spinMul * (0.7 + 0.3 * contact) * (0.55 + 0.45 * sp)) * 2 * Math.PI) / 60;
   let wb = back0;
   let ws = inp.curve * ((2600 * 2 * Math.PI) / 60);
   const [wx, wz] = inp.wind;
@@ -152,7 +193,7 @@ export function simulate(inp: ShotIn): Shot {
       }
       if (y <= 0 && vy < 0) {
         y = 0;
-        const surf = inp.surfaceAt(x, z);
+        const surf = surfAt(x, z);
         const P = SURF[surf];
         const vh = Math.hypot(vx, vz);
         const vin = -vy;
@@ -162,6 +203,14 @@ export function simulate(inp: ShotIn): Shot {
           curveY = (x * z0 - z * x0) / YD;
         }
         bounces.push({ t, x, z, vy: vin, surface: surf });
+        if (surf === "water") {
+          // a splash: the ball is gone
+          vx = 0;
+          vz = 0;
+          t += DT;
+          steps++;
+          break;
+        }
         // the tangential slip: sliding forward plus the backspin at the contact point
         const s = vh + R * wb;
         const full = ((1 + P.et) * Math.abs(s)) / 3.5; // impulse that leaves a clean roll (with tangential give)
@@ -181,7 +230,16 @@ export function simulate(inp: ShotIn): Shot {
         }
       }
     } else {
-      const surf = inp.surfaceAt(x, z);
+      const surf = surfAt(x, z);
+      if (surf === "water") {
+        // rolled into a pond
+        bounces.push({ t, x, z, vy: 0, surface: surf });
+        vx = 0;
+        vz = 0;
+        t += DT;
+        steps++;
+        break;
+      }
       const dec = SURF[surf].roll;
       const vh = Math.hypot(vx, vz);
       const d = Math.min(vh, dec * DT);
@@ -212,6 +270,19 @@ export function simulate(inp: ShotIn): Shot {
   void rz;
   const aimX = Math.sin(inp.yaw), aimZ = Math.cos(inp.yaw);
   const side = (x * aimZ - z * aimX) / YD;
+  const surface = surfAt(x, z);
+  let drop: Shot["drop"] = null;
+  if (surface === "water") {
+    // back along the flight to the last point that was not over water
+    drop = { x: 0, z: 0 };
+    for (let i = pts.length / 4 - 1; i >= 0; i--) {
+      const px = pts[i * 4 + 1], pz = pts[i * 4 + 3];
+      if (surfAt(px, pz) !== "water") {
+        drop = { x: px, z: pz };
+        break;
+      }
+    }
+  }
   return {
     pts: new Float32Array(pts),
     n,
@@ -227,7 +298,10 @@ export function simulate(inp: ShotIn): Shot {
     speed: speed * 2.23694,
     launch: (la * 180) / Math.PI,
     spin: Math.round((back0 * 60) / (2 * Math.PI) / 10) * 10,
-    surface: inp.surfaceAt(x, z),
+    surface,
+    ox,
+    oz,
+    drop,
   };
 }
 

@@ -78,6 +78,11 @@ export type RunStat = {
   /** seconds behind (+) or ahead (-) of the target at the finish, rail penalties counted; null if it did not finish */
   vsTarget: number | null;
   firstHitS: number | null;
+  /** seconds behind (+) or ahead (-) of the rival ghost at the finish, by the clock on the car; null if it did not finish */
+  vsGhost: number | null;
+  /** the share of the run the gap to the ghost is within 3 s (after the opening), and the share the ghost is on the road ahead in view (up to 150 m) */
+  nearFrac: number;
+  seenFrac: number;
 };
 
 const DT = 1 / 60;
@@ -103,6 +108,8 @@ export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): Ru
   const gateLeft: number[] = [];
   let cueFrames = 0, runFrames = 0, lastCue = -99, unwarned = 0, lastRails = 0, cues = 0, wasCue = false;
   let lastCp = 0;
+  let nearFrames = 0;
+  let seenFrames = 0;
   const paceJ = 1 + (R() - 0.5) * 0.12;
   let phase = R();
   let steerBias = 0;
@@ -197,6 +204,8 @@ export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): Ru
       inp.brake = axes.brake;
       inp.hand = d.hand ? 1 : 0;
       runFrames++;
+      if (g.deltaOn && Math.abs(g.deltaS) <= 3) nearFrames++;
+      if (g.deltaOn && g.gapM > 0 && g.gapM < 150) seenFrames++;
       if (g.cue.on) {
         cueFrames++;
         lastCue = g.clock;
@@ -248,6 +257,9 @@ export function playRun(base: Bot, seed = 1, setup?: (g: NightGame) => void): Ru
     vsTarget: r?.vsTargetS ?? null,
     railInto: [...g.railInto],
     firstHitS: crashes[0] ?? null,
+    vsGhost: r?.vsGhostS ?? null,
+    nearFrac: +(nearFrames / Math.max(1, runFrames)).toFixed(3),
+    seenFrac: +(seenFrames / Math.max(1, runFrames)).toFixed(3),
   };
   forgetBestRun();
   return out;

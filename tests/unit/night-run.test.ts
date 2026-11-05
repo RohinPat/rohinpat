@@ -6,7 +6,8 @@ import { newCar, resetCar, shiftGear, speedOf, stepCar, type Car } from "@/compo
 import { bankNow, driftRate, isSliding, loseDrift, newDrift, pending, stepDrift } from "@/components/offhours/night/score";
 import { GHOST_HZ, better, createRecorder, newPose, samplePose, timeAt, type Ghost } from "@/components/offhours/night/ghost";
 import { getTarget } from "@/components/offhours/night/target";
-import { buildPlan, drive } from "@/components/offhours/night/ai";
+import { buildPlan, drive, newPilotState, pilotDrive } from "@/components/offhours/night/ai";
+import { TRACKS } from "@/components/offhours/night/tracks";
 import { newPhone, noSources, resolveInput, setPhoneAxis, smoothPhone, stepKeySteer } from "@/components/offhours/night/nightInput";
 import { NightGame, forgetBestRun, getBestScore } from "@/components/offhours/night/game";
 import { createAxes } from "@/components/link/controllers/axes";
@@ -449,11 +450,12 @@ describe("night run: ghosts", () => {
     const t = getTarget();
     const c = newCar(12, 0);
     const i = inp();
+    const st = newPilotState();
     let clock = t.startS;
     let gate = 0;
     let time = 0;
     while (gate < 8 && time < 260) {
-      drive(c, t.road, t.plan, ENGINE_CAL.run.targetPace, i);
+      pilotDrive(st, c, t.road, t.pilot, TRACKS.canyon.pilot, DT, i);
       stepCar(c, i, t.road, DT);
       c.hit = 0;
       time += DT;

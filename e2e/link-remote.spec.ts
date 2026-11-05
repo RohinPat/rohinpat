@@ -168,6 +168,21 @@ test.describe("phone controllers: golf's driving range", () => {
     await context.close();
   });
 
+  test("in Play a golf-swing from the phone hits the tee shot, and the phone can swing until the ball is on the green", async ({ browser, baseURL }) => {
+    test.setTimeout(60_000);
+    const { context, host, phone } = await onTheGrid(browser, baseURL);
+    await phone.locator('[data-piece="golf"]').click();
+    await expect(stage(host)).toBeVisible(SLOW);
+    await stage(host).getByRole("button", { name: "Play", exact: true }).click();
+    // the course opens on its tee card, then the ball is waiting; the phone is told it can swing
+    await expect(host.locator('[data-golf-phase="ready"]')).toBeVisible({ timeout: 20_000 });
+    await expect(host.getByTestId("golf-phone-hint")).toHaveText(/swing your phone/i);
+    await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible();
+    await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-swing", data: { speedMph: 92, tempo: 3, faceDeg: 0 } }));
+    await expect(status(host)).toContainText(/Driver: \d+ yards carry/, { timeout: 25_000 });
+    await context.close();
+  });
+
   test("the phone's own recogniser turns real swing motion into that gesture", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);

@@ -192,7 +192,30 @@ export const ENGINE_CAL = {
       railK: 2,
     },
     /** what is different about the climb's run (the rest is ENGINE_CAL.run): a tighter clock, since a leg is a few seconds */
-    run: { startShare: 1.0, startFlatS: 2, legShare: 0.8, legFlatS: 0.5, finishSecondPoints: 100, targetPace: 0.55 },
+    run: { startShare: 1.0, startFlatS: 2, legShare: 0.8, legFlatS: 0.5, finishSecondPoints: 100, targetPace: 0.425 },
+    /** every corner is a hairpin: the target driver does not slide here, and takes each one on its line */
+    pilot: { topMs: 42, brakeMs2: 5.8, slides: false, legTrim: [0.711, 1.013, 0.999, 1.006, 0.997, 1.054, 1.119] as number[] },
+    /** the climb's rival (ENGINE_CAL.rival, with what the climb changes) */
+    rival: {
+      pace: 0.674,
+      pilot: {
+        topMs: 40.962,
+        brakeMs2: 6.576,
+        marginM: 2.756,
+        steerS: 0.086,
+        slides: true,
+        slidePace: 0.615,
+        handS: 0.257,
+        leadS: 0.524,
+        slideThrottle: 0.3,
+        slideHoldRad: 0.194,
+        slideGain: 1.384,
+        slideSteerS: 0.2,
+        slideMaxR: 121.649,
+        slideMinR: 40,
+        legTrim: [] as number[],
+      },
+    },
     driftPay: 2,
   },
 
@@ -232,8 +255,64 @@ export const ENGINE_CAL = {
     railClockShare: 0.5,
     /** the corner warning looks this many seconds (and metres) of road ahead and lights when the car is over the plan's speed there by this share */
     cue: { leadS: 2.6, leadM: 30, margin: 1.0 },
-    /** the target driver's pace as a share of the grip limit (under 1: it can be beaten) */
-    targetPace: 0.63,
+    /** the target driver's cornering speed as a share of what its racing line allows at the tyres' limit (under 1: it can be beaten) */
+    targetPace: 0.457,
+  },
+
+  // ------------------------------------------------------- night run: the target driver
+  /**
+   * How the target driver drives (night/ai.ts: the pilot). Its overall time is the clock's yardstick, so the numbers here are
+   * set until a track's run comes out at the time the clock was calibrated on (canyon about 134 s, climb about 94 s); they are
+   * pinned in tests/unit/cars-pilot.test.ts. `topMs` is the most it will go on a straight, `brakeMs2` the braking it plans on (a
+   * decent driver leaves some of the brakes alone), and it slides the corners with a radius of `slideMaxR` down to `slideMinR` m on
+   * its line (a handbrake flick for `handS` seconds, `leadS` seconds before the turn-in, then the throttle holds the slide), at
+   * `slidePace` of the line's limit. `marginM` is how far from the paved edge its line stays, `steerS` the steering's low-pass.
+   */
+  pilot: {
+    topMs: 45.331,
+    brakeMs2: 6.55,
+    marginM: 2.8,
+    steerS: 0.095,
+    slides: true,
+    slideMaxR: 140,
+    slideMinR: 70,
+    slideMinLenM: 40,
+    slidePace: 0.471,
+    handS: 0.238,
+    leadS: 0.524,
+    slideThrottle: 0.301,
+    slideHoldRad: 0.194,
+    slideGain: 1.75,
+    slideSteerS: 0.144,
+    /** a share of its pace for each leg (between two gates), so that every leg takes about what the clock was set on */
+    legTrim: [1.017, 1.043, 1.086, 0.795, 0.903, 1.017, 1.052, 1.08] as number[],
+  },
+
+  // ------------------------------------------------------- night run: the rival
+  /**
+   * The ghost on the road: the same pilot, recorded at a pace a good player can race. The target run above is the clock's
+   * yardstick and stays slow; the rival is the one that is drawn, that the gap box reads, and that the tile replays. `pace` is its
+   * cornering share of the line's limit and `pilot` what is different about its driving (the rest is ENGINE_CAL.pilot, without the
+   * leg trim). The pace is set from the scripted drivers (tests/unit/cars-rival.test.ts pins the share of runs each one beats it by).
+   */
+  rival: {
+    pace: 0.6,
+    pilot: {
+      topMs: 48.241,
+      brakeMs2: 7.494,
+      marginM: 2.332,
+      steerS: 0.097,
+      slidePace: 0.66,
+      handS: 0.257,
+      leadS: 0.727,
+      slideThrottle: 0.325,
+      slideHoldRad: 0.165,
+      slideGain: 1.728,
+      slideSteerS: 0.178,
+      slideMaxR: 148.567,
+      slideMinR: 40,
+      legTrim: [] as number[],
+    },
   },
 
   // ------------------------------------------------------------- night run: drifting

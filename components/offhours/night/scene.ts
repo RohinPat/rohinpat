@@ -54,7 +54,7 @@ export type Cam = {
 
 export const newCam = (): Cam => ({ x: 0, y: 0, z: 0, heading: 0, pitch: 0, fov: (CAM.fovDeg * Math.PI) / 180, shake: 0, kick: 0, lean: 0, fresh: true });
 
-export type GhostDraw = { pose: Pose; world: Point; /** 0 the target, 1 your best, 2 one of Learn mode's cars, 3 the learner you are racing */ kind: 0 | 1 | 2 | 3; show: boolean; alpha: number };
+export type GhostDraw = { pose: Pose; world: Point; /** 0 the target, 1 your best, 2 one of Learn mode's cars, 3 the learner you are racing */ kind: 0 | 1 | 2 | 3; show: boolean; alpha: number; /** the smoke it owes (see stepFxFromGhost) */ smoke?: number };
 
 export type Scene = {
   road: Road;
@@ -162,6 +162,33 @@ export function launchSmoke(sc: Scene, strength: number) {
 }
 
 /** Smoke and a dark line on the road from the rear tyres while they work, sparks while the rail is under the car. */
+/** A ghost that is sliding throws a little tyre smoke too (half what a car does), so its slide reads on the road. */
+export function stepFxFromGhost(sc: Scene, g: GhostDraw, dt: number) {
+  const p = g.pose;
+  if (!g.show || p.skid <= 0.45 || p.speed <= 7) {
+    g.smoke = 0;
+    return;
+  }
+  const theta = g.world.phi + p.psi;
+  const vel = theta + p.slip;
+  g.smoke = (g.smoke ?? 0) + dt * 30 * (p.skid - 0.35);
+  while (g.smoke >= 1) {
+    g.smoke -= 1;
+    const side = Math.random() < 0.5 ? -TRACK_M : TRACK_M;
+    puff(
+      sc.fx,
+      g.world.x - Math.sin(theta) * REAR_M + Math.cos(theta) * side,
+      g.world.y + 0.25,
+      g.world.z - Math.cos(theta) * REAR_M - Math.sin(theta) * side,
+      Math.sin(vel) * p.speed * 0.28 + (Math.random() - 0.5) * 1.6,
+      0.3 + Math.random() * 0.6,
+      Math.cos(vel) * p.speed * 0.28 + (Math.random() - 0.5) * 1.6,
+      0.7 + Math.random() * 0.5,
+      1.0 + Math.random() * 0.8,
+    );
+  }
+}
+
 export function stepFxFromCar(sc: Scene, dt: number) {
   const { fx, car, carWorld: w } = sc;
   const theta = w.phi + car.psi;

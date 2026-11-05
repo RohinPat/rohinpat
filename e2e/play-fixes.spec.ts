@@ -34,6 +34,37 @@ test("Penalty: pressing while the result is up kicks the next ball", async ({ br
   await context.close();
 });
 
+test("Penalty: five kicks from the keyboard alone, reduced motion, and a new shootout starts clean", async ({ browser, baseURL }) => {
+  test.setTimeout(90_000);
+  const context = await browser.newContext({ baseURL, viewport: LAPTOP, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page, "penalty");
+  const canvas = page.getByRole("img", { name: /penalty kick/i });
+  await canvas.focus();
+  for (let i = 1; i <= 5; i++) {
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(500);
+    await page.keyboard.up("Enter");
+    await expect(live(page)).toContainText(`from ${i}.`, SLOW);
+    await page.waitForTimeout(2600);
+  }
+  // the over screen (five goals from five is sudden death instead), then a press for a new shootout: the count starts again
+  if (!/ 5 from 5\./.test(await live(page).innerText())) {
+    await page.waitForTimeout(1000);
+    await page.keyboard.press("Enter");
+    await expect(live(page)).toHaveText("New shootout.", SLOW);
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(500);
+    await page.keyboard.up("Enter");
+    await expect(live(page)).toContainText("from 1.", SLOW);
+  }
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
 test("Powder: a steer key at the gate drops in", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, viewport: LAPTOP });
   const page = await context.newPage();

@@ -12,15 +12,22 @@ import { sfx } from "./sound";
 
 export const GW = 20;
 export const GH = 12.5;
-const CUP_R = 0.054;
-const MU = 0.065 * 9.81;
+export const CUP_R = 0.07;
+/** a ball that comes to rest this close to the cup (m) is holed for one more stroke, after a short beat */
+export const TAP_IN = 0.45;
+const TAP_BEAT = 0.45;
+/** the arrow keys' aim steps, radians: Alt for fine, none for normal, Shift for big */
+export const AIM_STEP = { fine: 0.005, normal: 0.03, big: 0.1 };
+export const MU = 0.065 * 9.81;
 const ROLL = (5 / 7) * 9.81;
 export const HOLES = 9;
 const PICK_UP = 7;
 
 type Hill = { x: number; y: number; a: number; s: number };
-type Hole = {
+export type Hole = {
   n: number;
+  /** tells a green made for the course from the putting greens that share its number (the lit relief is cached by it) */
+  tag?: string;
   hills: Hill[];
   tilt: [number, number];
   cup: [number, number];
@@ -31,12 +38,12 @@ type Hole = {
 
 const DIST = [4.5, 6.2, 7.6, 9.4, 6.9, 11.2, 8.6, 12.4, 10.2];
 
-function shapeR(H: Hole, th: number) {
+export function shapeR(H: Hole, th: number) {
   const s = H.shape;
   return 1 + s[0] * Math.sin(2 * th + s[1]) + s[2] * Math.sin(3 * th + s[3]) + s[4] * Math.sin(5 * th + s[5]);
 }
 /** 0 inside the green, 1 on the fringe, 2 in the rough */
-function zone(H: Hole, x: number, y: number) {
+export function zone(H: Hole, x: number, y: number) {
   const u = (x - GW / 2) / (GW / 2), v = (y - GH / 2) / (GH / 2);
   const rho = Math.hypot(u, v);
   const r = shapeR(H, Math.atan2(v, u));
@@ -78,6 +85,26 @@ export function makeHole(n: number): Hole {
   return H;
 }
 
+/**
+ * A green for the course: the same lit relief and the same ball roll as the putting greens, from a seed and a severity
+ * (the putting greens run 0.6 to 1.2). The caller sets the cup and where the ball lies.
+ */
+export function makeGreen(seed: number, severity: number, n = 1, par = 4): Hole {
+  const r = seeded(seed);
+  const k = severity;
+  const hills = Array.from({ length: 4 + Math.floor(r() * 3) }, () => ({ x: r() * GW, y: r() * GH, a: (r() - 0.45) * 0.55 * k, s: 1.9 + r() * 2.8 }));
+  return {
+    n,
+    tag: "course",
+    hills,
+    tilt: [(r() - 0.5) * 0.05 * k, (r() - 0.5) * 0.05 * k],
+    cup: [GW / 2, GH / 2],
+    tee: [GW / 2, GH / 2],
+    par,
+    shape: [0.05 + r() * 0.04, r() * 6, 0.04 + r() * 0.03, r() * 6, 0.02 + r() * 0.02, r() * 6],
+  };
+}
+
 /** height and its slope at a point (analytic) */
 function hg(H: Hole, x: number, y: number, out: [number, number, number]) {
   let z = H.tilt[0] * x + H.tilt[1] * y;
@@ -106,7 +133,7 @@ type Drop = { x: number; y: number; vx: number; vy: number; trail: [number, numb
 const tmp: [number, number, number] = [0, 0, 0];
 
 /** advance the ball one step; returns "sunk" / "lip" when something happens at the cup */
-function stepBall(H: Hole, b: Ball, dt: number): "sunk" | "lip" | null {
+export function stepBall(H: Hole, b: Ball, dt: number): "sunk" | "lip" | null {
   hg(H, b.x, b.y, tmp);
   const mul = (z: number) => (z === 0 ? 1 : z === 1 ? 2.8 : 7.5);
   const zn = zone(H, b.x, b.y);
@@ -176,7 +203,7 @@ function trial(H: Hole, x: number, y: number, ang: number, speed: number) {
 
 // ---------------------------------------------------------------- state
 
-export type PuttEnv = { play: boolean; say: (m: string) => void };
+export type PuttEnv = { play: boolean; say: (m: string) => void; /** prefers-reduced-motion: the ball's ring holds still */ reduce?: boolean };
 
 export type Putt = {
   hole: Hole;
@@ -214,6 +241,17 @@ export type Putt = {
   cache: { key: string; c: HTMLCanvasElement } | null;
   arrows: { key: string; pts: [number, number, number, number][] } | null;
   held: number;
+  /** a ball at rest by the cup, on its way in as a tap-in */
+  tap: { t: number; x: number; y: number } | null;
+  /** playing a hole of the course: when it is holed (or picked up) `onDone` is told the strokes, and there is no round card */
+  course: PuttCourse | null;
+  pickedUp: boolean;
+};
+
+export type PuttCourse = {
+  /** pick the ball up when this many strokes have been played */
+  pickUp: number;
+  onDone: (strokes: number, pickedUp: boolean) => void;
 };
 
 export function newPutt(): Putt {
@@ -252,18 +290,24 @@ export function newPutt(): Putt {
     cache: null,
     arrows: null,
     held: 0,
+    tap: null,
+    course: null,
+    pickedUp: false,
   };
   setupHole(p, 1);
   return p;
 }
 
 function setupHole(p: Putt, n: number) {
+  p.course = null;
+  p.pickedUp = false;
   p.hole = makeHole(n);
   p.ball = { x: p.hole.tee[0], y: p.hole.tee[1], vx: 0, vy: 0, moving: false, sunk: false };
   p.strokes = 0;
   p.drops = [];
   p.trail = [];
   p.putter = null;
+  p.tap = null;
   p.sunkT = 0;
   p.dropT = 0;
   p.nextT = -1;
@@ -280,6 +324,57 @@ export function puttRestart(p: Putt) {
   p.done = false;
   p.fade = 0;
   setupHole(p, 1);
+}
+
+/**
+ * Start putting a green of the course: this hole, the ball here (green coordinates, metres), `strokes` already played.
+ * The same putt as Putt mode; when the ball is holed (or picked up) `course.onDone` gets the strokes.
+ * `reduce` skips the dissolve in.
+ */
+export function puttBegin(p: Putt, hole: Hole, ball: [number, number], strokes: number, course: PuttCourse, t: number, reduce = false) {
+  p.hole = hole;
+  p.ball = { x: ball[0], y: ball[1], vx: 0, vy: 0, moving: false, sunk: false };
+  p.strokes = strokes;
+  p.course = course;
+  p.pickedUp = false;
+  p.done = false;
+  p.drops = [];
+  p.trail = [];
+  p.putter = null;
+  p.tap = null;
+  p.sunkT = 0;
+  p.dropT = 0;
+  p.nextT = -1;
+  p.call = "";
+  p.callT = -9;
+  p.reading = false;
+  p.readT = 0;
+  p.kAngle = Math.atan2(hole.cup[1] - ball[1], hole.cup[0] - ball[0]);
+  p.kPower = 0;
+  p.kCharging = false;
+  p.kTouched = -9;
+  p.aiming = false;
+  p.startT = t;
+  p.fade = reduce ? 1 : 0;
+  p.cache = null;
+  // a ball that comes to rest this close to the cup is a tap-in: so is one that lands there
+  if (Math.hypot(hole.cup[0] - ball[0], hole.cup[1] - ball[1]) < TAP_IN) {
+    p.tap = { t: 0, x: ball[0], y: ball[1] };
+    p.call = "TAP IN";
+    p.callT = t;
+  }
+}
+
+/** a putt struck the way Space's release does it: aim in radians in green coordinates, power 0..1 */
+export function puttShoot(p: Putt, angle: number, power: number, t: number, env: PuttEnv) {
+  if (p.ball.moving || p.ball.sunk || p.putter || p.tap || p.reading) return false;
+  p.kAngle = angle;
+  strike(p, Math.cos(angle), Math.sin(angle), Math.max(0.03, Math.min(1, power)), t, env);
+  return true;
+}
+/** the power that rolls a putt this far on a flat green */
+export function puttPowerFor(metres: number) {
+  return powFor(Math.sqrt(2 * MU * Math.max(0, metres)));
 }
 
 export function puttRead(p: Putt, on: boolean) {
@@ -308,8 +403,8 @@ export function puttRead(p: Putt, on: boolean) {
 
 // ---------------------------------------------------------------- mapping
 
-function layout(p: Putt, w: number, h: number, play: boolean) {
-  const bottom = play ? (w < 560 ? 62 : 66) : 0;
+export function puttLayout(p: Putt, w: number, h: number, play: boolean) {
+  const bottom = play && !p.course ? (w < 560 ? 62 : 66) : 0;
   const rot = h > w * 1.1;
   const uh = h - bottom;
   const sc = rot ? Math.min((w - 16) / (GH + 1.6), (uh - 16) / (GW + 1.6)) : Math.min((w - 16) / (GW + 1.6), (uh - 16) / (GH + 1.6));
@@ -341,7 +436,7 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
     return;
   }
   if (kind === "down") {
-    if (p.ball.moving || p.ball.sunk || p.putter) return;
+    if (p.ball.moving || p.ball.sunk || p.putter || p.tap) return;
     p.aiming = true;
     // the pull is the drag from where the press landed, laid on the ball: a press anywhere can pull back, and a tap
     // (a click to focus, a look at the cup) is no pull at all, so it does not putt
@@ -386,13 +481,13 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
   }
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     if (down) {
-      p.kAngle += (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 0.1 : 0.03);
+      p.kAngle += (e.key === "ArrowLeft" ? -1 : 1) * (e.altKey ? AIM_STEP.fine : e.shiftKey ? AIM_STEP.big : AIM_STEP.normal);
       p.kTouched = t;
     }
     return true;
   }
   if (e.key === " " || e.key === "Enter") {
-    if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter) {
+    if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap) {
       p.kCharging = true;
       p.kPower = 0;
       p.kTouched = t;
@@ -408,13 +503,21 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
 
 // ---------------------------------------------------------------- sim
 
-function callFor(strokes: number, par: number) {
+export function callFor(strokes: number, par: number) {
   const d = strokes - par;
   return strokes === 1 ? "HOLE IN ONE" : d <= -2 ? "EAGLE" : d === -1 ? "BIRDIE" : d === 0 ? "PAR" : d === 1 ? "BOGEY" : d === 2 ? "DOUBLE BOGEY" : `+${d}`;
 }
 
 function finishHole(p: Putt, t: number, env: PuttEnv, pickedUp = false) {
   const H = p.hole;
+  p.pickedUp = pickedUp;
+  if (p.course) {
+    // the course keeps the card and says the result; the putt only shows the call, then hands the hole back
+    p.call = pickedUp ? "PICK UP" : callFor(p.strokes, H.par);
+    p.callT = t;
+    p.nextT = t + 1.5;
+    return;
+  }
   p.scores[H.n - 1] = p.strokes;
   p.call = pickedUp ? "PICK UP" : callFor(p.strokes, H.par);
   p.callT = t;
@@ -424,6 +527,10 @@ function finishHole(p: Putt, t: number, env: PuttEnv, pickedUp = false) {
 
 function advance(p: Putt, t: number, env: PuttEnv) {
   const H = p.hole;
+  if (p.course) {
+    p.course.onDone(p.strokes, p.pickedUp);
+    return;
+  }
   if (H.n >= HOLES) {
     p.done = true;
     p.doneT = t;
@@ -482,10 +589,36 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     }
     if (!p.ball.moving && !p.ball.sunk) {
       p.trailAge = 0;
-      if (p.strokes >= PICK_UP) finishHole(p, t, env, true);
-      else p.kAngle = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
+      if (p.strokes >= (p.course?.pickUp ?? PICK_UP)) finishHole(p, t, env, true);
+      else if (Math.hypot(H.cup[0] - p.ball.x, H.cup[1] - p.ball.y) < TAP_IN) {
+        // close enough to the cup: no need for another stroke to be aimed
+        p.tap = { t: 0, x: p.ball.x, y: p.ball.y };
+        p.call = "TAP IN";
+        p.callT = t;
+        if (env.play) env.say("Tap in.");
+      } else p.kAngle = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
     }
   } else if (!p.ball.moving) p.trailAge += dt;
+  if (p.tap) {
+    // a beat, then the ball rolls the last few inches in, and it counts as one more stroke
+    const tp = p.tap;
+    tp.t += dt;
+    const u = Math.min(1, Math.max(0, (tp.t - 0.2) / (TAP_BEAT - 0.2)));
+    p.ball.x = tp.x + (H.cup[0] - tp.x) * u * u;
+    p.ball.y = tp.y + (H.cup[1] - tp.y) * u * u;
+    if (tp.t >= TAP_BEAT) {
+      p.tap = null;
+      p.strokes++;
+      p.ball.x = H.cup[0];
+      p.ball.y = H.cup[1];
+      p.ball.sunk = true;
+      p.ball.moving = false;
+      p.sunkT = t;
+      p.dropT = 0;
+      if (env.play) sfx("cup");
+      finishHole(p, t, env);
+    }
+  }
   if (p.ball.sunk) {
     p.dropT += dt;
     if (p.nextT > 0 && t > p.nextT) {
@@ -511,7 +644,7 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
   if (p.reading) p.readT += dt;
 
   // the self-playing demo: it reads the green by trying putts
-  if (!env.play && !p.ball.moving && !p.ball.sunk && !p.putter && p.nextT < 0 && !p.done) {
+  if (!env.play && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap && p.nextT < 0 && !p.done) {
     p.auto -= dt;
     if (p.auto <= 0) {
       const base = Math.atan2(H.cup[1] - p.ball.y, H.cup[0] - p.ball.x);
@@ -536,16 +669,26 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
 
 // ---------------------------------------------------------------- drawing
 
-export function puttDraw(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, dt: number, t: number, env: PuttEnv, pointer: { x: number; y: number; inside: boolean }) {
-  const play = env.play;
-  layout(p, w, h, play);
+/** advance the putt one step with no screen (the course's headless game uses this; puttDraw does the same, then draws) */
+export function puttStep(p: Putt, dt: number, t: number, env: PuttEnv) {
   update(p, dt, t, env);
+}
+
+export function puttDraw(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, dt: number, t: number, env: PuttEnv, pointer: { x: number; y: number; inside: boolean }) {
+  puttLayout(p, w, h, env.play);
+  update(p, dt, t, env);
+  puttPaint(ctx, p, w, h, t, env, pointer);
+}
+
+/** draw the putt as it stands (layout and step are the caller's) */
+export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: number, env: PuttEnv, pointer: { x: number; y: number; inside: boolean }) {
+  const play = env.play;
   const v = p.view;
   const H = p.hole;
   const X = (x: number, y: number) => sx(v, x, y);
   const Y = (x: number, y: number) => sy(v, x, y);
 
-  const key = `${H.n}-${Math.round(w)}-${Math.round(h)}-${play ? 1 : 0}`;
+  const key = `${H.tag ?? ""}${H.n}-${Math.round(w)}-${Math.round(h)}-${play ? 1 : 0}-${p.course ? 1 : 0}`;
   if (p.cache?.key !== key) p.cache = { key, c: renderGreen(H, w, h, p) };
   ctx.drawImage(p.cache.c, 0, 0, w, h);
 
@@ -661,8 +804,28 @@ export function puttDraw(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: n
       const pow = Math.min(1, Math.hypot(dx, dy) / dragMax(v));
       const w0 = toWorld(v, p.aimFrom.x, p.aimFrom.y), w1 = toWorld(v, p.aimFrom.x + dx, p.aimFrom.y + dy);
       drawPutterAt(ctx, p, X, Y, sc, w1.x - w0.x, w1.y - w0.y, pow, 0);
-    } else if (play && !p.ball.moving && (p.kCharging || t - p.kTouched < 3)) {
+    } else if (play && !p.ball.moving && !p.tap && (p.kCharging || t - p.kTouched < 3)) {
       drawPutterAt(ctx, p, X, Y, sc, Math.cos(p.kAngle), Math.sin(p.kAngle), p.kPower, 0);
+    }
+    // until the first stroke the ball wears a soft ring, so it reads at any size
+    if (play && p.strokes === 0 && !p.ball.moving) {
+      const pulse = env.reduce ? 0 : Math.sin(t * 3.4);
+      const rr = Math.max(11, br * 2.6) * (1 + 0.1 * pulse);
+      const halo = ctx.createRadialGradient(bx, by, br, bx, by, rr * 1.5);
+      halo.addColorStop(0, "rgba(242,234,215,0.34)");
+      halo.addColorStop(1, "rgba(242,234,215,0)");
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(bx, by, rr * 1.5, 0, 7);
+      ctx.fill();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "rgba(13,16,14,0.3)";
+      ctx.beginPath();
+      ctx.arc(bx, by, rr, 0, 7);
+      ctx.stroke();
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = `rgba(242,234,215,${0.8 + 0.15 * pulse})`;
+      ctx.stroke();
     }
     // ball shadow and ball
     ctx.fillStyle = "rgba(0,0,0,0.28)";
@@ -885,7 +1048,7 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   };
   if (p.reading) {
     chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"], "#a0dcff");
-  } else if (H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
+  } else if (!p.course && H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
     chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK, LET GO"], "#f2ead7");
   }
 
@@ -898,70 +1061,72 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     ctx.fillRect(w / 2 - 70, my, 140 * p.kPower, 8);
   }
 
-  // scorecard
-  const cells = HOLES;
-  const cwid = compact ? 28 : 40;
-  const lab = compact ? 0 : 46;
-  const tw = lab + cells * cwid + (compact ? 44 : 52);
-  const x0 = w / 2 - tw / 2, y0 = h - 58;
-  panel(x0 - 8, y0 - 6, tw + 16, 54);
-  mono(ctx, 10);
-  const rows = ["HOLE", "PAR", "YOU"];
-  rows.forEach((r, i) => {
-    if (lab) {
-      ctx.fillStyle = "#b5b6ab";
-      ctx.fillText(r, x0, y0 + 9 + i * 16);
-    }
-  });
-  let tot = 0, par = 0;
-  for (let i = 0; i < cells; i++) {
-    const cx = x0 + lab + i * cwid + cwid / 2;
-    const cur = H.n === i + 1 && !p.done;
-    if (cur) {
-      ctx.fillStyle = "rgba(242,234,215,0.12)";
-      ctx.fillRect(cx - cwid / 2 + 1, y0 - 3, cwid - 2, 50);
-    }
-    ctx.textAlign = "center";
-    ctx.fillStyle = cur ? "#f2ead7" : "#b5b6ab";
-    ctx.fillText(String(i + 1), cx, y0 + 9);
-    ctx.fillStyle = "#b5b6ab";
-    ctx.fillText(String(p.pars[i]), cx, y0 + 25);
-    const sc = p.scores[i];
-    if (sc !== null) {
-      tot += sc;
-      par += p.pars[i];
-      const d = sc - p.pars[i];
-      mono(ctx, 12);
-      ctx.fillStyle = d < 0 ? "#edbb00" : d === 0 ? "#f2ead7" : "#e5484d";
-      ctx.fillText(String(sc), cx, y0 + 42);
-      if (d < 0) {
-        ctx.strokeStyle = "#edbb00";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(cx, y0 + 38.5, 8, 0, 7);
-        ctx.stroke();
-      } else if (d > 0) {
-        ctx.strokeStyle = "#e5484d";
-        ctx.strokeRect(cx - 7.5, y0 + 31, 15, 15);
+  // scorecard (the course draws its own)
+  if (!p.course) {
+    const cells = HOLES;
+    const cwid = compact ? 28 : 40;
+    const lab = compact ? 0 : 46;
+    const tw = lab + cells * cwid + (compact ? 44 : 52);
+    const x0 = w / 2 - tw / 2, y0 = h - 58;
+    panel(x0 - 8, y0 - 6, tw + 16, 54);
+    mono(ctx, 10);
+    const rows = ["HOLE", "PAR", "YOU"];
+    rows.forEach((r, i) => {
+      if (lab) {
+        ctx.fillStyle = "#b5b6ab";
+        ctx.fillText(r, x0, y0 + 9 + i * 16);
       }
-      mono(ctx, 10);
-    } else if (cur) {
-      mono(ctx, 12);
-      ctx.fillStyle = "#f2ead7";
-      ctx.fillText(String(p.strokes || "·"), cx, y0 + 42);
-      mono(ctx, 10);
+    });
+    let tot = 0, par = 0;
+    for (let i = 0; i < cells; i++) {
+      const cx = x0 + lab + i * cwid + cwid / 2;
+      const cur = H.n === i + 1 && !p.done;
+      if (cur) {
+        ctx.fillStyle = "rgba(242,234,215,0.12)";
+        ctx.fillRect(cx - cwid / 2 + 1, y0 - 3, cwid - 2, 50);
+      }
+      ctx.textAlign = "center";
+      ctx.fillStyle = cur ? "#f2ead7" : "#b5b6ab";
+      ctx.fillText(String(i + 1), cx, y0 + 9);
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText(String(p.pars[i]), cx, y0 + 25);
+      const sc = p.scores[i];
+      if (sc !== null) {
+        tot += sc;
+        par += p.pars[i];
+        const d = sc - p.pars[i];
+        mono(ctx, 12);
+        ctx.fillStyle = d < 0 ? "#edbb00" : d === 0 ? "#f2ead7" : "#e5484d";
+        ctx.fillText(String(sc), cx, y0 + 42);
+        if (d < 0) {
+          ctx.strokeStyle = "#edbb00";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(cx, y0 + 38.5, 8, 0, 7);
+          ctx.stroke();
+        } else if (d > 0) {
+          ctx.strokeStyle = "#e5484d";
+          ctx.strokeRect(cx - 7.5, y0 + 31, 15, 15);
+        }
+        mono(ctx, 10);
+      } else if (cur) {
+        mono(ctx, 12);
+        ctx.fillStyle = "#f2ead7";
+        ctx.fillText(String(p.strokes || "·"), cx, y0 + 42);
+        mono(ctx, 10);
+      }
+      ctx.textAlign = "left";
     }
-    ctx.textAlign = "left";
+    const dv = tot - par;
+    const txr = x0 + lab + cells * cwid + 6;
+    ctx.fillStyle = "#b5b6ab";
+    ctx.fillText("TOT", txr, y0 + 9);
+    mono(ctx, 12);
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillText(tot ? `${tot}` : "·", txr, y0 + 42);
+    ctx.fillStyle = dv < 0 ? "#edbb00" : dv > 0 ? "#e5484d" : "#8ad9a8";
+    if (tot) ctx.fillText(dv === 0 ? "E" : dv > 0 ? `+${dv}` : `${dv}`, txr + (compact ? 20 : 26), y0 + 42);
   }
-  const dv = tot - par;
-  const txr = x0 + lab + cells * cwid + 6;
-  ctx.fillStyle = "#b5b6ab";
-  ctx.fillText("TOT", txr, y0 + 9);
-  mono(ctx, 12);
-  ctx.fillStyle = "#f2ead7";
-  ctx.fillText(tot ? `${tot}` : "·", txr, y0 + 42);
-  ctx.fillStyle = dv < 0 ? "#edbb00" : dv > 0 ? "#e5484d" : "#8ad9a8";
-  if (tot) ctx.fillText(dv === 0 ? "E" : dv > 0 ? `+${dv}` : `${dv}`, txr + (compact ? 20 : 26), y0 + 42);
 
   // the call
   if (p.call && t - p.callT < 1.7) {
