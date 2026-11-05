@@ -11,6 +11,9 @@ import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 import { BOTS, Player, mean, playRound } from "./golf-bots";
 
+// these play real shots and rounds, which run many times slower under coverage on CI
+vi.setConfig({ testTimeout: 60_000 });
+
 // The course as a game with no screen: its phases, its rules, what it says, and the bots that play it.
 
 beforeEach(() => {

@@ -9,6 +9,9 @@ import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, f
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
+// these play real shots and rounds, which run many times slower under coverage on CI
+vi.setConfig({ testTimeout: 60_000 });
+
 // Holes 3 to 6, the hole map, the short game and putting from beside the green.
 
 beforeEach(() => {
