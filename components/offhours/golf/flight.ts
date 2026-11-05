@@ -90,6 +90,8 @@ export type ShotIn = {
   lie?: Lie;
   /** the hand for anything random in the shot (a lie's wander); default Math.random */
   rng?: () => number;
+  /** trees a ball in the air can hit (world metres: x, z, crown radius, height): it loses most of its speed and drops */
+  trees?: { x: number; z: number; r: number; h: number }[];
 };
 
 export type Shot = {
@@ -114,6 +116,8 @@ export type Shot = {
   oz: number;
   /** a ball that ended in water: the last dry ground it passed over (relative to the origin) */
   drop: { x: number; z: number } | null;
+  /** where it hit a tree in the air (relative to the origin), if it did */
+  tree: { x: number; z: number } | null;
 };
 
 const YD = 0.9144;
@@ -150,6 +154,7 @@ export function simulate(inp: ShotIn): Shot {
   let t = 0;
   let apex = 0, apexT = 0, landT = 0, carry = 0, curveY = 0;
   let rolling = false;
+  let tree: Shot["tree"] = null;
   let steps = 0;
   const x0 = Math.sin(az), z0 = Math.cos(az);
   while (t < 28) {
@@ -190,6 +195,21 @@ export function simulate(inp: ShotIn): Shot {
       if (y > apex) {
         apex = y;
         apexT = t;
+      }
+      if (inp.trees && !tree && y > 0) {
+        for (const tr of inp.trees) {
+          const dx = x + ox - tr.x, dz = z + oz - tr.z;
+          if (y < tr.h && dx * dx + dz * dz < tr.r * tr.r) {
+            // into the branches: most of the speed is gone, and the ball drops
+            tree = { x, z };
+            vx *= 0.12;
+            vz *= 0.12;
+            vy = Math.min(vy, 0) * 0.3 - 0.5;
+            wb *= 0.3;
+            ws = 0;
+            break;
+          }
+        }
       }
       if (y <= 0 && vy < 0) {
         y = 0;
@@ -302,6 +322,7 @@ export function simulate(inp: ShotIn): Shot {
     ox,
     oz,
     drop,
+    tree,
   };
 }
 

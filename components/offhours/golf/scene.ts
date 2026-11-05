@@ -487,7 +487,7 @@ export function drawWorld(
     for (const [, pz] of pond) cz += pz / pond.length;
     const fg = fogAt(cz - cam.z);
     const ring: V3[] = pond.map(([x, z]) => [x, 0.014, z]);
-    poly(ctx, cam, ring, mixc(WATER, HAZE, fg * 0.8), mixc(hex("#2c6f86"), HAZE, fg), 1);
+    poly(ctx, cam, ring, mixc(WATER, HAZE, fg * 0.8), mixc(hex("#2c6f86"), HAZE, fg * 0.5), 2.2);
     if (!opts.still) {
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (const [x, z] of pond) {

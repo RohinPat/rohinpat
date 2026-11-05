@@ -8,7 +8,7 @@ import type { RemoteShot } from "./remoteSwing";
 import { YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { fullCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, chipPowerFor, fullCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -17,7 +17,10 @@ import { fullCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } fro
 // the tests can play it. Drawing is golf/playDraw.ts; the page is Golf.tsx.
 //
 // A swing is the same as the range's: drag down then up, Space three times, or a
-// phone's golf-swing; all of them end in swing.ts's strike numbers.
+// phone's golf-swing; all of them end in swing.ts's strike numbers. Inside 40 yd of
+// the pin a drag or the meter is a chip meter (swing.ts), and a ball within 2 yd
+// of the green is putted. The hole map (golf/map.ts) is drawn by playDraw; the
+// game keeps whether it is open and where it is, so a tap on it can set the aim.
 
 export type Phase = "tee-card" | "ready" | "swing" | "fly" | "rest" | "putt" | "hole-card" | "round-card";
 
@@ -34,7 +37,15 @@ export type CourseOpts = {
   onClub?: (i: number) => void;
   /** the phase changed (the phone is told whether it can swing) */
   onPhase?: (p: Phase) => void;
+  /** the map was opened or closed (the chip follows) */
+  onMap?: (open: boolean) => void;
 };
+
+/** a ball this close to the green (m), on rough or fairway, is putted */
+export const NEAR_GREEN = 2 * YD;
+/** how far the aim can be turned from the line to the pin, radians */
+const AIM_RANGE = 0.42;
+export type MapView = { x: number; y: number; w: number; h: number; /** the point on the hole (metres) under a point on the canvas */ at: (px: number, py: number) => [number, number] };
 
 export const STEP = 1 / 60;
 const TEE_CARD_S = 2;
@@ -68,8 +79,10 @@ type Swing = {
   over: boolean;
   tRev: number;
   lastL: number;
+  /** a chip meter (set when the swing began) */
+  chip: boolean;
 };
-const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0 });
+const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0, chip: false });
 
 export type Card = { club: Club; shot: Shot; label: string; t: number; /** a meter swing: seconds off the line, + late */ timing: number | null };
 
@@ -125,6 +138,13 @@ export class CourseGame {
   /** the camera is the draw layer's; it lives here so it survives frames */
   cam: Cam = newCam();
   camReady = false;
+  /** the hole map: open or not, where it was drawn last, and a drag on it in progress */
+  mapOpen = false;
+  mapSet = false;
+  mapView: MapView | null = null;
+  private mapDrag = false;
+  /** where each shot of this hole went, metres: from, to */
+  legs: [number, number, number, number][] = [];
   /** the end of the round */
   round: { total: number; par: number; isBest: boolean; previous: number | null; best: number } | null = null;
   said: string[] = [];
@@ -182,6 +202,7 @@ export class CourseGame {
     this.splash = null;
     this.result = "";
     this.trail = [];
+    this.legs = [];
     this.camReady = false;
     this.putt.course = null;
     this.setPhase("tee-card");
@@ -235,7 +256,45 @@ export class CourseGame {
   }
   /** nudge the aim, radians */
   aim(d: number) {
-    this.yawT = clamp(this.yawT + d, this.baseYaw() - 0.42, this.baseYaw() + 0.42);
+    this.yawT = clamp(this.yawT + d, this.baseYaw() - AIM_RANGE, this.baseYaw() + AIM_RANGE);
+  }
+  /** aim at a point of the hole (a tap or a drag on the map), metres */
+  aimAt(x: number, z: number) {
+    if (this.phase !== "ready") return;
+    const dx = x - this.ball[0], dz = z - this.ball[1];
+    if (Math.hypot(dx, dz) < 1) return;
+    this.yawT = clamp(Math.atan2(dx, dz), this.baseYaw() - AIM_RANGE, this.baseYaw() + AIM_RANGE);
+  }
+  setMap(open: boolean) {
+    this.mapSet = true;
+    if (open === this.mapOpen) return;
+    this.mapOpen = open;
+    this.opts.onMap?.(open);
+  }
+  toggleMap() {
+    this.setMap(!this.mapOpen);
+    this.say(this.mapOpen ? "Map open." : "Map closed.");
+  }
+  /** the short game: inside CHIP_YD of the pin a drag or the meter is scaled to the distance */
+  chipping() {
+    return this.phase === "swing" ? this.sw.chip : this.yardsToPin() <= CHIP_YD;
+  }
+  /** the club and meter fraction that carry the distance to the target with the drag or the meter (suggested(), but in the chip meter's units inside 40 yd) */
+  meterSuggest(): { club: number; power: number } {
+    const sg = this.suggested();
+    if (!this.chipping()) return sg;
+    const yd = this.yardsToTarget() / (this.lie === "rough" ? 0.88 : 1);
+    return { club: sg.club, power: chipPowerFor(sg.club, yd) };
+  }
+  /** a ball on the rough or the fairway close enough to the green to putt it (not out of sand) */
+  nearGreen() {
+    if (this.lie !== "rough" && this.lie !== "fairway") return false;
+    const sf = this.hole.surfaceAt;
+    for (let r = 0.5; r <= NEAR_GREEN + 1e-9; r += 0.5) for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      if (sf(this.ball[0] + Math.cos(a) * r, this.ball[1] + Math.sin(a) * r) === "green") return true;
+    }
+    return false;
   }
   /** point the aim at once (a bot, a test) */
   setAim(yaw: number) {
@@ -256,6 +315,10 @@ export class CourseGame {
   key(e: { key: string; shiftKey?: boolean; altKey?: boolean; repeat?: boolean }, down: boolean): boolean {
     if (this.phase === "putt") return puttKey(this.putt, e as KeyboardEvent, down, this.t, this.penv);
     const space = e.key === " " || e.key === "Enter";
+    if ((e.key === "m" || e.key === "M") && !e.repeat) {
+      if (down) this.toggleMap();
+      return true;
+    }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       if (down && this.phase !== "round-card" && !(this.phase === "swing" && this.sw.sub === "down")) this.aim((e.key === "ArrowLeft" ? -1 : 1) * (e.altKey ? 0.005 : e.shiftKey ? 0.05 : 0.015));
       return true;
@@ -301,6 +364,18 @@ export class CourseGame {
   pointer(kind: "down" | "move" | "up", x: number, y: number): void {
     if (this.phase === "putt") {
       puttPointer(this.putt, kind, x, y, this.t, this.penv);
+      return;
+    }
+    // the map: a tap or a drag on it sets the aim, and is not a swing
+    const mv = this.mapView;
+    if (kind === "down" && this.mapOpen && mv && this.phase === "ready" && x >= mv.x && x <= mv.x + mv.w && y >= mv.y && y <= mv.y + mv.h) {
+      this.mapDrag = true;
+      this.aimAt(...mv.at(x, y));
+      return;
+    }
+    if (this.mapDrag) {
+      if (kind === "up") this.mapDrag = false;
+      else if (mv) this.aimAt(...mv.at(x, y));
       return;
     }
     const s = this.sw;
@@ -359,7 +434,7 @@ export class CourseGame {
     this.card = null;
     this.trail = [];
     this.fast = false;
-    this.sw = { ...emptySwing(), src, sub: "back", tStart: this.t, x0: x, y0: y, peakY: y, xNow: x, yNow: y, xTop: x, lastL: swingLen(this.h) };
+    this.sw = { ...emptySwing(), src, sub: "back", chip: this.yardsToPin() <= CHIP_YD, tStart: this.t, x0: x, y0: y, peakY: y, xNow: x, yNow: y, xTop: x, lastL: swingLen(this.h) };
     this.phase = "swing";
     this.phaseT = 0;
     this.opts.onPhase?.("swing");
@@ -386,7 +461,7 @@ export class CourseGame {
   private strike() {
     const s = this.sw;
     const club = CLUBS[this.club];
-    const k = strikeNumbers({ src: s.src, peak: s.peak, x0: s.x0, xTop: s.xTop, xNow: s.xNow, lastL: s.lastL, td: this.t - s.tRev, autoFace: s.autoFace, remote: s.remote, over: s.over }, this.club, this.rng);
+    const k = strikeNumbers({ src: s.src, peak: s.peak, x0: s.x0, xTop: s.xTop, xNow: s.xNow, lastL: s.lastL, td: this.t - s.tRev, autoFace: s.autoFace, remote: s.remote, over: s.over }, this.club, this.rng, s.chip);
     if (k.overTop) this.timing = null;
     const shot = simulate({
       club,
@@ -401,6 +476,7 @@ export class CourseGame {
       origin: this.ball,
       lie: lieFor(this.lie, this.club),
       rng: this.rng,
+      trees: this.hole.blockers.length ? this.hole.blockers : undefined,
     });
     this.shot = shot;
     this.shotT = 0;
@@ -538,6 +614,7 @@ export class CourseGame {
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
     const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt);
     const def = this.hole.def;
+    this.legs.push([sh.ox, sh.oz, end[0], end[1]]);
     let msg = `${club.name}: ${Math.round(sh.carry)} yards carry, ${Math.round(sh.total)} total`;
     this.dropped = !!drop;
     if (drop) {
@@ -554,7 +631,7 @@ export class CourseGame {
       this.result = `${LIE_CAPS[sh.surface] ?? ""} · ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} FT` : `${Math.round(toPin)} YD`} TO GO`;
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} feet` : `${Math.round(toPin)} yards`} to the pin.`;
     }
-    this.say(msg);
+    this.say(sh.tree ? `${msg} Hit a tree.` : msg);
     this.setPhase("rest");
     this.restT = 0;
     this.fast = false;
@@ -567,7 +644,7 @@ export class CourseGame {
   private afterRest() {
     const def = this.hole.def;
     if (shouldPickUp(this.strokes, def.par)) return this.holeDone(this.strokes, true);
-    if (this.lie === "green" || this.lie === "fringe") {
+    if (this.lie === "green" || this.lie === "fringe" || this.nearGreen()) {
       const [gx, gy] = this.hole.toGreen(this.ball[0], this.ball[1]);
       this.puttRolling = false;
       puttBegin(this.putt, this.hole.green, [gx, gy], this.strokes, { pickUp: def.par + PICK_UP_OVER, onDone: (s, up) => this.holeDone(s, up) }, this.t, this.opts.reduce);
