@@ -4,6 +4,9 @@ import { CLUBS } from "@/components/offhours/golf/flight";
 import { TARGETS } from "@/components/offhours/golf/scene";
 import { PURE, makeSim, recordingCtx, seedRandom, stubScratchCanvas } from "./golf-headless";
 
+// these play real shots and rounds, which run many times slower under coverage on CI
+vi.setConfig({ testTimeout: 60_000 });
+
 // The driving range with no screen: the range's own state machine, stepped by hand.
 
 beforeEach(() => {

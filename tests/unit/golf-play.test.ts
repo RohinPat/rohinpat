@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CourseGame, REST_HOLD, STEP, type Phase } from "@/components/offhours/golf/play";
 import { CLUBS } from "@/components/offhours/golf/flight";
-import { buildHole, HOLE_DEFS } from "@/components/offhours/golf/course";
+import { buildHole, HOLE_DEFS, type Blob } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { carryAtPower, fullCarry, powerFor } from "@/components/offhours/golf/swing";
 import { carryRing, liftFor, paint, playDraw } from "@/components/offhours/golf/playDraw";
@@ -10,6 +10,9 @@ import { puttPowerFor } from "@/components/offhours/golf/green";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 import { BOTS, Player, mean, playRound } from "./golf-bots";
+
+// these play real shots and rounds, which run many times slower under coverage on CI
+vi.setConfig({ testTimeout: 60_000 });
 
 // The course as a game with no screen: its phases, its rules, what it says, and the bots that play it.
 
@@ -146,7 +149,7 @@ describe("water, the woods, pick-up", () => {
     const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
     g.key({ key: " " }, true);
     g.wind = [0, 0];
-    const d = HOLE_DEFS[1].water[0];
+    const d = HOLE_DEFS[1].water[0] as Blob;
     const yd = Math.hypot(d.x, d.z);
     g.setAim(Math.atan2(d.x, d.z));
     g.setClub(3);
@@ -252,7 +255,7 @@ describe("the green", () => {
     expect(g.phase).toBe("round-card");
     expect(g.round).not.toBeNull();
     expect(g.round!.total).toBe(r.total);
-    expect(g.round!.par).toBe(7);
+    expect(g.round!.par).toBe(23);
     expect(g.round!.isBest).toBe(true);
     expect(g.round!.previous).toBeNull();
     // a press too soon is ignored (the key that holed it)
@@ -302,38 +305,48 @@ describe("repeatability and the idle player", () => {
 });
 
 describe("the bots: measured bands, pinned", () => {
-  // 30 seeded rounds each over holes 1 and 2 (par 7). The numbers in the PR are these.
+  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these.
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1));
+  const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
+  const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));
 
-  it("skilled (aim off by 0.03 rad, power by 8%): about par to par + 3, never stuck", { timeout: 60_000 }, () => {
+  it("skilled (aim off by 0.03 rad, power by 8%): par + 4 to par + 6, never stuck", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
-    const tot = mean(rs.map((r) => r.total));
-    expect(tot).toBeGreaterThanOrEqual(8.0);
-    expect(tot).toBeLessThanOrEqual(9.2);
-    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(7);
-    expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(14);
-    expect(mean(rs.map((r) => r.holes[0]))).toBeGreaterThanOrEqual(4.2);
-    expect(mean(rs.map((r) => r.holes[0]))).toBeLessThanOrEqual(5.1);
-    expect(mean(rs.map((r) => r.holes[1]))).toBeGreaterThanOrEqual(3.5);
-    expect(mean(rs.map((r) => r.holes[1]))).toBeLessThanOrEqual(4.4);
+    expect(total(rs)).toBeGreaterThanOrEqual(27);
+    expect(total(rs)).toBeLessThanOrEqual(29.5);
+    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(23);
+    expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(36);
+    // every hole is a par plus about one, none out of reach
+    rs[0].pars.forEach((par, h) => {
+      expect(holeMean(rs, h), `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.2);
+      expect(holeMean(rs, h), `hole ${h + 1}`).toBeLessThanOrEqual(par + 2);
+    });
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(2);
   });
 
-  it("the keyboard's three presses, played well: par + 1 to par + 4", { timeout: 60_000 }, () => {
-    const rs = rounds(BOTS.keyboard);
+  it("casual (aim off by 0.08 rad, power by 15%): par + 11 to par + 14, with a few pick-ups", { timeout: 90_000 }, () => {
+    const rs = rounds(BOTS.casual);
     expect(rs.every((r) => r.finished)).toBe(true);
-    const tot = mean(rs.map((r) => r.total));
-    expect(tot).toBeGreaterThanOrEqual(8.0);
-    expect(tot).toBeLessThanOrEqual(11);
+    expect(total(rs)).toBeGreaterThanOrEqual(34);
+    expect(total(rs)).toBeLessThanOrEqual(38);
+    expect(total(rs)).toBeGreaterThan(total(rounds(BOTS.skilled)) + 4);
+    expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(25);
   });
 
-  it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 60_000 }, () => {
+  it("the keyboard's three presses, played well, lands between skilled and casual", { timeout: 90_000 }, () => {
+    const rs = rounds(BOTS.keyboard);
+    expect(rs.every((r) => r.finished)).toBe(true);
+    expect(total(rs)).toBeGreaterThanOrEqual(30);
+    expect(total(rs)).toBeLessThanOrEqual(34);
+  });
+
+  it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.oneButton);
     expect(rs.every((r) => r.finished)).toBe(true);
     for (const r of rs) r.holes.forEach((s, i) => expect(s, `seed ${r.seed} hole ${i + 1}`).toBeLessThanOrEqual(r.pars[i] + 5));
     // the one press is the over-the-top swing: it is a long way from par
-    expect(mean(rs.map((r) => r.total))).toBeGreaterThan(14);
+    expect(total(rs)).toBeGreaterThan(40);
   });
 });
 
@@ -360,7 +373,7 @@ describe("drawing, with no screen", () => {
     for (const s of ["HOLE 1 · PAR 4", "340 YD TO THE PIN", "STROKES 0", "DRIVER", `${Math.round(fullCarry(0))} YD CARRY`, "WIND"]) expect(rec.texts, s).toContain(s);
     expect(rec.texts.some((t) => /^\d+ MPH$/.test(t))).toBe(true);
   });
-  it("every phase draws, at desktop and phone size, and a draw never changes the game", () => {
+  it("every phase draws, at desktop and phone size, and a draw never changes the game", { timeout: 60_000 }, () => {
     for (const [w, h] of [[1440, 900], [390, 844]]) {
       const g = onTee();
       sized(g, w, h);
@@ -369,10 +382,13 @@ describe("drawing, with no screen", () => {
       const seen = (p: Phase) => phases.add(p);
       const player = new Player(g, BOTS.skilled, 6);
       let guard = 0;
+      let last: Phase | null = null;
       while (!g.finished && guard++ < 60 * 400) {
         player.tick();
         seen(g.phase);
-        if (guard % 7 === 0) paint(ctx, g, w, h, 1 / 60, ptr);
+        // six holes, twice: paint each phase as it starts and a sample between
+        if (g.phase !== last || guard % 61 === 0) paint(ctx, g, w, h, 1 / 60, ptr);
+        last = g.phase;
       }
       paint(ctx, g, w, h, 1 / 60, ptr);
       for (const p of ["ready", "swing", "fly", "rest", "putt", "hole-card", "round-card"] as Phase[]) expect(phases.has(p), `${p} at ${w}`).toBe(true);
@@ -463,8 +479,9 @@ describe("reading the hole from the tee", () => {
     expect(liftFor(252)).toBe(0);
     expect(liftFor(135)).toBe(1);
     expect(liftFor(75)).toBe(1);
-    expect(liftFor(175)).toBeGreaterThan(0);
-    expect(liftFor(175)).toBeLessThan(1);
+    expect(liftFor(195)).toBeGreaterThan(0);
+    expect(liftFor(195)).toBeLessThan(1);
+    expect(liftFor(175)).toBe(1);
     g.key({ key: " " }, true);
     g.wind = [0, 0];
     g.remoteSwing(PURE);

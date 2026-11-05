@@ -59,6 +59,31 @@ export function suggestCourse(yd: number): { club: number; power: number } {
 /** a backswing fraction as the fraction of the club's ball speed */
 export const sfOf = (b: number) => 0.3 + 0.7 * clamp(b, 0, 1);
 
+// The short game. The meter's power is the time between two presses of Space, and nobody presses twice in under about
+// 0.15 s, so a full-swing meter cannot carry less than about 15 yd. Inside CHIP_YD of the pin the meter (and a drag)
+// is scaled to the distance instead: its full travel carries CHIP_FULL_YD with the sand wedge, and the shortest press
+// carries a few yards. A phone's swing is its own power and is not scaled.
+export const CHIP_YD = 40;
+export const CHIP_FULL_YD = 48;
+const CHIP_LOW = 0.18;
+/** the share of the club's ball speed at the top of a chip meter */
+export const chipTop = (club: number) => Math.min(1, Math.sqrt(CHIP_FULL_YD / fullCarry(club)));
+export const sfOfChip = (club: number, b: number) => chipTop(club) * (CHIP_LOW + (1 - CHIP_LOW) * clamp(b, 0, 1));
+/** the no-wind carry (yd) of a chip meter at `b` (steps of 2%) and at the top */
+export const carryAtChip = (club: number, b: number) => carryFor(club, sfOfChip(club, Math.round(clamp(b, 0, 1) * 50) / 50));
+export const chipCarry = (club: number) => carryAtChip(club, 1);
+/** the chip meter fraction that carries `yd` with this club (1 if it cannot) */
+export function chipPowerFor(club: number, yd: number): number {
+  if (yd >= chipCarry(club)) return 1;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 9; i++) {
+    const m = (lo + hi) / 2;
+    if (carryFor(club, sfOfChip(club, m)) < yd) lo = m;
+    else hi = m;
+  }
+  return hi;
+}
+
 // An over-the-top swing always has the same contact, hook and (random) thin or fat lift, so its
 // speed is found once per club: the best of those lies (fat, which flies highest) carries OVER_CARRY.
 export const OVER_CONTACT = 0.4;
@@ -121,7 +146,7 @@ export type Strike = {
 };
 
 /** `rng` decides thin or fat on a poor strike (the range uses Math.random; the course passes its seeded hand) */
-export function strikeNumbers(s: SwingIn, club: number, rng: () => number = Math.random): Strike {
+export function strikeNumbers(s: SwingIn, club: number, rng: () => number = Math.random, chip = false): Strike {
   const power = clamp(s.peak, 0.05, 1.15);
   let face = 0, curve = 0, contact = 1;
   if (s.src === "gesture") {
@@ -161,12 +186,13 @@ export function strikeNumbers(s: SwingIn, club: number, rng: () => number = Math
     }
   }
   const sp = Math.abs(power) > 1 ? 1 : power;
-  let speed = sfOf(sp) * (1 + clamp(power - 1, 0, 0.15) * 0.15);
+  const chipped = chip && s.src !== "remote";
+  let speed = (chipped ? sfOfChip(club, sp) : sfOf(sp)) * (1 + clamp(power - 1, 0, 0.15) * 0.15);
   const overTop = s.over && s.src !== "gesture";
   if (overTop) {
     // over the top: the same hooked, poor contact every time, and never more than OVER_CARRY of a pure swing
     contact = Math.min(contact, OVER_CONTACT);
-    speed = overSpeed(club);
+    speed = overSpeed(club) * (chipped ? chipTop(club) : 1);
   }
   return { power, face, curve, contact, lift, label, speed, overTop };
 }

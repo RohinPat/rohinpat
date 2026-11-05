@@ -10,26 +10,28 @@ import { newPutt, puttDraw, puttKey, puttPointer, puttRead, puttRestart, type Pu
 import type { CourseGame, Phase as PlayPhase } from "./golf/play";
 import type { playDraw as PlayDraw } from "./golf/playDraw";
 
-// Two ways to play golf. PUTT: nine greens drawn as lit relief; pull back from
-// the ball and let go (or aim with the arrows and hold Space), and "Read" pours
-// water that runs the way the putt will break. DRIVING RANGE: a behind-the-
-// golfer camera, a swing you make with your hand (or three presses of Space),
-// real ball flight, a shot-data card and a ten-shot target challenge.
-// The preview tile plays itself, alternating the two. PLAY is the course: two
-// holes so far, the same swing, the same putting view when the ball is on the
-// green. Its code is loaded when the chip is first pressed, so the tile and the
-// rest of the page do not carry it.
+// Three ways to play golf. PLAY is the course: six holes, the same swing as the
+// range, the putting view when the ball is on the green, and a map of the hole
+// that takes a tap or a drag to aim. It opens first; its code is loaded when
+// the dialog opens, so the tile and the rest of the page do not carry it.
+// PUTT: nine greens drawn as lit relief; pull back from the ball and let go (or
+// aim with the arrows and hold Space), and "Read" pours water that runs the way
+// the putt will break. DRIVING RANGE: a behind-the-golfer camera, a swing you
+// make with your hand (or three presses of Space), real ball flight, a shot-data
+// card and a ten-shot target challenge. Putt and range are practice. The
+// preview tile plays itself, alternating putt and range.
 
 type Kind = "putt" | "range" | "play";
 
 export default function Golf({ mode, paused }: PieceProps) {
   const play = mode === "play";
-  const [kind, setKind] = useState<Kind>("putt");
+  const [kind, setKind] = useState<Kind>("play");
   const [club, setClub] = useState(3);
   const [rmode, setRmode] = useState<RangeMode>("practice");
   const [reading, setReading] = useState(false);
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<PlayPhase>("tee-card");
+  const [mapOpen, setMapOpen] = useState(false);
   const [, setReady] = useState(0);
   const kindRef = useRef<Kind>("putt");
   kindRef.current = play ? kind : kindRef.current;
@@ -141,6 +143,46 @@ export default function Golf({ mode, paused }: PieceProps) {
     else puttPointer(P, kind, p.x, p.y, f.t, penv.current);
   };
 
+  /** load the course the first time it is wanted, and start a game */
+  const ensureCourse = () => {
+    const have = course.current;
+    if (have) {
+      setClub(have.game.club);
+      setPhase(have.game.phase);
+      setMapOpen(have.game.mapOpen);
+      return;
+    }
+    if (loading.current) return;
+    loading.current = true;
+    Promise.all([import("./golf/play"), import("./golf/playDraw")])
+      .then(([mod, draw]) => {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const game = new mod.CourseGame({
+          seed: 1 + Math.floor(Math.random() * 1e6),
+          sound: true,
+          reduce,
+          say: setStatus,
+          onClub: setClub,
+          onPhase: setPhase,
+          onMap: setMapOpen,
+        });
+        setClub(game.club);
+        setPhase(game.phase);
+        course.current = { game, draw: draw.playDraw };
+        if (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock")) (window as unknown as { __golf?: CourseGame }).__golf = game;
+        setReady((n) => n + 1);
+      })
+      .catch(() => {
+        loading.current = false;
+        setStatus("The course did not load.");
+      });
+  };
+  // the dialog opens on Play
+  useEffect(() => {
+    if (play && kindRef.current === "play") ensureCourse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play]);
+
   const pick = (k: Kind) => {
     setKind(k);
     kindRef.current = k;
@@ -149,32 +191,7 @@ export default function Golf({ mode, paused }: PieceProps) {
       puttRead(P, false);
       setReading(false);
     }
-    if (k === "play" && !course.current && !loading.current) {
-      loading.current = true;
-      Promise.all([import("./golf/play"), import("./golf/playDraw")])
-        .then(([mod, draw]) => {
-          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-          const game = new mod.CourseGame({
-            seed: 1 + Math.floor(Math.random() * 1e6),
-            sound: true,
-            reduce,
-            say: setStatus,
-            onClub: setClub,
-            onPhase: setPhase,
-          });
-          setClub(game.club);
-          setPhase(game.phase);
-          course.current = { game, draw: draw.playDraw };
-          setReady((n) => n + 1);
-        })
-        .catch(() => {
-          loading.current = false;
-          setStatus("The course did not load.");
-        });
-    } else if (k === "play" && course.current) {
-      setClub(course.current.game.club);
-      setPhase(course.current.game.phase);
-    }
+    if (k === "play") ensureCourse();
   };
   const pickRef = useRef(pick);
   pickRef.current = pick;
@@ -187,15 +204,20 @@ export default function Golf({ mode, paused }: PieceProps) {
     <div className="absolute inset-0 flex flex-col bg-[#1f4d2c]">
       {play && (
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-3 pt-2 sm:pt-3 pb-2 bg-[#0d100e]">
+          <button type="button" aria-pressed={kind === "play"} onClick={() => pick("play")} className={chip(kind === "play")}>
+            Play
+          </button>
           <button type="button" aria-pressed={kind === "putt"} onClick={() => pick("putt")} className={chip(kind === "putt")}>
             Putt
           </button>
           <button type="button" aria-pressed={kind === "range"} onClick={() => pick("range")} className={chip(kind === "range")}>
             Driving range
           </button>
-          <button type="button" aria-pressed={kind === "play"} onClick={() => pick("play")} className={chip(kind === "play")}>
-            Play
-          </button>
+          {kind === "play" && phase !== "putt" && (
+            <button type="button" aria-pressed={mapOpen} onClick={() => course.current?.game.toggleMap()} className={sub(mapOpen)}>
+              Map
+            </button>
+          )}
           {kind === "putt" && (
             <div className="flex items-center gap-1 ml-auto">
               <button
@@ -335,7 +357,7 @@ export default function Golf({ mode, paused }: PieceProps) {
           role={play ? "img" : undefined}
           aria-label={
             play
-              ? "Golf. Putting: drag back from the ball and let go, or use the arrow keys to aim (Alt for fine steps) and hold Space; press R to read the green. Driving range: drag down and swing up, or press Space three times; arrows aim and change club. Play: the same swing, two holes; on the green you putt."
+              ? "Golf. Play: six holes. Drag down and swing up, or press Space three times; arrows aim and change club; M opens the map, and a tap or drag on it sets the aim; on the green you putt. Putting practice: drag back from the ball and let go, or use the arrow keys to aim (Alt for fine steps) and hold Space; press R to read the green. Driving range: the same swing, with a target challenge."
               : undefined
           }
           className="absolute inset-0 w-full h-full outline-none touch-none"

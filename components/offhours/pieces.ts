@@ -78,9 +78,9 @@ export const PIECE_META: PieceMeta[] = [
     id: "golf",
     index: 8,
     label: "Golf",
-    line: "Read the break, then rip one.",
-    title: "Putt, drive, read",
-    how: ["Putt: pull back and let go", "Range: drag down, then swing up", "Read green: pour water to see the break"],
+    line: "Six holes, tee to cup.",
+    title: "Six holes",
+    how: ["Swing: drag down, then up (or Space three times)", "Aim: tap the map (or arrows)", "Putt: pull back and let go"],
   },
   {
     id: "powder",

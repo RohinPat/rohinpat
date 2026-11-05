@@ -23,6 +23,8 @@ export type Bot = {
 export const BOTS: Record<string, Bot> = {
   /** swings at the suggested club and power, as a phone's swing does: aim off by 0.03 rad, power off by 8% */
   skilled: { name: "skilled", aim: 0.03, power: 0.08, skilled: true },
+  /** a casual player: aim off by 0.08 rad, power by 15%, same suggested club (a phone's swing) */
+  casual: { name: "casual", aim: 0.08, power: 0.15, skilled: true },
   /** Space once, then waits (the club goes over the top on its own) */
   oneButton: { name: "one-button", aim: 0, power: 0, skilled: false },
   /** never does anything */
@@ -85,7 +87,8 @@ export class Player {
         }
         case "ready": {
           this.shots++;
-          const sg = g.suggested();
+          // a phone's swing is a plain power; Space and a drag are the chip meter inside 40 yd
+          const sg = bot.keys ? g.meterSuggest() : g.suggested();
           if (bot.keys) {
             g.setAim(g.yawT + gauss(rnd) * bot.aim);
             this.kbPower = Math.max(0.1, Math.min(1.1, sg.power * (1 + gauss(rnd) * bot.power)));

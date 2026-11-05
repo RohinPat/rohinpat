@@ -4,7 +4,8 @@ import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
 import { CourseGame, swingLen } from "./play";
 import { YD, drawWorld, prepare, project, type Cam, type Drawable, type P2 } from "./scene";
-import { carryAtPower, fullCarry } from "./swing";
+import { MAP_WIDE, mapDraw } from "./map";
+import { carryAtChip, carryAtPower, chipCarry, fullCarry } from "./swing";
 import { bestRound, overUnder, toPar } from "./score";
 import { trace } from "./tracer";
 
@@ -40,12 +41,15 @@ export function playDraw(ctx: CanvasRenderingContext2D, g: CourseGame, w: number
 export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer) {
   const reduce = !!g.opts.reduce;
   if (g.phase === "putt" || (g.phase === "hole-card" && g.putt.course && g.putt.ball.sunk)) {
+    g.mapView = null;
     puttLayout(g.putt, w, h, true);
     puttPaint(ctx, g.putt, w, h, g.t, { play: true, say: () => {}, reduce }, pointer);
     if (g.phase === "putt") puttPrompt(ctx, g, w, h);
   } else {
     shotView(ctx, g, w, h, dt, reduce);
     hud(ctx, g, w, h);
+    if (!g.mapSet) g.setMap(w >= MAP_WIDE);
+    mapDraw(ctx, g, w, h, carryRing(g));
   }
   if (g.phase === "tee-card") teeCard(ctx, g, w, h);
   else if (g.phase === "hole-card") holeCard(ctx, g, w, h);
@@ -55,12 +59,26 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
 // ------------------------------------------------------------ camera
 type Rig = { dx: number; dy: number; dz: number; tx: number; ty: number; tz: number; F: number };
 
-/** how much the camera rises for a shot to a target this far away (yd): none from 200 yd or more, all of it inside 150 */
-export const liftFor = (yd: number) => smooth(clamp((200 - yd) / 50, 0, 1));
+/** how much the camera rises for a shot to a target this far away (yd): none from 205 yd or more, all of it inside 180 */
+export const liftFor = (yd: number) => smooth(clamp((205 - yd) / 25, 0, 1));
 /** the height of the raised camera, m, and how far behind the ball it stands */
 const HIGH = 44, HIGH_BACK = 16;
 /** the raised camera is zoomed until the green is this tall on screen, px, as far as the width allows (about 52 m across) */
 const GREEN_PX = 72, SPAN_M = 52, GREEN_DEPTH_M = 12.5;
+
+/** the far bank (m from the ball) of the first water the aim line crosses within 140 yd, or null */
+function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: number): number | null {
+  const sf = g.hole.surfaceAt;
+  const sx = Math.sin(yaw), sz = Math.cos(yaw);
+  const reach = Math.min(dm, 140 * YD);
+  let far: number | null = null;
+  for (let d = 4; d <= reach; d += 3) {
+    const wet = sf(bx + sx * d, bz + sz * d) === "water";
+    if (wet) far = d;
+    else if (far !== null) break;
+  }
+  return far;
+}
 
 /**
  * Where the camera stands to take a shot from (bx, bz) at `yd` yards to the target. A long shot: behind the golfer at eye
@@ -77,13 +95,20 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   // the long-shot camera (the range's)
   const back = yd < 60 ? 5 : 8.4;
   const ahead = clamp(dm + 12, 30, 70);
-  const lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
-  const k = liftFor(yd);
+  let lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
+  // water across the line within reach: the eye rises so that it can be seen, and looks at it
+  const hz = waterAhead(g, bx, bz, yaw, dm);
+  if (hz !== null) {
+    const look = clamp(hz + 35, 45, Math.max(45, dm));
+    lo = { ex: -a[0] * 12 + rt[0] * off, ey: 14, ez: -a[2] * 12 + rt[2] * off, tx: a[0] * look, ty: 0, tz: a[2] * look, F: F0 * 1.1 };
+  }
+  // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
+  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
   if (k <= 0) return { dx: bx + lo.ex, dy: lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lo.ty, tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
   const rng = Math.hypot(HIGH, D);
-  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 3600);
+  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 4400);
   const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
   const m = (p: number, q: number) => p + (q - p) * k;
   return { dx: bx + m(lo.ex, hi.ex), dy: m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx: bx + m(lo.tx, hi.tx), ty: m(lo.ty, hi.ty), tz: bz + m(lo.tz, hi.tz), F: m(lo.F, hi.F) };
@@ -239,7 +264,8 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
 export function carryRing(g: CourseGame): { x: number; z: number; yd: number } {
   const s = g.sw;
   const power = g.phase === "swing" ? clamp(s.sub === "back" ? s.b : s.peak, 0.05, 1) : 1;
-  const yd = power >= 1 ? fullCarry(g.club) : carryAtPower(g.club, power);
+  const chip = g.chipping();
+  const yd = power >= 1 ? (chip ? chipCarry(g.club) : fullCarry(g.club)) : chip ? carryAtChip(g.club, power) : carryAtPower(g.club, power);
   return { x: g.ball[0] + Math.sin(g.yaw) * yd * YD, z: g.ball[1] + Math.cos(g.yaw) * yd * YD, yd };
 }
 
@@ -420,7 +446,7 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   mono(ctx, 10);
   ctx.fillStyle = MINT;
   const clubName = club.name.toUpperCase();
-  const carryTxt = `${Math.round(fullCarry(g.club))} YD CARRY`;
+  const carryTxt = `${Math.round(g.chipping() ? chipCarry(g.club) : fullCarry(g.club))} YD CARRY`;
   ctx.fillText(clubName, gx + 12, gy + 18);
   ctx.fillStyle = DIM;
   ctx.fillText(carryTxt, gx + 12, gy + 34);
@@ -439,7 +465,7 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   ctx.fillStyle = bcur > 1.04 ? RED : MINT;
   ctx.fillRect(bx, by, clamp(bcur / maxB, 0, 1) * bw, 10);
   // the swing that carries the distance with this club
-  const sg = g.suggested();
+  const sg = g.meterSuggest();
   if (g.club === sg.club && (g.phase === "ready" || active)) {
     ctx.fillStyle = PAPER;
     ctx.fillRect(bx + clamp(sg.power / maxB, 0, 1) * bw - 1, by - 3, 2, 16);

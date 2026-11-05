@@ -3,6 +3,9 @@ import * as M from "@/components/offhours/golf/range";
 import * as S from "@/components/offhours/golf/swing";
 import { makeSim, seedRandom, stubScratchCanvas, type Sim } from "./golf-headless";
 
+// these play real shots and rounds, which run many times slower under coverage on CI
+vi.setConfig({ testTimeout: 60_000 });
+
 // The swing's numbers: what a gesture, a two-press meter swing, an over-the-top swing and a phone's swing turn into
 // (power, start line, curve, contact, thin/fat) before the ball is struck. The expected values below were recorded from
 // the range as it was BEFORE the swing logic moved into golf/swing.ts, so they pin that move to no change at all.

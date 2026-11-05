@@ -9,7 +9,7 @@ import { YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } fro
 //
 // Frame: the tee is (0, 0), +z is downrange, +x is right. Yards in the data,
 // metres at run time (YD converts). Only scenery and green contours come from
-// seeds. Holes 3-9 are a later drop; the format takes nine.
+// seeds. The six holes are all here; the format takes nine.
 
 type V3 = [number, number, number];
 
@@ -22,10 +22,16 @@ const DEEP = hex("#21472a");
 const GREEN = hex("#c4f092");
 const GREEN_B = hex("#b8ea85");
 const FRINGE = hex("#8ccb64");
+/** the crown of a tree that stops a ball, m */
+const TREE_R = 1.8;
 /** the flag is at least this tall on screen, px */
 const FLAG_MIN_PX = 34;
 
 export type Blob = { x: number; z: number; rx: number; rz: number; rot?: number };
+/** a creek: water along a path (yd), `w` yd wide */
+export type Creek = { path: [number, number][]; w: number };
+export type Water = Blob | Creek;
+const isCreek = (w: Water): w is Creek => "path" in w;
 
 export type HoleDef = {
   n: number;
@@ -42,8 +48,10 @@ export type HoleDef = {
   pin: [number, number];
   green: { c: [number, number]; seed: number; severity: number };
   bunkers: Blob[];
-  water: Blob[];
+  water: Water[];
   trees: { seed: number; /** yd of clear ground beyond the rough before the trees */ edge: number; /** yd between trees along the edge */ spacing: number };
+  /** trees that stop a ball in the air: x and z (yd) and the height (m). They are drawn with the rest. */
+  copse?: [number, number, number][];
   /** where the wind blows to: 0 is straight downrange (a tailwind), pi/2 to the right; m/s */
   wind: { speed: number; dir: number };
   /** the aim for the tee shot on a par 4 or 5 (yd); a par 3 aims at the pin */
@@ -83,6 +91,94 @@ export const HOLE_DEFS: HoleDef[] = [
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
   },
+  {
+    // a dogleg right at 205 yd. The inside of the bend is a bunker and a stand of trees: a driver aimed over them gets home,
+    // a 5 iron to the bend leaves about 165 in
+    n: 3,
+    name: "The Elbow",
+    par: 4,
+    yards: 365,
+    line: [[0, 0], [0, 205], [100, 333]],
+    half: [15, 21, 19],
+    rough: 14,
+    pin: [98, 331],
+    green: { c: [99.5, 334], seed: 4303, severity: 0.8 },
+    bunkers: [
+      { x: 31, z: 196, rx: 5, rz: 9, rot: -0.15 },
+      { x: 117, z: 341, rx: 5, rz: 5, rot: -0.8 },
+    ],
+    water: [],
+    trees: { seed: 37, edge: 6, spacing: 6 },
+    copse: [[44, 150, 17], [50, 160, 19], [42, 170, 16], [54, 176, 20], [46, 186, 18], [58, 192, 17], [47, 199, 19], [60, 206, 16]],
+    wind: { speed: 2.5, dir: 0.9 },
+    landing: [0, 180],
+  },
+  {
+    // a creek across the fairway, 320 to 334 yd from the tee, and the green 136 yd past it
+    n: 4,
+    name: "Reed Creek",
+    par: 5,
+    yards: 470,
+    line: [[0, 0], [0, 300], [10, 474]],
+    half: [14, 22, 20],
+    rough: 14,
+    pin: [9, 470],
+    green: { c: [10, 472], seed: 4404, severity: 0.85 },
+    bunkers: [
+      { x: 23, z: 268, rx: 5, rz: 9 },
+      { x: 33, z: 470, rx: 5, rz: 6 },
+    ],
+    water: [{ path: [[-56, 327.5], [-28, 326.5], [0, 327], [28, 327.5], [56, 326.5]], w: 14 }],
+    trees: { seed: 41, edge: 6, spacing: 6 },
+    wind: { speed: 2.5, dir: 0.3 },
+    landing: [0, 255],
+  },
+  {
+    // the green ringed with sand, a pond on its left edge, the strongest wind of the six blowing toward the pond
+    n: 5,
+    name: "The Collar",
+    par: 3,
+    yards: 175,
+    line: [[0, 0], [0, 177]],
+    half: [10, 15],
+    rough: 12,
+    pin: [3, 174],
+    green: { c: [0, 176], seed: 4505, severity: 0.9 },
+    bunkers: [
+      { x: 0, z: 164.5, rx: 6, rz: 3.6 },
+      { x: 12, z: 168, rx: 5, rz: 4, rot: -0.7 },
+      { x: 16.5, z: 176, rx: 3.8, rz: 5 },
+      { x: 12, z: 184, rx: 5, rz: 4, rot: 0.7 },
+      { x: 0, z: 187.5, rx: 6, rz: 3.6 },
+      { x: -12, z: 184.5, rx: 4.5, rz: 3.6, rot: -0.7 },
+      { x: -12, z: 167.5, rx: 4.5, rz: 3.6, rot: 0.7 },
+    ],
+    water: [{ x: -18.5, z: 176, rx: 5.5, rz: 7.5 }],
+    trees: { seed: 53, edge: 6, spacing: 6 },
+    wind: { speed: 4.2, dir: -1.2 },
+    landing: [3, 174],
+  },
+  {
+    // a long dogleg left with water along the inside of the bend and the wind in your face
+    n: 6,
+    name: "Last Light",
+    par: 4,
+    yards: 395,
+    line: [[0, 0], [0, 175], [-110, 370.5]],
+    half: [15, 22, 19],
+    rough: 14,
+    pin: [-107, 366.5],
+    green: { c: [-109, 369], seed: 4606, severity: 1.0 },
+    bunkers: [
+      { x: -19, z: 263, rx: 4.5, rz: 8, rot: 0.515 },
+      { x: -91, z: 355, rx: 5, rz: 4.5 },
+    ],
+    water: [{ path: [[-54, 189], [-81, 233], [-106, 276], [-130, 320], [-142, 342]], w: 11 }],
+    trees: { seed: 67, edge: 6, spacing: 6 },
+    copse: [[-47, 128, 18], [-53, 139, 20], [-45, 150, 16], [-58, 154, 19], [-50, 165, 17], [-60, 172, 18], [-52, 180, 20]],
+    wind: { speed: 2.8, dir: 3.4 },
+    landing: [-26, 225],
+  },
 ];
 
 const blobHit = (b: Blob, x: number, z: number) => {
@@ -102,7 +198,36 @@ const blobRing = (b: Blob, n = 20): [number, number][] => {
   return out;
 };
 
-type Sample = { x: number; z: number; nx: number; nz: number; hw: number };
+/** metres from a point to the nearest part of a path (a list of points in metres) */
+const pathDist = (path: [number, number][], x: number, z: number) => {
+  let best = Infinity;
+  for (let i = 0; i < path.length - 1; i++) {
+    const [ax, az] = path[i], [bx, bz] = path[i + 1];
+    const dx = bx - ax, dz = bz - az;
+    const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+    best = Math.min(best, Math.hypot(x - (ax + dx * u), z - (az + dz * u)));
+  }
+  return best;
+};
+const creekPath = (c: Creek) => c.path.map(([x, z]) => [x * YD, z * YD] as [number, number]);
+const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? pathDist(creekPath(w), x, z) < (w.w * YD) / 2 : blobHit(w, x, z));
+/** a creek's outline: its bank on one side out, on the other back */
+const creekRing = (c: Creek): [number, number][] => {
+  const P = creekPath(c), hw = (c.w * YD) / 2;
+  const left: [number, number][] = [], right: [number, number][] = [];
+  P.forEach(([x, z], i) => {
+    const [ax, az] = P[Math.max(0, i - 1)], [bx, bz] = P[Math.min(P.length - 1, i + 1)];
+    const l = Math.hypot(bx - ax, bz - az) || 1;
+    const nx = (bz - az) / l, nz = -(bx - ax) / l;
+    left.push([x + nx * hw, z + nz * hw]);
+    right.push([x - nx * hw, z - nz * hw]);
+  });
+  return [...left, ...right.reverse()];
+};
+const waterRing = (w: Water) => (isCreek(w) ? creekRing(w) : blobRing(w));
+
+/** a point along the ribbon: its normal (to the right of the line), the half width, and how much to stretch an offset at a bend so the edge stays a constant distance from the line */
+type Sample = { x: number; z: number; nx: number; nz: number; hw: number; m: number };
 
 export type BuiltHole = {
   def: HoleDef;
@@ -123,6 +248,12 @@ export type BuiltHole = {
   edgeDrop: (x: number, z: number) => [number, number];
   /** the fairway's half width where the line is nearest a point, m (for the tests) */
   fairHalfAt: (z: number) => number;
+  /** how far (m) a point is outside the fairway: 0 or less on it */
+  margin: (x: number, z: number) => number;
+  /** trees that stop a ball in the air (metres: x, z, crown radius, height) */
+  blockers: { x: number; z: number; r: number; h: number }[];
+  /** the hole drawn flat, metres: the rough and the fairway as outlines, and the box that holds all of it */
+  shape: { rough: [number, number][]; fairway: [number, number][]; box: { x0: number; x1: number; z0: number; z1: number } };
 };
 
 const built = new Map<number, BuiltHole>();
@@ -165,7 +296,7 @@ export function buildHole(def: HoleDef): BuiltHole {
   green.tee = toGreen(0, 0);
 
   const surfaceAt = (x: number, z: number): Surface => {
-    for (const b of def.water) if (blobHit(b, x, z)) return "water";
+    for (const b of def.water) if (waterHit(b, x, z)) return "water";
     // the green: only worth asking near it
     if (Math.abs(x - cx) < GW * 0.62 && Math.abs(z - cz) < GH * 0.7) {
       const [gx, gy] = toGreen(x, z);
@@ -180,7 +311,8 @@ export function buildHole(def: HoleDef): BuiltHole {
     return "out";
   };
 
-  // ribbon samples: every 5 yd along the line, with a normal and the half width
+  // ribbon samples: every 5 yd along the line, with a normal and the half width. At a bend the normal is the mean of the
+  // two segments' and the offsets are stretched, so the edges meet instead of gapping on the outside
   const samples: Sample[] = [];
   {
     const step = 5 * YD;
@@ -188,10 +320,20 @@ export function buildHole(def: HoleDef): BuiltHole {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
       const len = Math.hypot(bx - ax, bz - az);
       const n = Math.max(1, Math.ceil(len / step));
+      const dx = (bx - ax) / len, dz = (bz - az) / len;
       for (let k = i === 0 ? 0 : 1; k <= n; k++) {
         const u = k / n;
-        const dx = (bx - ax) / len, dz = (bz - az) / len;
-        samples.push({ x: ax + (bx - ax) * u, z: az + (bz - az) * u, nx: dz, nz: -dx, hw: half[i] + (half[i + 1] - half[i]) * u });
+        let nx = dz, nz = -dx, m = 1;
+        if (k === n && i < pts.length - 2) {
+          const [cx2, cz2] = pts[i + 2];
+          const l2 = Math.hypot(cx2 - bx, cz2 - bz) || 1;
+          const mx = nx + (cz2 - bz) / l2, mz = nz - (cx2 - bx) / l2;
+          const ml = Math.hypot(mx, mz) || 1;
+          nx = mx / ml;
+          nz = mz / ml;
+          m = Math.min(1.6, 1 / Math.max(0.01, nx * dz + nz * -dx));
+        }
+        samples.push({ x: ax + (bx - ax) * u, z: az + (bz - az) * u, nx, nz, hw: half[i] + (half[i + 1] - half[i]) * u, m });
       }
     }
   }
@@ -207,16 +349,16 @@ export function buildHole(def: HoleDef): BuiltHole {
       const rc = mixc(ROUGH, HAZE, fg);
       for (const s of [-1, 1])
         poly(ctx, cam, [
-          [a.x + s * a.nx * a.hw, 0, a.z + s * a.nz * a.hw],
-          [a.x + s * a.nx * (a.hw + rough), 0, a.z + s * a.nz * (a.hw + rough)],
-          [b.x + s * b.nx * (b.hw + rough), 0, b.z + s * b.nz * (b.hw + rough)],
-          [b.x + s * b.nx * b.hw, 0, b.z + s * b.nz * b.hw],
+          [a.x + s * a.nx * a.hw * a.m, 0, a.z + s * a.nz * a.hw * a.m],
+          [a.x + s * a.nx * (a.hw + rough) * a.m, 0, a.z + s * a.nz * (a.hw + rough) * a.m],
+          [b.x + s * b.nx * (b.hw + rough) * b.m, 0, b.z + s * b.nz * (b.hw + rough) * b.m],
+          [b.x + s * b.nx * b.hw * b.m, 0, b.z + s * b.nz * b.hw * b.m],
         ] as V3[], rc);
       poly(ctx, cam, [
-        [a.x - a.nx * a.hw, 0, a.z - a.nz * a.hw],
-        [a.x + a.nx * a.hw, 0, a.z + a.nz * a.hw],
-        [b.x + b.nx * b.hw, 0, b.z + b.nz * b.hw],
-        [b.x - b.nx * b.hw, 0, b.z - b.nz * b.hw],
+        [a.x - a.nx * a.hw * a.m, 0, a.z - a.nz * a.hw * a.m],
+        [a.x + a.nx * a.hw * a.m, 0, a.z + a.nz * a.hw * a.m],
+        [b.x + b.nx * b.hw * b.m, 0, b.z + b.nz * b.hw * b.m],
+        [b.x - b.nx * b.hw * b.m, 0, b.z - b.nz * b.hw * b.m],
       ] as V3[], mixc(Math.floor(i / 2) % 2 ? FAIR_B : FAIR_A, HAZE, fg));
     }
   };
@@ -227,15 +369,21 @@ export function buildHole(def: HoleDef): BuiltHole {
     const r = seeded(def.trees.seed);
     const out = rough + def.trees.edge * YD;
     const sp = def.trees.spacing * YD;
+    // inside a bend the offset from one segment can land on the other's rough: leave those out (the draws are still made, so the rest do not move)
+    const keep = (t: Tree) => {
+      if (margin(t.x, t.z) > rough + 3 * YD) trees.push(t);
+    };
     for (let i = 0; i < samples.length; i++) {
       if (i % Math.max(1, Math.round(sp / (5 * YD))) !== 0) continue;
       const a = samples[i];
       for (const s of [-1, 1]) {
         const d = a.hw + out + r() * 4;
-        trees.push({ x: a.x + s * a.nx * d, z: a.z + s * a.nz * d + (r() - 0.5) * 3, h: 11 + r() * 9, kind: Math.floor(r() * 4), flip: r() > 0.5 });
-        if (r() > 0.45) trees.push({ x: a.x + s * a.nx * (d + 9 + r() * 14), z: a.z + s * a.nz * (d + 9 + r() * 14) + r() * 4, h: 15 + r() * 10, kind: Math.floor(r() * 4), flip: r() > 0.5 });
+        keep({ x: a.x + s * a.nx * d, z: a.z + s * a.nz * d + (r() - 0.5) * 3, h: 11 + r() * 9, kind: Math.floor(r() * 4), flip: r() > 0.5 });
+        if (r() > 0.45) keep({ x: a.x + s * a.nx * (d + 9 + r() * 14), z: a.z + s * a.nz * (d + 9 + r() * 14) + r() * 4, h: 15 + r() * 10, kind: Math.floor(r() * 4), flip: r() > 0.5 });
       }
     }
+    // the copse: trees a ball in the air can hit, set where the hole's decision is
+    for (const [x, z, h] of def.copse ?? []) trees.push({ x: x * YD, z: z * YD, h, kind: Math.floor(r() * 3), flip: r() > 0.5 });
     const end = pts[pts.length - 1];
     for (let row = 0; row < 3; row++) for (let x = -130; x < 130; x += 6 + r() * 4) trees.push({ x: end[0] + x, z: end[1] + 22 + row * 14 + r() * 6, h: 15 + r() * 12 + row * 3, kind: Math.floor(r() * 4), flip: r() > 0.5 });
   }
@@ -256,16 +404,37 @@ export function buildHole(def: HoleDef): BuiltHole {
     return o;
   };
 
-  // yardage markers at 100, 150 and 200 yd from the middle of the green, on the edge of the fairway, never in a hazard
+  // yardage markers at 100, 150 and 200 yd from the middle of the green (along the line), on the edge of the fairway, never in a hazard
   const markers: { x: number; z: number; label: string }[] = [];
-  for (const d of [100, 150, 200]) {
-    const z = cz - d * YD;
-    if (z < 12 * YD) continue;
-    for (const side of [-1, 1]) {
-      const x = side * (fairHalfAt(z) + 3.5);
-      let clear = true;
-      for (let a = 0; a < 12 && clear; a++) for (const r of [0, 2.5]) if (!["fairway", "rough"].includes(surfaceAt(x + Math.cos(a) * r, z + Math.sin(a) * r))) clear = false;
-      if (clear) markers.push({ x, z, label: String(d) });
+  {
+    const cum = [0];
+    for (let i = 1; i < L.length; i++) cum.push(cum[i - 1] + Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]));
+    // where along the line the middle of the green is
+    let sEnd = 0, bestD = Infinity;
+    for (let i = 0; i < L.length - 1; i++) {
+      const dx = L[i + 1][0] - L[i][0], dz = L[i + 1][1] - L[i][1], l2 = dx * dx + dz * dz;
+      const u = Math.max(0, Math.min(1, ((cx - L[i][0]) * dx + (cz - L[i][1]) * dz) / l2));
+      const d = Math.hypot(cx - (L[i][0] + dx * u), cz - (L[i][1] + dz * u));
+      if (d < bestD) {
+        bestD = d;
+        sEnd = cum[i] + u * Math.sqrt(l2);
+      }
+    }
+    for (const d of [100, 150, 200]) {
+      const s0 = sEnd - d * YD;
+      if (s0 < 12 * YD) continue;
+      let i = 0;
+      while (i < L.length - 2 && s0 > cum[i + 1]) i++;
+      const len = cum[i + 1] - cum[i], u = (s0 - cum[i]) / len;
+      const px = L[i][0] + (L[i + 1][0] - L[i][0]) * u, pz = L[i][1] + (L[i + 1][1] - L[i][1]) * u;
+      const nx = (L[i + 1][1] - L[i][1]) / len, nz = -(L[i + 1][0] - L[i][0]) / len;
+      const off = hw0[i] + (hw0[i + 1] - hw0[i]) * u + 3.5;
+      for (const side of [-1, 1]) {
+        const x = px + side * nx * off, z = pz + side * nz * off;
+        let clear = true;
+        for (let a = 0; a < 12 && clear; a++) for (const r of [0, 2.5]) if (!["fairway", "rough"].includes(surfaceAt(x + Math.cos(a) * r, z + Math.sin(a) * r))) clear = false;
+        if (clear) markers.push({ x, z, label: String(d) });
+      }
     }
   }
 
@@ -275,7 +444,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     tee: true,
     bunkers: [],
     sand: def.bunkers.map((b) => blobRing(b)),
-    water: def.water.map((b) => blobRing(b)),
+    water: def.water.map((w) => waterRing(w)),
     greens: [{ x: cx, z: cz, r: GH / 2, ring: greenRing, fringe: 0.7, pin, plain: true }],
     trees,
     boards: [],
@@ -306,6 +475,26 @@ export function buildHole(def: HoleDef): BuiltHole {
     return best;
   };
 
+  const edge = (k: number): [number, number][] => {
+    const l: [number, number][] = [], r: [number, number][] = [];
+    for (const q of samples) {
+      l.push([q.x - q.nx * (q.hw + k) * q.m, q.z - q.nz * (q.hw + k) * q.m]);
+      r.push([q.x + q.nx * (q.hw + k) * q.m, q.z + q.nz * (q.hw + k) * q.m]);
+    }
+    return [...l, ...r.reverse()];
+  };
+  const shape = { rough: edge(rough), fairway: edge(0), box: { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity } };
+  {
+    const bx = shape.box;
+    const all: [number, number][] = [...shape.rough, ...world.water.flat(), ...(world.sand ?? []).flat(), ...greenRing(GH / 2 + 1).map(([x, , z]) => [x, z] as [number, number])];
+    for (const [x, z] of all) {
+      bx.x0 = Math.min(bx.x0, x);
+      bx.x1 = Math.max(bx.x1, x);
+      bx.z0 = Math.min(bx.z0, z);
+      bx.z1 = Math.max(bx.z1, z);
+    }
+  }
+
   const b: BuiltHole = {
     def,
     surfaceAt,
@@ -319,6 +508,9 @@ export function buildHole(def: HoleDef): BuiltHole {
     wind: [Math.sin(def.wind.dir) * def.wind.speed, Math.cos(def.wind.dir) * def.wind.speed],
     edgeDrop,
     fairHalfAt,
+    margin,
+    blockers: (def.copse ?? []).map(([x, z, h]) => ({ x: x * YD, z: z * YD, r: TREE_R, h: h * 0.92 })),
+    shape,
   };
   built.set(def.n, b);
   return b;
