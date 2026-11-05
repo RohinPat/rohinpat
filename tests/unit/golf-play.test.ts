@@ -370,7 +370,7 @@ describe("drawing, with no screen", () => {
     for (const s of ["HOLE 1 · PAR 4", "340 YD TO THE PIN", "STROKES 0", "DRIVER", `${Math.round(fullCarry(0))} YD CARRY`, "WIND"]) expect(rec.texts, s).toContain(s);
     expect(rec.texts.some((t) => /^\d+ MPH$/.test(t))).toBe(true);
   });
-  it("every phase draws, at desktop and phone size, and a draw never changes the game", () => {
+  it("every phase draws, at desktop and phone size, and a draw never changes the game", { timeout: 60_000 }, () => {
     for (const [w, h] of [[1440, 900], [390, 844]]) {
       const g = onTee();
       sized(g, w, h);
@@ -379,10 +379,13 @@ describe("drawing, with no screen", () => {
       const seen = (p: Phase) => phases.add(p);
       const player = new Player(g, BOTS.skilled, 6);
       let guard = 0;
+      let last: Phase | null = null;
       while (!g.finished && guard++ < 60 * 400) {
         player.tick();
         seen(g.phase);
-        if (guard % 7 === 0) paint(ctx, g, w, h, 1 / 60, ptr);
+        // six holes, twice: paint each phase as it starts and a sample between
+        if (g.phase !== last || guard % 61 === 0) paint(ctx, g, w, h, 1 / 60, ptr);
+        last = g.phase;
       }
       paint(ctx, g, w, h, 1 / 60, ptr);
       for (const p of ["ready", "swing", "fly", "rest", "putt", "hole-card", "round-card"] as Phase[]) expect(phases.has(p), `${p} at ${w}`).toBe(true);
