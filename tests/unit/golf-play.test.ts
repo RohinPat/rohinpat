@@ -591,6 +591,7 @@ describe("the aim line and the carry ring", () => {
     const ga = new CourseGame({ seed: 5 }), gb = new CourseGame({ seed: 5, reduce: true });
     for (const [g, r] of [[ga, a], [gb, b]] as const) {
       g.key({ key: " " }, true);
+      g.taken = 1; // past the first shot's cue, which is meant to differ
       g.w = 1440;
       g.h = 900;
       for (let i = 0; i < 30; i++) paint(r.ctx, g, 1440, 900, 1 / 60, ptr);
@@ -633,4 +634,38 @@ describe("holes", () => {
     expect(g.round!.par).toBe(3);
     expect(buildHole(HOLE_DEFS[1])).toBe(buildHole(HOLE_DEFS[1]));
   });
+});
+
+describe("a linked phone", () => {
+  it("its aim buttons take the laptop's step, only while the next shot is being set up", () => {
+    const g = onTee();
+    run(g, () => g.phase === "ready");
+    const y = g.yawT;
+    g.remoteAim(1);
+    expect(g.yawT).toBeCloseTo(y + 0.03);
+    g.remoteAim(-1);
+    g.remoteAim(-1);
+    expect(g.yawT).toBeCloseTo(y - 0.03);
+    g.remoteAim(0);
+    expect(g.yawT).toBeCloseTo(y - 0.03);
+    g.remoteSwing(PURE);
+    const during = g.yawT;
+    g.remoteAim(1);
+    expect(g.yawT).toBe(during);
+  });
+  it("the mouse and key hints stay away while a phone is paired", () => {
+    const hints = (linked: boolean) => {
+      const rec = recordingCtx();
+      const g = onTee();
+      run(g, () => g.phase === "ready");
+      g.linked = linked;
+      g.w = 1440;
+      g.h = 900;
+      paint(rec.ctx, g, 1440, 900, 1 / 60, { x: 0, y: 0, inside: false });
+      return rec.texts.filter((t) => t.startsWith("DRAG DOWN"));
+    };
+    expect(hints(false).length).toBeGreaterThan(0);
+    expect(hints(true)).toEqual([]);
+  });
+it("the first shot shows a moving dot, still under reduced motion, and it goes with the first strike", () => {    const arcs = (opts: { reduce?: boolean }, taken: number) => {      const rec = recordingCtx();      const g = onTee(opts);      run(g, () => g.phase === "ready");      g.taken = taken;      g.w = 1440;      g.h = 900;      paint(rec.ctx, g, 1440, 900, 1 / 60, { x: 0, y: 0, inside: false });      return rec.arcs.length;    };    expect(arcs({}, 0)).toBe(arcs({}, 1) + 1);    expect(arcs({ reduce: true }, 0)).toBe(arcs({ reduce: true }, 1));  });
 });

@@ -178,6 +178,12 @@ test.describe("phone controllers: golf's driving range", () => {
     await expect(host.locator('[data-golf-phase="ready"]')).toBeVisible({ timeout: 20_000 });
     await expect(host.getByTestId("golf-phone-hint")).toHaveText(/swing your phone/i);
     await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible();
+    await expect(phone.getByRole("group", { name: "Game" }).getByRole("button", { name: "Play" })).toHaveAttribute("aria-pressed", "true");
+    // its aim buttons turn the laptop's aim
+    const aim = () => host.evaluate(() => (window as unknown as { __golf: { yawT: number } }).__golf.yawT);
+    const before = await aim();
+    await phone.locator('[data-golf-aim="right"]').click();
+    await expect.poll(aim).toBeGreaterThan(before);
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-swing", data: { speedMph: 92, tempo: 3, faceDeg: 0 } }));
     await expect(status(host)).toContainText(/Driver: \d+ yards carry/, { timeout: 25_000 });
     await context.close();
@@ -248,6 +254,11 @@ test.describe("phone controllers: golf's driving range", () => {
     // and the laptop's own switch still reaches the phone
     await stage(host).getByRole("button", { name: "Driving range" }).click();
     await expect(game.getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
+    // the phone can come back to the course, and a page that only knows range still works
+    await game.getByRole("button", { name: "Play" }).click();
+    await expect(stage(host).getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-pick", data: { range: true } }));
+    await expect(stage(host).getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
     await context.close();
   });
 });

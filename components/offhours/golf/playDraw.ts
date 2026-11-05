@@ -486,12 +486,13 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   const room = w - 2 * pad - 20;
   let msgs: string[] = [];
   if (g.phase === "fly") msgs = g.fast ? ["4X"] : g.taken < 3 ? ["PRESS TO SPEED UP", "PRESS TO SKIP"] : [];
-  else if (g.phase === "ready") msgs = g.taken < 3 ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"] : [];
+  else if (g.phase === "ready") msgs = g.taken < 3 && !g.linked ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"] : [];
   else if (g.phase === "swing" && s.src !== "remote") msgs = s.sub === "back" ? [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"] : [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
   if (msgs.length) {
     mono(ctx, 10);
     pill(ctx, fit(ctx, msgs, room), w / 2, slot0);
   }
+  if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, w / 2, slot0 - 84, g.t, !!g.opts.reduce);
   // what the last shot did
   if (g.phase === "rest" && g.result) {
     mono(ctx, 10);
@@ -559,6 +560,43 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
     s.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.stroke();
   }
+}
+
+/** the first shot of a visit: a dot that drags down slowly and swings up fast; a plain double arrow under reduced motion */
+function swingCue(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, reduce: boolean) {
+  const len = 44;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(13,16,14,.78)";
+  ctx.lineWidth = 24;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y + len);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(242,234,215,.5)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y + len);
+  if (reduce) {
+    for (const [ty, d] of [[y, 1], [y + len, -1]]) {
+      ctx.moveTo(x - 5, ty + d * 6);
+      ctx.lineTo(x, ty);
+      ctx.lineTo(x + 5, ty + d * 6);
+    }
+  }
+  ctx.stroke();
+  if (!reduce) {
+    const u = (t % 2) / 2;
+    const down = 0.55, up = 0.7;
+    const at = u < down ? u / down : u < up ? 1 - (u - down) / (up - down) : 0;
+    ctx.globalAlpha = u < up ? 1 : 1 - (u - up) / (1 - up);
+    ctx.fillStyle = PAPER;
+    ctx.beginPath();
+    ctx.arc(x, y + at * len, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** the first putt of a visit: how to hit it */

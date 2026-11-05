@@ -18,12 +18,20 @@ import { buzz } from "@/lib/haptics";
 // Sends   gesture golf-swing {speedMph, tempo, faceDeg}   a finished swing
 //         gesture golf-club  {index}                       the club picker
 //         gesture golf-sync  {}                            "tell me the club and mode" (on mount)
-//         gesture golf-pick  {range: boolean}              the Putt / Driving range switch
+//         gesture golf-pick  {mode, range: boolean}        the Play / Putt / Driving range switch
+//         gesture golf-aim   {dir: -1 | 1}                 the aim buttons, in Play
 // Hears   gesture golf-club  {index}                       the laptop's club (keys or picker)
-//         gesture golf-mode  {range: boolean}              false while the laptop is putting
+//         gesture golf-mode  {mode, range: boolean}        which game is up; range is false while the laptop is putting
 
 type Mode = "swing" | "touch";
 type SwingNumbers = { speedMph: number; tempo: number; faceDeg: number };
+type Game = "play" | "putt" | "range";
+
+const GAMES: { id: Game; label: string }[] = [
+  { id: "play", label: "Play" },
+  { id: "putt", label: "Putt" },
+  { id: "range", label: "Driving range" },
+];
 
 const REASONS: Record<string, string> = {
   "too-slow": "Swing harder.",
@@ -44,6 +52,7 @@ const fmtFace = (d: number) => (Math.abs(d) < 1 ? "square" : `${Math.abs(round(d
 export default function GolfController({ send, subscribe, motionOk }: ControllerProps) {
   const [mode, setMode] = useState<Mode>(motionOk ? "swing" : "touch");
   const [club, setClub] = useState(3);
+  const [game, setGame] = useState<Game>("play");
   const [range, setRange] = useState(true);
   const [ready, setReady] = useState(false);
   const [last, setLast] = useState<SwingNumbers | null>(null);
@@ -56,7 +65,12 @@ export default function GolfController({ send, subscribe, motionOk }: Controller
       if (m.name === "golf-club") {
         const i = Number(m.data?.index);
         if (Number.isInteger(i) && i >= 0 && i < CLUBS.length) setClub(i);
-      } else if (m.name === "golf-mode") setRange(!!m.data?.range);
+      } else if (m.name === "golf-mode") {
+        const r = !!m.data?.range;
+        setRange(r);
+        const g = m.data?.mode;
+        setGame(g === "play" || g === "putt" || g === "range" ? g : r ? "range" : "putt");
+      }
     });
     send({ type: "gesture", name: "golf-sync", data: {} });
     return off;
@@ -110,26 +124,28 @@ export default function GolfController({ send, subscribe, motionOk }: Controller
     send({ type: "gesture", name: "golf-club", data: { index: i } });
   };
 
-  const pickRange = (r: boolean) => {
-    setRange(r);
-    send({ type: "gesture", name: "golf-pick", data: { range: r } });
+  const pickGame = (g: Game) => {
+    setGame(g);
+    setRange(g !== "putt");
+    send({ type: "gesture", name: "golf-pick", data: { mode: g, range: g === "range" } });
   };
+  const aim = (dir: -1 | 1) => send({ type: "gesture", name: "golf-aim", data: { dir } });
 
   const live = swingOn && receiving !== false;
   const go = live && ready;
   return (
     <div className="flex-1 min-h-0 overflow-y-auto pb-4" data-testid="golf-controller" data-mode={mode} data-ready={go}>
-      <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Game">
-        {([false, true] as const).map((r) => (
+      <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Game">
+        {GAMES.map((g) => (
           <button
-            key={String(r)}
+            key={g.id}
             type="button"
-            aria-pressed={range === r}
-            data-golf-pick={r ? "range" : "putt"}
-            onClick={() => pickRange(r)}
-            className={`${ghostButton} !min-h-[48px] ${range === r ? "!bg-[var(--paper)] !text-[var(--ink)] !border-transparent" : ""}`}
+            aria-pressed={game === g.id}
+            data-golf-pick={g.id}
+            onClick={() => pickGame(g.id)}
+            className={`${ghostButton} !min-h-[48px] !px-1 ${game === g.id ? "!bg-[var(--paper)] !text-[var(--ink)] !border-transparent" : ""}`}
           >
-            {r ? "Driving range" : "Putt"}
+            {g.label}
           </button>
         ))}
       </div>
@@ -161,6 +177,17 @@ export default function GolfController({ send, subscribe, motionOk }: Controller
         </div>
       )}
       {range && mode === "touch" && <TouchSwing club={club} onSwing={sendSwing} />}
+
+      {game === "play" && range && (
+        <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Aim">
+          <button type="button" data-golf-aim="left" onClick={() => aim(-1)} className={`${ghostButton} !min-h-[56px]`}>
+            ◀ Aim left
+          </button>
+          <button type="button" data-golf-aim="right" onClick={() => aim(1)} className={`${ghostButton} !min-h-[56px]`}>
+            Aim right ▶
+          </button>
+        </div>
+      )}
 
       {note && (
         <p role="status" data-testid="golf-note" className="mt-3 rounded-[14px] bg-[#d9b44a]/15 border border-[#d9b44a]/40 px-3.5 py-2.5 text-[1rem] text-[#f0dc9d]">
