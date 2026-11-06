@@ -71,9 +71,11 @@ export default function Golf({ mode, paused }: PieceProps) {
           setClub(R.club);
         }
         syncPhone();
+      } else if (name === "golf-aim") {
+        if (kindRef.current === "play") course.current?.game.remoteAim(Number(data.dir) || 0);
       } else if (name === "golf-pick") {
-        // the phone's Putt / Driving range switch
-        pickRef.current(data.range ? "range" : "putt");
+        // the phone's Play / Putt / Driving range switch; a phone on an older page only sends range
+        pickRef.current(data.mode === "play" || data.mode === "putt" || data.mode === "range" ? data.mode : data.range ? "range" : "putt");
       } else if (name === "golf-sync") {
         syncPhone();
       }
@@ -86,8 +88,10 @@ export default function Golf({ mode, paused }: PieceProps) {
   const syncPhone = () => {
     const G = kindRef.current === "play" ? course.current?.game : null;
     remote.send({ type: "gesture", name: "golf-club", data: { index: G ? G.club : R.club } });
-    remote.send({ type: "gesture", name: "golf-mode", data: { range: swinging(kindRef.current, phaseRef.current) } });
+    remote.send({ type: "gesture", name: "golf-mode", data: { range: swinging(kindRef.current, phaseRef.current), mode: kindRef.current } });
   };
+  const linkedRef = useRef(false);
+  linkedRef.current = remote.linked;
   const syncRef = useRef(syncPhone);
   syncRef.current = syncPhone;
   useEffect(() => {
@@ -107,7 +111,10 @@ export default function Golf({ mode, paused }: PieceProps) {
         }
       }
       if (kindRef.current === "play") {
-        if (course.current) course.current.draw(ctx, course.current.game, w, h, dt, p);
+        if (course.current) {
+          course.current.game.linked = linkedRef.current;
+          course.current.draw(ctx, course.current.game, w, h, dt, p);
+        }
         else {
           ctx.fillStyle = "#0d100e";
           ctx.fillRect(0, 0, w, h);

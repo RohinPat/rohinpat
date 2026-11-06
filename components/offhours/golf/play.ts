@@ -134,6 +134,8 @@ export class CourseGame {
   timing: number | null = null;
   /** the shots struck this visit (hints go after a few) */
   taken = 0;
+  /** a phone is paired, so the swing hints for a mouse or the keys stay away */
+  linked = false;
   putt: Putt;
   /** the camera is the draw layer's; it lives here so it survives frames */
   cam: Cam = newCam();
@@ -418,6 +420,11 @@ export class CourseGame {
       s.xNow = x;
       this.strike();
     }
+  }
+
+  /** the aim buttons on a linked phone: the same step as the laptop's, while the next shot is being set up */
+  remoteAim(dir: number) {
+    if (this.phase === "ready" && dir) this.aim(Math.sign(dir) * 0.03);
   }
 
   /** a swing from a linked phone: the golfer takes a quick swing and the ball is struck with exactly `shot` */
