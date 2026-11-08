@@ -195,8 +195,8 @@ const GOLDEN: Record<string, ReturnType<typeof summary>> = {
     "launch": 17,
     "spin": 5870,
     "carry": 80.29,
-    "side": -1.25,
-    "curve": -0.67,
+    "side": 0,
+    "curve": 0,
     "timing": 0.0127
   },
   "meter, full power early": {
@@ -205,9 +205,9 @@ const GOLDEN: Record<string, ReturnType<typeof summary>> = {
     "mph": 122.38,
     "launch": 11,
     "spin": 3330,
-    "carry": 195.71,
-    "side": 49.5,
-    "curve": 39.32,
+    "carry": 201.86,
+    "side": 22.78,
+    "curve": 17.07,
     "timing": -0.0888
   },
   "meter, 80% late": {
@@ -216,9 +216,9 @@ const GOLDEN: Record<string, ReturnType<typeof summary>> = {
     "mph": 56.93,
     "launch": 32,
     "spin": 8260,
-    "carry": 61.14,
-    "side": -4.11,
-    "curve": -1.84,
+    "carry": 61.27,
+    "side": -1.45,
+    "curve": -0.7,
     "timing": 0.0764
   },
   "meter, missed the line": {
@@ -330,7 +330,10 @@ describe("strikeNumbers, on its own", () => {
   it("a meter swing: the line is pure, an early press closes the face, a late one opens it the other way", () => {
     const m = { ...base, src: "meter" as const };
     expect(S.strikeNumbers(m, 3).contact).toBe(1);
-    expect(S.meterFace(-0.07)).toBeCloseTo(-0.5, 6);
+    expect(S.meterFace(-0.165)).toBeCloseTo(-0.5, 6);
+    // a frame either side of the line is the line
+    expect(S.meterFace(S.METER_SQUARE)).toBe(0);
+    expect(S.meterFace(-S.METER_SQUARE)).toBe(0);
     expect(S.meterFace(0.5)).toBe(1);
     expect(S.strikeNumbers({ ...m, autoFace: -1 }, 3, () => 0.9).face).toBeCloseTo(-0.6, 6);
   });

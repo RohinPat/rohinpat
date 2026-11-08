@@ -334,11 +334,11 @@ describe("the bots: measured bands, pinned", () => {
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(25);
   });
 
-  it("the keyboard's three presses, played well, lands between skilled and casual", { timeout: 90_000 }, () => {
+  it("the keyboard's three presses, played well (40 ms off the line), plays like the skilled player", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.keyboard);
     expect(rs.every((r) => r.finished)).toBe(true);
-    expect(total(rs)).toBeGreaterThanOrEqual(30);
-    expect(total(rs)).toBeLessThanOrEqual(34);
+    expect(total(rs)).toBeGreaterThanOrEqual(27.5);
+    expect(total(rs)).toBeLessThanOrEqual(31);
   });
 
   it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 90_000 }, () => {

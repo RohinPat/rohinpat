@@ -348,7 +348,7 @@ export default function Golf({ mode, paused }: PieceProps) {
           </p>
         </div>
       )}
-      <div className="relative flex-1 min-h-0" data-golf-phase={play && kind === "play" ? phase : undefined}>
+      <div className="relative flex-1 min-h-0" data-golf-phase={play && kind === "play" && course.current ? phase : undefined}>
         {remote.linked && swinging(kind, phase) && (
           <p
             data-testid="golf-phone-hint"

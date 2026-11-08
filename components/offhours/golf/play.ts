@@ -8,7 +8,7 @@ import type { RemoteShot } from "./remoteSwing";
 import { YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { CHIP_YD, chipPowerFor, fullCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, chipPowerFor, fullCarry, lieCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -45,6 +45,12 @@ export type CourseOpts = {
 export const NEAR_GREEN = 2 * YD;
 /** how far the aim can be turned from the line to the pin, radians */
 const AIM_RANGE = 0.42;
+/** water is played over when the longest club carries its far bank by this much (yd), else the ball is laid up */
+const LAY_OVER = 10;
+/** a lay-up carries this far short of the water (yd), so its roll stops on dry ground */
+const LAY_SHORT = 18;
+/** a pin this much (yd) past the longest carry is still aimed at: the roll gets there */
+const REACH_ROLL = 15;
 export type MapView = { x: number; y: number; w: number; h: number; /** the point on the hole (metres) under a point on the canvas */ at: (px: number, py: number) => [number, number] };
 
 export const STEP = 1 / 60;
@@ -89,6 +95,8 @@ export type Card = { club: Club; shot: Shot; label: string; t: number; /** a met
 type V3 = [number, number, number];
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const feet = (n: number) => `${n} ${n === 1 ? "foot" : "feet"}`;
+const yards = (n: number) => `${n} ${n === 1 ? "yard" : "yards"}`;
 const smooth = (u: number) => u * u * (3 - 2 * u);
 export const swingLen = (h: number) => clamp(h * 0.3, 110, 230);
 
@@ -216,8 +224,7 @@ export class CourseGame {
 
   /** the aim, the club and the wind for the next shot from the ball */
   private prepareShot(tee: boolean) {
-    const def = this.hole.def;
-    const target = tee && def.par > 3 ? this.hole.landing : this.hole.pin;
+    const target = this.target();
     this.yawT = Math.atan2(target[0] - this.ball[0], target[1] - this.ball[1]);
     if (tee) this.yaw = this.yawT;
     const drift = 1 + (this.rng() * 2 - 1) * 0.2;
@@ -231,7 +238,29 @@ export class CourseGame {
   /** where the aim points: the landing zone for a tee shot on a par 4 or 5, else the pin (metres) */
   target(): [number, number] {
     const def = this.hole.def;
-    return this.strokes === 0 && def.par > 3 ? this.hole.landing : this.hole.pin;
+    if (this.strokes === 0 && def.par > 3) return this.hole.landing;
+    return this.downTheFairway() ?? this.hole.pin;
+  }
+  /** a pin out of reach: the furthest point down the middle of the fairway that the longest club carries, or null */
+  private downTheFairway(): [number, number] | null {
+    let reach = 0;
+    for (let c = 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    const [bx, bz] = this.ball;
+    const R = (reach + REACH_ROLL) * YD;
+    if (this.hole.toPin(bx, bz) <= R) return null;
+    const line = this.hole.line;
+    const near = (x: number, z: number) => {
+      let bi = 0, bd = Infinity;
+      line.forEach(([lx, lz], i) => {
+        const d = Math.hypot(lx - x, lz - z);
+        if (d < bd) [bd, bi] = [d, i];
+      });
+      return bi;
+    };
+    const from = near(bx, bz), to = near(...this.hole.pin);
+    let best: [number, number] | null = null;
+    for (let i = from + 1; i <= to; i++) if (Math.hypot(line[i][0] - bx, line[i][1] - bz) <= reach * YD) best = line[i];
+    return best;
   }
   /** distance to the target, yards */
   yardsToTarget() {
@@ -241,12 +270,39 @@ export class CourseGame {
   yardsToPin() {
     return this.hole.toPin(this.ball[0], this.ball[1]) / YD;
   }
-  /** the club and swing that carry the distance to the target from this lie */
+  /** the share of a pure swing's carry the ball's lie leaves with this club */
+  carryK(club = this.club) {
+    return lieCarry(this.lie, club);
+  }
+  /** the club and swing that carry the distance to the target from this lie, short of water it cannot carry */
   suggested(): { club: number; power: number } {
-    if (this.lie === "bunker") return { club: CLUBS.length - 1, power: Math.min(1, this.yardsToTarget() / fullCarry(CLUBS.length - 1)) };
-    // the rough takes some of the ball's speed: ask for a little more
-    const yd = this.yardsToTarget() / (this.lie === "rough" ? 0.88 : 1);
-    return suggestCourse(yd);
+    const yd = this.layUp() ?? this.yardsToTarget();
+    const sw = CLUBS.length - 1;
+    if (this.lie === "bunker") return { club: sw, power: Math.min(1, yd / (fullCarry(sw) * this.carryK(sw))) };
+    return suggestCourse(yd, (c) => this.carryK(c));
+  }
+  /** water across the line to the target that no club carries from here: how far to lay up short of it (yd), or null */
+  layUp(): number | null {
+    const [tx, tz] = this.target();
+    const [bx, bz] = this.ball;
+    const dm = Math.hypot(tx - bx, tz - bz);
+    if (dm < 1) return null;
+    const sx = (tx - bx) / dm, sz = (tz - bz) / dm;
+    // short of the pin, look on past the target as far as the ball rolls
+    const past = this.target() === this.hole.pin ? 0 : LAY_SHORT * YD;
+    let near = -1, far = -1;
+    for (let d = 2; d < dm + past; d += 2) {
+      const wet = this.hole.surfaceAt(bx + sx * d, bz + sz * d) === "water";
+      if (wet) {
+        if (near < 0) near = d;
+        far = d;
+      } else if (near >= 0) break;
+    }
+    if (near < 0) return null;
+    let reach = 0;
+    for (let c = 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    if (reach >= far / YD + LAY_OVER) return null;
+    return Math.max(10, near / YD - LAY_SHORT);
   }
 
   setClub(i: number, byPlayer = true) {
@@ -285,8 +341,7 @@ export class CourseGame {
   meterSuggest(): { club: number; power: number } {
     const sg = this.suggested();
     if (!this.chipping()) return sg;
-    const yd = this.yardsToTarget() / (this.lie === "rough" ? 0.88 : 1);
-    return { club: sg.club, power: chipPowerFor(sg.club, yd) };
+    return { club: sg.club, power: chipPowerFor(sg.club, (this.layUp() ?? this.yardsToTarget()) / this.carryK(sg.club)) };
   }
   /** a ball on the rough or the fairway close enough to the green to putt it (not out of sand) */
   nearGreen() {
@@ -304,7 +359,7 @@ export class CourseGame {
     this.yaw = yaw;
   }
   private baseYaw() {
-    const [tx, tz] = this.hole.pin;
+    const [tx, tz] = this.target();
     return Math.atan2(tx - this.ball[0], tz - this.ball[1]);
   }
 
@@ -546,7 +601,7 @@ export class CourseGame {
         const ps = this.puttState();
         if (this.puttRolling && !ps.rolling && this.putt.strokes > this.strokes) {
           this.strokes = this.putt.strokes;
-          this.say(`${Math.round(ps.dist * 3.281)} feet to the pin.`);
+          this.say(`${feet(Math.round(ps.dist * 3.281))} to the pin.`);
         }
         this.puttRolling = ps.rolling;
         break;
@@ -636,7 +691,7 @@ export class CourseGame {
       const toPin = this.yardsToPin();
       const ft = Math.round(toPin * 3);
       this.result = `${LIE_CAPS[sh.surface] ?? ""} · ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} FT` : `${Math.round(toPin)} YD`} TO GO`;
-      msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} feet` : `${Math.round(toPin)} yards`} to the pin.`;
+      msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? feet(ft) : yards(Math.round(toPin))} to the pin.`;
     }
     this.say(sh.tree ? `${msg} Hit a tree.` : msg);
     this.setPhase("rest");

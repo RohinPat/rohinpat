@@ -1,4 +1,5 @@
-import { CLUBS, simulate } from "./flight";
+import { CLUBS, simulate, type Surface } from "./flight";
+import { lieFor } from "./lie";
 import type { RemoteShot } from "./remoteSwing";
 
 // What a swing turns into. The range and the course both swing the same three
@@ -41,20 +42,35 @@ export function powerFor(club: number, yd: number): number | null {
   }
   return (hi - 0.3) / 0.7;
 }
-export function suggest(yd: number): { club: number; power: number } {
+const lieCache = new Map<string, number>();
+/** the share of a pure swing's carry this lie leaves with this club (the fairway and the tee: 1) */
+export function lieCarry(surface: Surface, club: number): number {
+  const lie = lieFor(surface, club);
+  if (!lie) return 1;
+  const key = `${surface}:${club}`;
+  let v = lieCache.get(key);
+  if (v === undefined) {
+    const c = simulate({ club: CLUBS[club], speed: 1, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: flatSurf, lie: { ...lie, faceNoise: 0 } }).carry;
+    v = c / fullCarry(club);
+    lieCache.set(key, v);
+  }
+  return v;
+}
+/** `k` is the share of the carry each club keeps from the lie (lieCarry), so the club asked for really gets there */
+export function suggest(yd: number, k: (club: number) => number = () => 1): { club: number; power: number } {
   // the shortest club that gets there, with a little in hand
   for (let i = CLUBS.length - 1; i >= 0; i--) {
-    const p = powerFor(i, yd);
+    const p = powerFor(i, yd / k(i));
     if (p !== null && p >= 0.62) return { club: i, power: p };
   }
-  return { club: 0, power: Math.min(1, powerFor(0, yd) ?? 1) };
+  return { club: 0, power: Math.min(1, powerFor(0, yd / k(0)) ?? 1) };
 }
 /** suggest(), but a short shot takes the sand wedge at the swing that carries it, not a driver at 17% */
-export function suggestCourse(yd: number): { club: number; power: number } {
+export function suggestCourse(yd: number, k: (club: number) => number = () => 1): { club: number; power: number } {
   const sw = CLUBS.length - 1;
-  const p = powerFor(sw, yd);
+  const p = powerFor(sw, yd / k(sw));
   if (p !== null && p < 0.62) return { club: sw, power: Math.max(0.05, p) };
-  return suggest(yd);
+  return suggest(yd, k);
 }
 /** a backswing fraction as the fraction of the club's ball speed */
 export const sfOf = (b: number) => 0.3 + 0.7 * clamp(b, 0, 1);
@@ -107,8 +123,12 @@ export function overSpeed(club: number): number {
 }
 
 // ------------------------------------------------------------ the strike
+/** a press this close to the ideal impact (s) is square: a frame either way, which a keyboard cannot promise */
+export const METER_SQUARE = 0.015;
+/** how far past that (s) the face is as open or closed as it gets */
+const METER_SPAN = 0.3;
 /** how far the second press is from the ideal impact (seconds, + late) as the meter swing's face: -1..1 */
-export const meterFace = (tau: number) => clamp(tau / 0.14, -1, 1);
+export const meterFace = (tau: number) => (Math.abs(tau) <= METER_SQUARE ? 0 : clamp((tau - Math.sign(tau) * METER_SQUARE) / METER_SPAN, -1, 1));
 
 /** the swing as it stood at impact */
 export type SwingIn = {
@@ -167,7 +187,9 @@ export function strikeNumbers(s: SwingIn, club: number, rng: () => number = Math
     const f = s.autoFace;
     face = f * 0.6;
     curve = f * 0.9;
-    contact = 1 - Math.max(0, Math.abs(f) - 0.4) * 0.5;
+    // the strike falls off with the timing as it did before the line was widened: from 56 ms off, to 0.7 at 140 ms
+    const f0 = (0.056 - METER_SQUARE) / METER_SPAN, f1 = (0.14 - METER_SQUARE) / METER_SPAN;
+    contact = 1 - 0.3 * clamp((Math.abs(f) - f0) / (f1 - f0), 0, 1);
   }
   if (power > 1.04) contact -= (power - 1.04) * 2.2;
   contact = clamp(contact, 0.35, 1);

@@ -394,7 +394,15 @@ export function drawWorld(
   h: number,
   t: number,
   wind: Wind,
-  opts: { highlight?: number; extra?: Drawable[]; world?: World; /** prefers-reduced-motion: the water holds still */ still?: boolean } = {},
+  opts: {
+    highlight?: number;
+    extra?: Drawable[];
+    world?: World;
+    /** prefers-reduced-motion: the water holds still */
+    still?: boolean;
+    /** trees nearer the camera than this (m) are left out, so the woods behind a golfer never fill the picture */
+    clearNear?: number;
+  } = {},
 ) {
   const world = opts.world ?? RANGE_WORLD;
   const hor = Math.max(-50, Math.min(h * 0.95, cam.horizon));
@@ -543,7 +551,7 @@ export function drawWorld(
   for (const tr of world.trees) {
     if (!project(cam, tr.x, 0, tr.z, p3)) continue;
     const d = p3.d;
-    if (d > 760) continue;
+    if (d > 760 || d < (opts.clearNear ?? 0)) continue;
     const sx = p3.x, sy = p3.y, k = p3.s;
     const ph = tr.h * k;
     if (sx < -ph || sx > w + ph || sy < -20) continue;

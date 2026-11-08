@@ -24,6 +24,8 @@ const GREEN_B = hex("#b8ea85");
 const FRINGE = hex("#8ccb64");
 /** the crown of a tree that stops a ball, m */
 const TREE_R = 1.8;
+/** how far out (m) a ball is still low enough to hit a tree in the copse */
+const LOW_M = 100;
 /** the flag is at least this tall on screen, px */
 const FLAG_MIN_PX = 34;
 
@@ -252,6 +254,8 @@ export type BuiltHole = {
   margin: (x: number, z: number) => number;
   /** trees that stop a ball in the air (metres: x, z, crown radius, height) */
   blockers: { x: number; z: number; r: number; h: number }[];
+  /** the middle of the fairway from the tee to past the green, every 5 yd, metres */
+  line: [number, number][];
   /** the hole drawn flat, metres: the rough and the fairway as outlines, and the box that holds all of it */
   shape: { rough: [number, number][]; fairway: [number, number][]; box: { x0: number; x1: number; z0: number; z1: number } };
 };
@@ -453,6 +457,15 @@ export function buildHole(def: HoleDef): BuiltHole {
     palette: { deep: DEEP, green: GREEN, greenB: GREEN_B, fringe: FRINGE },
   };
 
+  const blockers = (def.copse ?? []).map(([x, z, h]) => ({ x: x * YD, z: z * YD, r: TREE_R, h: h * 0.92 }));
+  // the copse is in the way of a shot from (x, z) to the pin while the ball is still low enough to hit it
+  const blocked = (x: number, z: number) => {
+    const dx = pin[0] - x, dz = pin[1] - z, l = Math.hypot(dx, dz) || 1;
+    return blockers.some((b) => {
+      const u = Math.max(0, Math.min(l, LOW_M, ((b.x - x) * dx + (b.z - z) * dz) / l));
+      return Math.hypot(x + (dx / l) * u - b.x, z + (dz / l) * u - b.z) < b.r + 2;
+    });
+  };
   const edgeDrop = (x: number, z: number): [number, number] => {
     // walk from the ball toward the line until the ground is in play, then a little further in
     let best: [number, number] = [0, 0], bd = Infinity;
@@ -468,7 +481,9 @@ export function buildHole(def: HoleDef): BuiltHole {
       const px = x + (dx / l) * d, pz = z + (dz / l) * d;
       const sf = surfaceAt(px, pz);
       if (sf !== "out" && sf !== "water") {
-        const q = Math.min(l, d + 1.5);
+        let q = Math.min(l, d + 1.5);
+        // dropped behind the copse there would be no way out: further in, until the way to the pin is open
+        while (q < l && blocked(x + (dx / l) * q, z + (dz / l) * q)) q = Math.min(l, q + 1);
         return [x + (dx / l) * q, z + (dz / l) * q];
       }
     }
@@ -509,7 +524,8 @@ export function buildHole(def: HoleDef): BuiltHole {
     edgeDrop,
     fairHalfAt,
     margin,
-    blockers: (def.copse ?? []).map(([x, z, h]) => ({ x: x * YD, z: z * YD, r: TREE_R, h: h * 0.92 })),
+    blockers,
+    line: samples.map((s) => [s.x, s.z] as [number, number]),
     shape,
   };
   built.set(def.n, b);
