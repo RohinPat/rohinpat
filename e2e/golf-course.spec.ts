@@ -138,6 +138,39 @@ test("phone size: no sideways scroll, and the chips fit", async ({ browser, base
   await context.close();
 });
 
+test("a phone on its side: the heading shrinks, the chips and clubs keep to one row, and a drag swings", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, viewport: { width: 844, height: 390 }, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto("/interests?linkmock");
+  await page.locator('[data-piece="golf"]').click();
+  const canvas = page.locator("canvas[data-autofocus]");
+  await expect(canvas).toBeVisible(SLOW);
+  await expect(page.locator("[data-golf-phase]")).toBeVisible(SLOW);
+  // the hints under the heading go, and "Driving range" is "Range"
+  await expect(page.getByRole("dialog").getByText("Putt: pull back and let go")).toBeHidden();
+  await expect(page.getByRole("button", { name: "range", exact: true })).toBeVisible();
+  const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+  expect(m.sw).toBeLessThanOrEqual(m.cw);
+  const play = (await page.getByRole("button", { name: "Play", exact: true }).boundingBox())!;
+  const sw = (await page.getByRole("button", { name: "Sand wedge" }).boundingBox())!;
+  expect(Math.abs(play.y - sw.y)).toBeLessThan(6);
+  // the course keeps most of the height (it was 161 px of 390)
+  const box = (await canvas.boundingBox())!;
+  expect(box.height).toBeGreaterThan(280);
+  // a drag down and back up off the tee is a swing
+  await page.evaluate(() => { const g = (window as unknown as Win).__golf; if (g.phase === "tee-card") (g as unknown as { key(e: { key: string }, d: boolean): void }).key({ key: " " }, true); });
+  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  const x = box.x + box.width / 2, y0 = box.y + box.height * 0.35;
+  await page.mouse.move(x, y0);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x, y0 + i * 13);
+  for (let i = 1; i <= 6; i++) await page.mouse.move(x, y0 + 130 - i * 24);
+  await page.mouse.up();
+  await expect.poll(() => phase(page), SLOW).not.toBe("ready");
+  expect(await page.evaluate(() => (window as unknown as Win).__golf.strokes)).toBe(1);
+  await context.close();
+});
+
 test("the map: open on a wide screen, M and the chip toggle it, a tap on it sets the aim", async ({ page }) => {
   await openPlay(page);
   const chip = page.getByRole("button", { name: "Map", exact: true });

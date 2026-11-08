@@ -42,7 +42,7 @@ const MASS = 0.04593;
 const DT = 1 / 240;
 
 const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; keep: number }> = {
-  green: { e: 0.22, et: 0.55, mu: 0.8, roll: 0.9, keep: 0.7 },
+  green: { e: 0.22, et: 0.55, mu: 0.8, roll: 0.9, keep: 0.45 },
   fringe: { e: 0.24, et: 0.3, mu: 0.7, roll: 1.6, keep: 0.6 },
   fairway: { e: 0.28, et: 0.0, mu: 0.6, roll: 2.4, keep: 0.62 },
   rough: { e: 0.12, et: 0, mu: 0.8, roll: 6, keep: 0.4 },

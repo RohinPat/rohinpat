@@ -56,6 +56,20 @@ export function lieCarry(surface: Surface, club: number): number {
   }
   return v;
 }
+const rollCache = new Map<string, number>();
+const greenSurf = () => "green" as const;
+/** how far (yd) a pure shot with this club at `sf` of its ball speed runs on after it lands on the green, from this lie */
+export function greenRoll(club: number, sf: number, surface: Surface = "fairway"): number {
+  const lie = lieFor(surface, club);
+  const key = `${club}:${surface}:${sf.toFixed(2)}`;
+  let v = rollCache.get(key);
+  if (v === undefined) {
+    const s = simulate({ club: CLUBS[club], speed: Math.round(sf * 100) / 100, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: greenSurf, lie: lie ? { ...lie, faceNoise: 0 } : undefined });
+    v = Math.max(0, s.total - s.carry);
+    rollCache.set(key, v);
+  }
+  return v;
+}
 /** `k` is the share of the carry each club keeps from the lie (lieCarry), so the club asked for really gets there */
 export function suggest(yd: number, k: (club: number) => number = () => 1): { club: number; power: number } {
   // the shortest club that gets there, with a little in hand

@@ -310,26 +310,26 @@ describe("the bots: measured bands, pinned", () => {
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
   const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));
 
-  it("skilled (aim off by 0.03 rad, power by 8%): par + 4 to par + 6, never stuck", { timeout: 90_000 }, () => {
+  it("skilled (aim off by 0.03 rad, power by 8%): par + 3 to par + 6, never stuck", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
-    expect(total(rs)).toBeGreaterThanOrEqual(27);
-    expect(total(rs)).toBeLessThanOrEqual(29.5);
+    expect(total(rs)).toBeGreaterThanOrEqual(26);
+    expect(total(rs)).toBeLessThanOrEqual(29);
     expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(23);
     expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(36);
-    // every hole is a par plus about one, none out of reach
+    // every hole is about a par plus one, none out of reach (the par 5 is a little under: it is reached in two)
     rs[0].pars.forEach((par, h) => {
-      expect(holeMean(rs, h), `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.2);
+      expect(holeMean(rs, h), `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.6);
       expect(holeMean(rs, h), `hole ${h + 1}`).toBeLessThanOrEqual(par + 2);
     });
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(2);
   });
 
-  it("casual (aim off by 0.08 rad, power by 15%): par + 11 to par + 14, with a few pick-ups", { timeout: 90_000 }, () => {
+  it("casual (aim off by 0.08 rad, power by 15%): par + 9 to par + 14, with a few pick-ups", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.casual);
     expect(rs.every((r) => r.finished)).toBe(true);
-    expect(total(rs)).toBeGreaterThanOrEqual(34);
-    expect(total(rs)).toBeLessThanOrEqual(38);
+    expect(total(rs)).toBeGreaterThanOrEqual(32);
+    expect(total(rs)).toBeLessThanOrEqual(37);
     expect(total(rs)).toBeGreaterThan(total(rounds(BOTS.skilled)) + 4);
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(25);
   });
@@ -337,8 +337,8 @@ describe("the bots: measured bands, pinned", () => {
   it("the keyboard's three presses, played well (40 ms off the line), plays like the skilled player", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.keyboard);
     expect(rs.every((r) => r.finished)).toBe(true);
-    expect(total(rs)).toBeGreaterThanOrEqual(27.5);
-    expect(total(rs)).toBeLessThanOrEqual(31);
+    expect(total(rs)).toBeGreaterThanOrEqual(25.5);
+    expect(total(rs)).toBeLessThanOrEqual(29.5);
   });
 
   it("one button (Space once per shot): every hole ends, at par + 5 or better", { timeout: 90_000 }, () => {

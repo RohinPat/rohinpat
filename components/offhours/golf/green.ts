@@ -203,7 +203,7 @@ function trial(H: Hole, x: number, y: number, ang: number, speed: number) {
 
 // ---------------------------------------------------------------- state
 
-export type PuttEnv = { play: boolean; say: (m: string) => void; /** prefers-reduced-motion: the ball's ring holds still */ reduce?: boolean };
+export type PuttEnv = { play: boolean; say: (m: string) => void; /** prefers-reduced-motion: the ball's ring holds still */ reduce?: boolean; /** a touch screen: the prompts leave the keyboard out */ touch?: boolean };
 
 export type Putt = {
   hole: Hole;
@@ -926,7 +926,7 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
   }
 
   // ---- HUD
-  hud(ctx, p, w, h, t, play, pointer);
+  hud(ctx, p, w, h, t, play, pointer, !!env.touch);
 
   // hole transition
   if (p.fade < 1) {
@@ -1000,7 +1000,7 @@ function paintPutter(ctx: CanvasRenderingContext2D, x: number, y: number, ux: nu
   ctx.restore();
 }
 
-function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: number, play: boolean, pointer: { x: number; y: number; inside: boolean }) {
+function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: number, play: boolean, pointer: { x: number; y: number; inside: boolean }, touch: boolean) {
   const H = p.hole;
   void pointer;
   const compact = w < 560;
@@ -1047,9 +1047,9 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     ctx.textAlign = "left";
   };
   if (p.reading) {
-    chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"], "#a0dcff");
+    chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"].slice(touch ? 1 : 0), "#a0dcff");
   } else if (!p.course && H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
-    chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK, LET GO"], "#f2ead7");
+    chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(touch ? 1 : 0), "#f2ead7");
   }
 
   // power meter while charging by key
@@ -1164,7 +1164,7 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     ctx.fillStyle = tot2 - par2 <= 0 ? "#edbb00" : "#b5b6ab";
     ctx.fillText(tot2 === par2 ? "EVEN PAR" : tot2 > par2 ? `${tot2 - par2} OVER PAR` : `${par2 - tot2} UNDER PAR`, w / 2, y + 118);
     ctx.fillStyle = "#b5b6ab";
-    ctx.fillText("CLICK OR PRESS SPACE TO PLAY AGAIN", w / 2, y + 156);
+    ctx.fillText(touch ? "TAP TO PLAY AGAIN" : "CLICK OR PRESS SPACE TO PLAY AGAIN", w / 2, y + 156);
     ctx.textAlign = "left";
   }
 }

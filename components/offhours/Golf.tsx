@@ -50,6 +50,12 @@ export default function Golf({ mode, paused }: PieceProps) {
   penv.current.play = play;
   const renv = useRef<RangeEnv>({ play, say: setStatus, club: setClub });
   renv.current.play = play;
+  // a touch screen: the prompts on the canvas leave the keyboard out
+  useEffect(() => {
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    penv.current.touch = touch;
+    renv.current.touch = touch;
+  }, []);
 
   // A linked phone: its golf-swing plays a shot on the range, its club picker
   // sets the club. The phone is told the club and which half (putt / range) is
@@ -173,6 +179,7 @@ export default function Golf({ mode, paused }: PieceProps) {
           onPhase: setPhase,
           onMap: setMapOpen,
         });
+        game.touch = !!penv.current.touch;
         setClub(game.club);
         setPhase(game.phase);
         course.current = { game, draw: draw.playDraw };
@@ -203,14 +210,14 @@ export default function Golf({ mode, paused }: PieceProps) {
   const pickRef = useRef(pick);
   pickRef.current = pick;
   const chip = (on: boolean) =>
-    `h-8 sm:h-9 px-3 sm:px-4 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border ${on ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"}`;
+    `h-8 sm:h-9 [@media(max-height:500px)]:!h-7 px-3 sm:px-4 [@media(max-height:500px)]:!px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.14em] border ${on ? "bg-[#f2ead7] text-[#0d100e] border-transparent" : "border-white/15 text-[#f2ead7] hover:bg-white/10"}`;
   const sub = (on: boolean) =>
-    `h-8 sm:h-9 px-2 sm:px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] ${on ? "bg-[#1d5e3f] text-[#f2ead7]" : "text-[#b5b6ab] hover:text-[#f2ead7]"}`;
+    `h-8 sm:h-9 [@media(max-height:500px)]:!h-7 px-2 sm:px-3 [@media(max-height:500px)]:!px-2 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] ${on ? "bg-[#1d5e3f] text-[#f2ead7]" : "text-[#b5b6ab] hover:text-[#f2ead7]"}`;
 
   return (
     <div className="absolute inset-0 flex flex-col bg-[#1f4d2c]">
       {play && (
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-3 pt-2 sm:pt-3 pb-2 bg-[#0d100e]">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-3 pt-2 sm:pt-3 pb-2 [@media(max-height:500px)]:!py-1 bg-[#0d100e]">
           <button type="button" aria-pressed={kind === "play"} onClick={() => pick("play")} className={chip(kind === "play")}>
             Play
           </button>
@@ -218,7 +225,8 @@ export default function Golf({ mode, paused }: PieceProps) {
             Putt
           </button>
           <button type="button" aria-pressed={kind === "range"} onClick={() => pick("range")} className={chip(kind === "range")}>
-            Driving range
+            {/* a phone on its side: "Range", so the chips and the clubs keep to one row */}
+            <span className="[@media(max-height:500px)]:hidden">Driving </span>range
           </button>
           {kind === "play" && phase !== "putt" && (
             <button type="button" aria-pressed={mapOpen} onClick={() => course.current?.game.toggleMap()} className={sub(mapOpen)}>
@@ -281,8 +289,8 @@ export default function Golf({ mode, paused }: PieceProps) {
                       onClick={() => course.current?.game.setClub(i)}
                       className={sub(club === i)}
                     >
-                      <span className="hidden md:inline">{c.name.replace("Pitching wedge", "PW").replace("Sand wedge", "SW")}</span>
-                      <span className="md:hidden">{c.short}</span>
+                      <span className="hidden md:inline [@media(max-height:500px)]:!hidden">{c.name.replace("Pitching wedge", "PW").replace("Sand wedge", "SW")}</span>
+                      <span className="md:hidden [@media(max-height:500px)]:!inline">{c.short}</span>
                     </button>
                   ))}
                   <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true" />
@@ -329,8 +337,8 @@ export default function Golf({ mode, paused }: PieceProps) {
                     }}
                     className={sub(club === i)}
                   >
-                    <span className="hidden md:inline">{c.name.replace("Pitching wedge", "PW").replace("Sand wedge", "SW")}</span>
-                    <span className="md:hidden">{c.short}</span>
+                    <span className="hidden md:inline [@media(max-height:500px)]:!hidden">{c.name.replace("Pitching wedge", "PW").replace("Sand wedge", "SW")}</span>
+                    <span className="md:hidden [@media(max-height:500px)]:!inline">{c.short}</span>
                   </button>
                 ))}
                 <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true" />

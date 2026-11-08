@@ -488,13 +488,14 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   const room = w - 2 * pad - 20;
   let msgs: string[] = [];
   if (g.phase === "fly") msgs = g.fast ? ["4X"] : g.taken < 3 ? ["PRESS TO SPEED UP", "PRESS TO SKIP"] : [];
-  else if (g.phase === "ready") msgs = g.taken < 3 && !g.linked ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"] : [];
+  else if (g.phase === "ready") msgs = g.taken < 3 && !g.linked ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"].slice(g.touch ? 1 : 0) : [];
   else if (g.phase === "swing" && s.src !== "remote") msgs = s.sub === "back" ? [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"] : [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
   if (msgs.length) {
     mono(ctx, 10);
     pill(ctx, fit(ctx, msgs, room), w / 2, slot0);
   }
-  if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, w / 2, slot0 - 84, g.t, !!g.opts.reduce);
+  // a short canvas (a phone on its side) has the aim's yardage where the cue would go: the cue stands off to the right
+  if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, h < 380 ? w / 2 + Math.min(160, w * 0.24) : w / 2, h < 380 ? slot0 - 64 : slot0 - 84, g.t, !!g.opts.reduce);
   // what the last shot did
   if (g.phase === "rest" && g.result) {
     mono(ctx, 10);
@@ -605,7 +606,7 @@ function swingCue(ctx: CanvasRenderingContext2D, x: number, y: number, t: number
 function puttPrompt(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number) {
   if (g.scores.length > 0 || g.phaseT > 12 || g.putt.strokes > g.strokes) return;
   mono(ctx, 10);
-  const msg = fit(ctx, ["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK, LET GO"], w - 40);
+  const msg = fit(ctx, ["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(g.touch ? 1 : 0), w - 40);
   pill(ctx, msg, w / 2, h - 36);
 }
 
