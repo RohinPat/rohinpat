@@ -5,7 +5,7 @@ import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
 import { YD, project } from "@/components/offhours/golf/scene";
-import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, overSpeed, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
+import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, lieCarry, meterFace, overSpeed, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
@@ -508,7 +508,9 @@ describe("the hole map", () => {
     g.setMap(true);
     paint(fakeCtx(), g, 1440, 900, 1 / 60, ptr);
     g.aimAt(-300 * YD, 20 * YD);
-    const base = Math.atan2(g.hole.pin[0], g.hole.pin[1]);
+    // the range is about the target: the landing zone from this tee
+    const [tx, tz] = g.target();
+    const base = Math.atan2(tx, tz);
     expect(Math.abs(g.yawT - base)).toBeLessThanOrEqual(0.42 + 1e-9);
   });
   it("is drawn while the ball waits, swings, flies and rests, not on a card or the green; it is kept, not redrawn", () => {
@@ -563,6 +565,91 @@ describe("the hole map", () => {
     paint(rec.ctx, g, 390, 700, 1 / 60, ptr);
     expect(rec.texts).toContain("TAP OR DRAG TO AIM");
     expect(g.mapView!.w).toBe(374);
+  });
+});
+
+describe("found in play", () => {
+  it("a ball in the woods behind the copse is dropped where the way to the pin is open", () => {
+    for (const n of [3, 6]) {
+      const b = buildHole(HOLE_DEFS[n - 1]);
+      const open = (x: number, z: number) => {
+        const dx = b.pin[0] - x, dz = b.pin[1] - z, l = Math.hypot(dx, dz);
+        return b.blockers.every((t) => {
+          const u = Math.max(0, Math.min(l, 100, ((t.x - x) * dx + (t.z - z) * dz) / l));
+          return Math.hypot(x + (dx / l) * u - t.x, z + (dz / l) * u - t.z) >= t.r + 2;
+        });
+      };
+      for (const t of b.blockers) {
+        // just outside the copse, on the woods side
+        const out = Math.sign(t.x) * 9 * YD;
+        const [x, z] = b.edgeDrop(t.x + out, t.z);
+        expect(["fairway", "rough"], `hole ${n}`).toContain(b.surfaceAt(x, z));
+        expect(open(x, z), `hole ${n} by the tree at ${Math.round(t.z / YD)} yd`).toBe(true);
+      }
+    }
+  });
+  it("from the rough, the club it picks carries the distance (the rough keeps 55 to 67% of a club's carry)", () => {
+    for (let c = 0; c < CLUBS.length; c++) {
+      expect(lieCarry("rough", c)).toBeGreaterThan(0.5);
+      expect(lieCarry("rough", c)).toBeLessThan(0.7);
+      expect(lieCarry("fairway", c)).toBe(1);
+    }
+    const g = onHole(1);
+    for (const yd of [60, 90, 120]) {
+      place(g, 0, (339.5 - yd) * YD, "rough");
+      const sg = g.suggested();
+      const carry = carryAtPower(sg.club, sg.power) * g.carryK(sg.club);
+      expect(carry, `${yd} yd`).toBeGreaterThan(g.yardsToTarget() - 6);
+      expect(carry, `${yd} yd`).toBeLessThan(g.yardsToTarget() + 6);
+    }
+    // and the club's carry on the screen is what it carries from here
+    place(g, 0, 150 * YD, "rough");
+    expect(carryRing(g).yd).toBeCloseTo(fullCarry(g.club) * lieCarry("rough", g.club), 1);
+  });
+  it("a creek no club can carry from here is laid up short of; one that can be carried is played over", () => {
+    const g = onHole(4);
+    for (const [z, lie] of [[177, "rough"], [60, "fairway"]] as const) {
+      place(g, 0, z * YD, lie);
+      expect(g.layUp(), `${lie} at ${z}`).not.toBeNull();
+      const sg = g.suggested();
+      // the carry and its roll stay short of the bank at 320 yd
+      expect(z + carryAtPower(sg.club, sg.power) * g.carryK(sg.club) + 12, `${lie} at ${z}`).toBeLessThan(320);
+    }
+    // from 100 yd the driver carries the far bank (234 yd away) with room to spare
+    for (const z of [100, 250]) {
+      place(g, 0, z * YD, "fairway");
+      expect(g.layUp(), `fairway at ${z}`).toBeNull();
+    }
+  });
+  it("round a dogleg with the pin out of reach, the aim goes down the fairway, not over the woods", () => {
+    for (const [n, x, z] of [[3, 21, 150], [6, -25, 150]] as const) {
+      const g = onHole(n);
+      place(g, x * YD, z * YD, "rough");
+      const [tx, tz] = g.target();
+      expect(g.target(), `hole ${n}`).not.toEqual(g.hole.pin);
+      expect(g.hole.surfaceAt(tx, tz), `hole ${n}`).toBe("fairway");
+      // the line to it stays in play
+      for (let u = 0.1; u <= 1; u += 0.05) expect(g.hole.surfaceAt(g.ball[0] + (tx - g.ball[0]) * u, g.ball[1] + (tz - g.ball[1]) * u), `hole ${n} at ${u.toFixed(2)}`).not.toBe("out");
+      expect(Math.atan2(tx - g.ball[0], tz - g.ball[1])).toBeCloseTo(g.yawT, 6);
+    }
+    // in reach, it is the pin
+    const g = onHole(3);
+    place(g, 60 * YD, 260 * YD);
+    expect(g.target()).toEqual(g.hole.pin);
+  });
+  it("a keyboard swing a little off the line still finds the fairway on the first hole", () => {
+    // 40 ms either way is two frames: it was the trees, it is the fairway now
+    expect(Math.abs(meterFace(0.04))).toBeLessThan(0.1);
+    for (const late of [-0.04, 0.04]) {
+      const h = onHole(1);
+      h.key({ key: " " }, true);
+      run(h, () => h.sw.b >= 1);
+      h.key({ key: " " }, true);
+      run(h, () => h.sw.t >= h.sw.dur + late);
+      h.key({ key: " " }, true);
+      expect(run(h, () => h.phase === "rest")).toBe(true);
+      expect(h.lie, `${late * 1000} ms`).toBe("fairway");
+    }
   });
 });
 

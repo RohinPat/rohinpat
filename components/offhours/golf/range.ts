@@ -581,7 +581,7 @@ function finishShot(r: Range, t: number, env: RangeEnv) {
     r.ch.results.push(pts);
     const ft = Math.round(d * 3.281);
     r.ch.last = `${onGreen ? "ON THE GREEN" : sh.surface === "bunker" ? "BUNKER" : "MISSED THE GREEN"} · ${ft} FT FROM THE PIN · +${pts}`;
-    extra = ` ${onGreen ? "On the green" : "Missed the green"}, ${ft} feet from the pin. Plus ${pts}. Score ${r.ch.score}.`;
+    extra = ` ${onGreen ? "On the green" : "Missed the green"}, ${ft} ${ft === 1 ? "foot" : "feet"} from the pin. Plus ${pts}. Score ${r.ch.score}.`;
     if (r.ch.n >= SHOTS_PER_ROUND) {
       r.ch.done = true;
       extra += ` Round over: ${r.ch.score} points.`;

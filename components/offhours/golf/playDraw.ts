@@ -194,7 +194,9 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   }
   const gd = golferDrawable(ctx, cam, [bx, 0.02, bz], g.yaw, club, g.pose, g.trail);
   if (gd) extra.push(gd);
-  drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce });
+  // trees between the camera and the golfer only hide the shot
+  const near = project(cam, bx, 0, bz, pp) ? pp.d + 1.5 : 0;
+  drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce, clearNear: near });
   if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w);
   if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h);
 
@@ -265,7 +267,7 @@ export function carryRing(g: CourseGame): { x: number; z: number; yd: number } {
   const s = g.sw;
   const power = g.phase === "swing" ? clamp(s.sub === "back" ? s.b : s.peak, 0.05, 1) : 1;
   const chip = g.chipping();
-  const yd = power >= 1 ? (chip ? chipCarry(g.club) : fullCarry(g.club)) : chip ? carryAtChip(g.club, power) : carryAtPower(g.club, power);
+  const yd = (power >= 1 ? (chip ? chipCarry(g.club) : fullCarry(g.club)) : chip ? carryAtChip(g.club, power) : carryAtPower(g.club, power)) * g.carryK();
   return { x: g.ball[0] + Math.sin(g.yaw) * yd * YD, z: g.ball[1] + Math.cos(g.yaw) * yd * YD, yd };
 }
 
@@ -446,7 +448,7 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   mono(ctx, 10);
   ctx.fillStyle = MINT;
   const clubName = club.name.toUpperCase();
-  const carryTxt = `${Math.round(g.chipping() ? chipCarry(g.club) : fullCarry(g.club))} YD CARRY`;
+  const carryTxt = `${Math.round((g.chipping() ? chipCarry(g.club) : fullCarry(g.club)) * g.carryK())} YD CARRY`;
   ctx.fillText(clubName, gx + 12, gy + 18);
   ctx.fillStyle = DIM;
   ctx.fillText(carryTxt, gx + 12, gy + 34);
