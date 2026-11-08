@@ -470,7 +470,7 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
   if (e.key === "r" || e.key === "R") {
     if (down && !e.repeat) {
       puttRead(p, !p.reading);
-      env.say(p.reading ? "Reading the green: press Space to pour water where the pointer is." : "Back to putting.");
+      env.say(p.reading ? "Reading the green: the arrows move the pointer, Space pours water there." : "Back to putting.");
     }
     return true;
   }

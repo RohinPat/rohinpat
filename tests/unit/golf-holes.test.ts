@@ -675,6 +675,42 @@ describe("found in play", () => {
     expect(carryAtPower(sg.club, sg.power)).toBeLessThan(g.yardsToPin());
     expect(carryAtPower(sg.club, sg.power) + greenRoll(sg.club, sfOf(sg.power))).toBeGreaterThan(g.yardsToPin() - 3);
   });
+  it("on a phone on its side (830x304) the hole and round cards fit, the shot HUD stays off them, and a touch screen is told to tap", () => {
+    const g = onHole(2);
+    g.touch = true;
+    const drawn: [string, number][] = [];
+    const ctx = new Proxy(fakeCtx() as object, {
+      get: (t, k) => (k === "fillText" ? (s: string, _x: number, y: number) => drawn.push([s, y]) : Reflect.get(t, k)),
+      set: () => true,
+    }) as unknown as CanvasRenderingContext2D;
+    const look = (phase: string) => {
+      drawn.length = 0;
+      paint(ctx, g, 830, 304, 1 / 60, ptr);
+      expect(drawn.some(([s]) => s === "POWER"), phase).toBe(false);
+      // the card's last line, the prompt, is on the canvas
+      const tap = drawn.find(([s]) => s.startsWith("TAP "));
+      expect(tap, phase).toBeDefined();
+      expect(tap![1], phase).toBeLessThan(304 - 8);
+    };
+    let seen = false;
+    for (let i = 0; i < 40000 && g.phase !== "round-card"; i++) {
+      if (g.phase === "ready") g.remoteSwing({ ...PURE, power: g.suggested().power });
+      if (g.phase === "putt" && !g.puttState().rolling) {
+        const ps = g.puttState();
+        g.puttShoot(Math.atan2(ps.cup[1] - ps.ball[1], ps.cup[0] - ps.ball[0]), 0.35);
+      }
+      if (g.phase === "hole-card" && g.phaseT > 1 && !seen) {
+        seen = true;
+        look("hole card");
+        g.key({ key: " " }, true);
+      }
+      g.step(STEP);
+    }
+    expect(g.phase).toBe("round-card");
+    run(g, () => g.phaseT > 1, 3);
+    look("round card");
+    expect(drawn.map(([s]) => s)).toContain("TAP TO PLAY AGAIN");
+  });
   it("a keyboard swing a little off the line still finds the fairway on the first hole", () => {
     // 40 ms either way is two frames: it was the trees, it is the fairway now
     expect(Math.abs(meterFace(0.04))).toBeLessThan(0.1);
