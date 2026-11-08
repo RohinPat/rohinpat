@@ -507,8 +507,9 @@ export default function Decks({ mode, paused }: PieceProps) {
 
   const Cell = play ? "button" : "span";
   return (
-    <div className="absolute inset-0 flex flex-col md:flex-row bg-[#16181a] text-[#f2ead7]">
-      <div className="relative flex-1 min-h-[30%] md:min-h-0">
+    // a phone on its side: the deck and the grid stay side by side at any width, the grid gets two thirds, and the caption goes
+    <div className={`absolute inset-0 flex flex-col md:flex-row ${play ? "[@media(max-height:500px)]:!flex-row" : ""} bg-[#16181a] text-[#f2ead7]`}>
+      <div className={`relative flex-1 min-h-[30%] md:min-h-0 ${play ? "[@media(max-height:500px)]:!min-h-0" : ""}`}>
         {remote.linked && (
           <p
             data-testid="decks-phone-hint"
@@ -526,7 +527,7 @@ export default function Decks({ mode, paused }: PieceProps) {
           className="absolute inset-0 w-full h-full outline-none touch-none"
         />
       </div>
-      <div className={`flex flex-col gap-3 [&>:first-child]:mt-auto [&>:last-child]:mb-auto ${play ? "min-h-0 overflow-y-auto p-3 md:p-6 md:w-[52%]" : "p-3 w-[50%] justify-center"}`}>
+      <div className={`flex flex-col gap-3 [&>:first-child]:mt-auto [&>:last-child]:mb-auto ${play ? "min-h-0 overflow-y-auto p-3 md:p-6 md:w-[52%] [@media(max-height:500px)]:!w-[66%] [@media(max-height:500px)]:!p-3" : "p-3 w-[50%] justify-center"}`}>
         {play && (
           <div className="flex items-center gap-3 flex-wrap">
             <button
@@ -555,20 +556,20 @@ export default function Decks({ mode, paused }: PieceProps) {
           </div>
         )}
         {play && scope && <Scope paused={paused} />}
-        {/* played: steps are never smaller than 28px, so on a phone the rows scroll sideways together */}
+        {/* played: steps are never smaller than 28px (18px on a phone on its side, where all sixteen fit), so on an upright phone the rows scroll sideways together */}
         <div
           role={play ? "group" : undefined}
           aria-label={play ? "Step sequencer" : undefined}
-          className={`flex flex-col gap-1.5 ${play ? "overflow-x-auto [scrollbar-width:thin] pb-1 -mb-1" : ""}`}
+          className={`flex flex-col gap-1.5 ${play ? "overflow-x-auto [scrollbar-width:thin] pb-1 -mb-1 [--step:28px] [@media(max-height:500px)]:[--step:18px]" : ""}`}
         >
           {ROWS.map((name, r) => (
-            <div key={name} className={`flex items-center gap-2 ${play ? "w-max min-w-full" : ""}`}>
+            <div key={name} className={`flex items-center gap-2 ${play ? "w-max min-w-full [@media(max-height:500px)]:!gap-1.5" : ""}`}>
               <span
-                className={`font-mono uppercase tracking-[0.12em] text-[#b5b6ab] shrink-0 ${play ? "w-12 text-[10px] sticky left-0 z-10 bg-[#16181a]" : "w-8 text-[8px]"}`}
+                className={`font-mono uppercase tracking-[0.12em] text-[#b5b6ab] shrink-0 ${play ? "w-12 text-[10px] sticky left-0 z-10 bg-[#16181a] [@media(max-height:500px)]:!w-10" : "w-8 text-[8px]"}`}
               >
                 {name}
               </span>
-              <div className="grid gap-[3px] flex-1" style={{ gridTemplateColumns: `repeat(16, minmax(${play ? 28 : 0}px, 1fr))` }}>
+              <div className="grid gap-[3px] flex-1" style={{ gridTemplateColumns: `repeat(16, minmax(${play ? "var(--step)" : "0px"}, 1fr))` }}>
                 {pattern[r].map((on, c) => (
                   <Cell
                     key={c}
@@ -590,7 +591,7 @@ export default function Decks({ mode, paused }: PieceProps) {
           ))}
         </div>
         {play && (
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#b5b6ab]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#b5b6ab] [@media(max-height:500px)]:!hidden">
             Kick · snare · hats · bass, made in code. Grab the record while it plays.
           </p>
         )}

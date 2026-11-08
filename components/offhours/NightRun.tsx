@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Remote, RemoteHandlers } from "@/lib/link/remote";
 import { useCanvas, type PieceProps } from "./useCanvas";
+import { useShortStage } from "./Stage";
 import { getAudio } from "./audio";
 import { ENGINE_CAL, nightStateData, parseHandbrakeMs, parseShift, type NightInput } from "./engineRemote";
 import { buildAssets, type Assets } from "./night/assets";
@@ -70,6 +71,12 @@ export default function NightRun({ mode, paused, remote, bus, race }: NightProps
   const mineRef = useRef<RemoteHandlers | null>(null);
   const againRef = useRef<HTMLButtonElement>(null);
   const pickRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // a phone on its side: the switches stand in a column on the right and the cards are drawn left of it
+  const short = useShortStage();
+  const shortRef = useRef(short);
+  shortRef.current = short && mode === "play";
+  const lastCard = useRef("");
 
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState<string>("ready");
@@ -362,17 +369,34 @@ export default function NightRun({ mode, paused, remote, bus, race }: NightProps
         }
       }
       drawScene(ctx, a, g.scene, Math.min(q.level, 2), q.level);
-      const opt: HudOptions = { touch: touchRef.current, linked: linkRef.current.linked, lift: touchRef.current ? PAD_LIFT : 0 };
-      drawHud(ctx, w, h, g, opt, now, reduce);
-      // the end card is drawn on the canvas, the button is under it wherever its bottom edge falls
+      const short = shortRef.current;
       const again = againRef.current;
-      if (again && g.phase === "done") again.style.top = `${Math.round(resultBottom(w, h, opt) + 14)}px`;
-      // the track picker: above the title on the ready card, under the button on the end card
       const pick = pickRef.current;
-      if (pick) {
-        const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
-        const cy = h * 0.27 + (isNarrow(w) ? 20 : 0);
-        pick.style.top = `${Math.round(g.phase === "done" ? resultBottom(w, h, opt) + 14 + 56 : cy - 75 * u - 40)}px`;
+      const opt: HudOptions = { touch: touchRef.current, linked: linkRef.current.linked, lift: touchRef.current ? PAD_LIFT : 0 };
+      if (short) {
+        // the column on the right: the settings row, then the road, then Drive again
+        let left = w;
+        for (const el of [rowRef.current, pick, again]) if (el?.offsetParent) left = Math.min(left, el.offsetLeft);
+        opt.panel = left;
+        if (pick) pick.style.top = "56px";
+        if (again) again.style.top = "100px";
+      }
+      const card = drawHud(ctx, w, h, g, opt, now, reduce);
+      const box = card ? `${Math.round(card.x)},${Math.round(card.y)},${Math.round(card.w)},${Math.round(card.h)}` : "";
+      if (box !== lastCard.current && ref.current) {
+        // where the card is, for the page's tests: nothing on the page may sit on it
+        lastCard.current = box;
+        ref.current.dataset.card = box;
+      }
+      if (!short) {
+        // the end card is drawn on the canvas, the button is under it wherever its bottom edge falls
+        if (again && g.phase === "done") again.style.top = `${Math.round(resultBottom(w, h, opt) + 14)}px`;
+        // the track picker: above the title on the ready card, under the button on the end card
+        if (pick) {
+          const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
+          const cy = h * 0.27 + (isNarrow(w) ? 20 : 0);
+          pick.style.top = `${Math.round(g.phase === "done" ? resultBottom(w, h, opt) + 14 + 56 : cy - 75 * u - 40)}px`;
+        }
       }
     },
     {
@@ -537,13 +561,13 @@ export default function NightRun({ mode, paused, remote, bus, race }: NightProps
         aria-label={`Night run: ${TRACKS[track].label}. The Road buttons choose the road. Arrow keys or A and D steer, Up, W or Space is the gas, Down or S brakes, Shift is the handbrake. T switches between automatic and manual, E and Q change gear by hand, R starts the run over. Hold the gas or press Enter to start.`}
         className="absolute inset-0 w-full h-full outline-none touch-none"
       />
-      <div className="absolute right-3 top-14 z-10 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em]">
+      <div ref={rowRef} className={`absolute right-3 z-10 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] ${short ? "top-3" : "top-14"}`}>
         <button
           type="button"
           data-testid="night-assist"
           onClick={cycleAssist}
-          // on a phone the row is too wide for the clock while driving: the assist is picked before a run, so it steps aside during one
-          className={`h-8 rounded-full border border-white/15 px-3.5 ${phase === "run" || phase === "count" ? "max-sm:hidden" : ""} ${assist > 0 ? "bg-[var(--paper)] text-[var(--ink)]" : "bg-[#0d100e]/70 text-[#f2ead7] hover:bg-white/10"}`}
+          // on a phone (upright or on its side) the row is too wide for the clock while driving: the assist is picked before a run, so it steps aside during one
+          className={`h-8 rounded-full border border-white/15 px-3.5 ${phase === "run" || phase === "count" ? (short ? "hidden" : "max-sm:hidden") : ""} ${assist > 0 ? "bg-[var(--paper)] text-[var(--ink)]" : "bg-[#0d100e]/70 text-[#f2ead7] hover:bg-white/10"}`}
         >
           Assist: {ASSIST_NAMES[assist]}
         </button>
@@ -578,7 +602,7 @@ export default function NightRun({ mode, paused, remote, bus, race }: NightProps
           ref={pickRef}
           role="group"
           aria-label="Road"
-          className="absolute left-1/2 z-10 flex -translate-x-1/2 overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70 font-mono text-[11px] uppercase tracking-[0.14em]"
+          className={`absolute z-10 flex overflow-hidden rounded-full border border-white/15 bg-[#0d100e]/70 font-mono text-[11px] uppercase tracking-[0.14em] ${short ? "right-3" : "left-1/2 -translate-x-1/2"}`}
           style={{ top: 120 }}
           onKeyDown={(e) => {
             const i = TRACK_IDS.indexOf(track);
@@ -620,13 +644,14 @@ export default function NightRun({ mode, paused, remote, bus, race }: NightProps
           data-testid="night-again"
           onClick={startOrAgain}
           ref={againRef}
-          className="absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-[var(--mint)] px-6 py-2.5 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink)]"
+          className={`absolute z-10 rounded-full bg-[var(--mint)] px-6 py-2.5 font-mono text-xs uppercase tracking-[0.18em] text-[var(--ink)] ${short ? "right-3" : "left-1/2 -translate-x-1/2"}`}
           style={{ top: "calc(50% + 13.5rem)" }}
         >
           Drive again
         </button>
       )}
-      {touch && (
+      {/* on a short stage the end card needs the height, and the pads have nothing to do until the next run */}
+      {touch && !(short && phase === "done") && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-3 p-3" data-testid="night-pads">
           <div className="flex shrink-0 gap-2">
             <button type="button" aria-label="Steer left" data-testid="night-pad-left" className={`${padClass} h-[88px] w-16 text-lg sm:h-20 sm:w-20`} {...pad("left")}>

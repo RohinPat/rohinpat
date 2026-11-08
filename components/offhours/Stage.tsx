@@ -20,6 +20,27 @@ export type StageMeta = { index: number; label: string; title: string; how: stri
 export type StageLabel = { title: string; how?: string[] };
 const StageLabelContext = createContext<((l: StageLabel | null) => void) | null>(null);
 
+/** A phone on its side, or any window this short: the stage's heading is one line (see the header below). */
+export const SHORT_QUERY = "(max-height: 500px)";
+const onShortChange = (fn: () => void) => {
+  const mq = window.matchMedia(SHORT_QUERY);
+  mq.addEventListener("change", fn);
+  return () => mq.removeEventListener("change", fn);
+};
+/** true while the stage is in its short (one-line heading) layout */
+export function useShortStage() {
+  return useSyncExternalStore(onShortChange, () => window.matchMedia(SHORT_QUERY).matches, () => false);
+}
+
+// On a short screen the heading row has room a piece can borrow: a piece with a
+// mode switch (Cars) puts it there, next to Sound, so the game keeps its top edge.
+const StageSlotContext = createContext<HTMLElement | null>(null);
+/** where in the heading a piece can portal a control on a short screen (null until the stage has mounted, or when it isn't short) */
+export function useStageSlot() {
+  const slot = useContext(StageSlotContext);
+  return useShortStage() ? slot : null;
+}
+
 /** Call from inside a piece (play mode only): the stage's heading and hints show this instead of the piece's own. */
 export function useStageLabel(label: StageLabel | null) {
   const set = useContext(StageLabelContext);
@@ -59,6 +80,7 @@ export default function Stage({
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
   const [label, setLabel] = useState<StageLabel | null>(null);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const title = label?.title ?? meta.title;
@@ -205,16 +227,18 @@ export default function Stage({
         userSelect: "none",
       }}
     >
-      <header className="flex items-start justify-between gap-4 px-4 md:px-8 pt-3 md:pt-5 pb-2 md:pb-3">
+      {/* a phone on its side: the heading is one short line and the hints go, so the piece keeps the height */}
+      <header className="flex items-start justify-between gap-4 px-4 md:px-8 pt-3 md:pt-5 pb-2 md:pb-3 [@media(max-height:500px)]:items-center [@media(max-height:500px)]:!pt-1.5 [@media(max-height:500px)]:!pb-1">
         <div className="min-w-0">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mint)]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mint)] [@media(max-height:500px)]:hidden">
             {String(meta.index).padStart(2, "0")} — {meta.label}
           </p>
-          <h2 id="stage-title" className="hero-field mt-1 text-[clamp(1.6rem,4.2vw,3.4rem)] leading-[0.92]">
+          <h2 id="stage-title" className="hero-field mt-1 text-[clamp(1.6rem,4.2vw,3.4rem)] leading-[0.92] [@media(max-height:500px)]:!mt-0 [@media(max-height:500px)]:!text-[1.4rem]">
             {title}
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <span ref={setSlot} className="contents" />
           <PairChip tone="dark" />
           <SoundPrompt returnFocus={() => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true })} />
           <button
@@ -222,7 +246,7 @@ export default function Stage({
             onClick={() => setMuted(!muted)}
             aria-pressed={!muted}
             aria-label="Sound"
-            className="h-10 w-10 sm:w-auto sm:px-3.5 grid place-items-center rounded-full border border-white/15 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
+            className="h-10 w-10 sm:w-auto sm:px-3.5 [@media(max-height:500px)]:!h-8 grid place-items-center rounded-full border border-white/15 font-mono text-[11px] uppercase tracking-[0.16em] hover:bg-white/10"
           >
             {/* phones get the speaker alone so the title keeps the width */}
             <svg className="sm:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -238,7 +262,7 @@ export default function Stage({
             type="button"
             onClick={close}
             aria-label="Close"
-            className="w-10 h-10 rounded-full grid place-items-center bg-[var(--paper)] text-[var(--ink)] hover:scale-105 transition-transform"
+            className="w-10 h-10 [@media(max-height:500px)]:!w-8 [@media(max-height:500px)]:!h-8 rounded-full grid place-items-center bg-[var(--paper)] text-[var(--ink)] hover:scale-105 transition-transform"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6 6 18" />
@@ -246,15 +270,17 @@ export default function Stage({
           </button>
         </div>
       </header>
-      <ul className="flex flex-wrap gap-x-5 gap-y-1 px-4 md:px-8 pb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[#b5b6ab]">
+      <ul className="flex flex-wrap gap-x-5 gap-y-1 px-4 md:px-8 pb-3 [@media(max-height:500px)]:hidden font-mono text-[11px] uppercase tracking-[0.14em] text-[#b5b6ab]">
         {how.map((h, i) => (
           <li key={h} className={i ? "hidden sm:list-item" : undefined}>
             {h}
           </li>
         ))}
       </ul>
-      <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 rounded-[14px] overflow-hidden border border-white/10">
-        <StageLabelContext.Provider value={setLabel}>{children}</StageLabelContext.Provider>
+      <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 [@media(max-height:500px)]:!mx-1.5 [@media(max-height:500px)]:!mb-1.5 rounded-[14px] overflow-hidden border border-white/10">
+        <StageLabelContext.Provider value={setLabel}>
+          <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
+        </StageLabelContext.Provider>
       </div>
     </div>,
     document.body,

@@ -718,13 +718,19 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     // narrow (a phone, played): the dial is centred and big, speed and the
     // stats sit in a row under it, the prompt under that. Nothing shares a line.
     const stacked = play && w < 560;
+    // short (a phone on its side, played): the dial fits between the shift lights and the prompt over the lanes, and the stats go in two columns
+    const tight = play && !stacked && area < 240;
     // narrow, the mode switch sits across the top right of the stage: the shift lights go under it
     const ledY = stacked ? 62 : Math.max(16, area * 0.07);
     const dialTop = ledY + 24;
     const foot = stacked ? 124 : 100; // stats block (64 to 80) + the call-out row + gaps
-    const R = stacked ? Math.max(36, Math.min(w * 0.38, (area - dialTop - foot) / 1.8)) : Math.min(w * 0.3, area * 0.42);
+    const R = stacked
+      ? Math.max(36, Math.min(w * 0.38, (area - dialTop - foot) / 1.8))
+      : tight
+        ? Math.max(30, Math.min(w * 0.3, (area - 30 - (ledY + 14)) / 1.88)) // the launch band (1.1 R) clears the lights; its low ends (0.78 R down) clear the prompt
+        : Math.min(w * 0.3, area * 0.42);
     const cx = stacked ? w / 2 : Math.min(w * 0.36, w / 2 - R * 0.2);
-    const cy = stacked ? dialTop + R * 1.06 : area * 0.55;
+    const cy = stacked ? dialTop + R * 1.06 : tight ? ledY + 14 + R * 1.1 : area * 0.55;
     const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
     const ang = (r: number) => a0 + (r / 9000) * (a1 - a0);
     // the face (the track, the red zone, the numbers) once per size
@@ -848,6 +854,27 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillStyle = "#b5b6ab";
       ctx.fillText("MPH", rx + 3, top + 58);
       lines.forEach((l, i) => ctx.fillText(l, rx + sw + gapX, top + 12 + i * 16));
+    } else if (tight) {
+      // speed with MPH beside it, under the shift lights; the stats in two columns under that
+      mono(ctx, 12);
+      const col1 = [0, 2, 4].filter((i) => i < lines.length);
+      const col2 = [1, 3];
+      const w1 = Math.max(...col1.map((i) => ctx.measureText(lines[i]).width));
+      const w2 = Math.max(...col2.map((i) => ctx.measureText(lines[i]).width));
+      rx = Math.min(Math.max(cx + R * 1.3, w * 0.62), w - (w1 + w2 + 34));
+      const base = ledY + 48;
+      display(ctx, 44, 800);
+      ctx.fillStyle = "#f2ead7";
+      ctx.fillText(speed, rx, base);
+      const sw = ctx.measureText(speed).width;
+      mono(ctx, 12);
+      ctx.fillStyle = "#b5b6ab";
+      ctx.fillText("MPH", rx + sw + 8, base);
+      lines.forEach((l, i) => {
+        ctx.fillStyle = i === 4 && gap !== null ? (gap <= 0 ? "#8ad9a8" : "#ffd23f") : "#b5b6ab";
+        const c2 = col2.includes(i);
+        ctx.fillText(l, rx + 4 + (c2 ? w1 + 18 : 0), base + 24 + (c2 ? col2.indexOf(i) : col1.indexOf(i)) * 18);
+      });
     } else {
       rx = Math.min(Math.max(cx + R * 1.2, w * 0.62), w - (play ? 170 : 110));
       ctx.fillStyle = "#f2ead7";
@@ -923,7 +950,18 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       ctx.fillText("SHIFT", cx, cy - R * 0.1);
       ctx.textAlign = "left";
     }
-    if (play && c.phase === "done") drawResult(ctx, c, w, area);
+    if (play && c.phase === "done") {
+      // a short stage: the card is taller than the whole canvas, so it is drawn smaller, from the top, with its backdrop still full width
+      const k = Math.min(1, (h - 12) / (264 + 10));
+      if (k < 1) {
+        ctx.save();
+        ctx.translate(w / 2, 0);
+        ctx.scale(k, k);
+        ctx.translate(-w / k / 2, 0);
+        drawResult(ctx, c, w / k, area / k);
+        ctx.restore();
+      } else drawResult(ctx, c, w, area);
+    }
   }
 
   return (
