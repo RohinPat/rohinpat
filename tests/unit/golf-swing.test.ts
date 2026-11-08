@@ -217,7 +217,7 @@ const GOLDEN: Record<string, ReturnType<typeof summary>> = {
     "launch": 32,
     "spin": 8260,
     "carry": 61.27,
-    "side": -1.45,
+    "side": -1.41,
     "curve": -0.7,
     "timing": 0.0764
   },

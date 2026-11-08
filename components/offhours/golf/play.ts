@@ -8,7 +8,7 @@ import type { RemoteShot } from "./remoteSwing";
 import { YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { CHIP_YD, chipPowerFor, fullCarry, lieCarry, meterFace, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -51,6 +51,8 @@ const LAY_OVER = 10;
 const LAY_SHORT = 18;
 /** a pin this much (yd) past the longest carry is still aimed at: the roll gets there */
 const REACH_ROLL = 15;
+/** a shot played to run up to the pin still lands at least this far (yd) onto the green */
+const GREEN_IN = 3;
 export type MapView = { x: number; y: number; w: number; h: number; /** the point on the hole (metres) under a point on the canvas */ at: (px: number, py: number) => [number, number] };
 
 export const STEP = 1 / 60;
@@ -144,6 +146,8 @@ export class CourseGame {
   taken = 0;
   /** a phone is paired, so the swing hints for a mouse or the keys stay away */
   linked = false;
+  /** a touch screen: the prompts leave the keyboard out */
+  touch = false;
   putt: Putt;
   /** the camera is the draw layer's; it lives here so it survives frames */
   cam: Cam = newCam();
@@ -274,12 +278,32 @@ export class CourseGame {
   carryK(club = this.club) {
     return lieCarry(this.lie, club);
   }
-  /** the club and swing that carry the distance to the target from this lie, short of water it cannot carry */
+  /** the club and swing for the target from this lie, short of water it cannot carry; played at the pin, it lands short and runs up to it */
   suggested(): { club: number; power: number } {
-    const yd = this.layUp() ?? this.yardsToTarget();
+    const lay = this.layUp();
+    const yd = lay ?? this.yardsToTarget();
     const sw = CLUBS.length - 1;
     if (this.lie === "bunker") return { club: sw, power: Math.min(1, yd / (fullCarry(sw) * this.carryK(sw))) };
-    return suggestCourse(yd, (c) => this.carryK(c));
+    const k = (c: number) => this.carryK(c);
+    let sg = suggestCourse(yd, k);
+    if (lay !== null || this.target() !== this.hole.pin) return sg;
+    // the run on the green depends on the club and swing, which depend on the carry: a few rounds settle it
+    for (let i = 0; i < 3; i++) sg = suggestCourse(this.runUpCarry(yd, greenRoll(sg.club, sfOf(sg.power), this.lie)), k);
+    return sg;
+  }
+  /** the carry (yd) that runs `run` yd on to finish at `yd`, but lands on the green (GREEN_IN past its front) */
+  private runUpCarry(yd: number, run: number) {
+    const front = this.greenFront();
+    if (front === null) return yd;
+    return Math.min(yd, Math.max(front + GREEN_IN, yd - run));
+  }
+  /** how far (yd) along the line to the pin the green starts, or null if it is not on the line */
+  private greenFront(): number | null {
+    const [px, pz] = this.hole.pin;
+    const [bx, bz] = this.ball;
+    const dm = Math.hypot(px - bx, pz - bz);
+    for (let d = 0; d <= dm; d += YD) if (this.hole.surfaceAt(bx + ((px - bx) * d) / dm, bz + ((pz - bz) * d) / dm) === "green") return d / YD;
+    return null;
   }
   /** water across the line to the target that no club carries from here: how far to lay up short of it (yd), or null */
   layUp(): number | null {
@@ -341,7 +365,13 @@ export class CourseGame {
   meterSuggest(): { club: number; power: number } {
     const sg = this.suggested();
     if (!this.chipping()) return sg;
-    return { club: sg.club, power: chipPowerFor(sg.club, (this.layUp() ?? this.yardsToTarget()) / this.carryK(sg.club)) };
+    const lay = this.layUp();
+    const yd = lay ?? this.yardsToTarget();
+    const k = this.carryK(sg.club);
+    let power = chipPowerFor(sg.club, yd / k);
+    if (lay === null && this.lie !== "bunker" && this.target() === this.hole.pin)
+      for (let i = 0; i < 3; i++) power = chipPowerFor(sg.club, this.runUpCarry(yd, greenRoll(sg.club, sfOfChip(sg.club, power), this.lie)) / k);
+    return { club: sg.club, power };
   }
   /** a ball on the rough or the fairway close enough to the green to putt it (not out of sand) */
   nearGreen() {
