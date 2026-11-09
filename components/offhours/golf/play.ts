@@ -39,6 +39,20 @@ export type CourseOpts = {
   onPhase?: (p: Phase) => void;
   /** the map was opened or closed (the chip follows) */
   onMap?: (open: boolean) => void;
+  /** how long the tee card stays up before play, s (the 3D page flies over the hole under it) */
+  teeCardS?: number | ((def: HoleDef) => number);
+};
+
+/** how a hole was played, for the end of the round: the tee shot, the green, the putts */
+export type HoleStat = {
+  /** a par 4 or 5: the tee shot finished in the fairway (null on a par 3) */
+  fairway: boolean | null;
+  /** on the green with two putts left for par */
+  gir: boolean;
+  putts: number;
+  /** a par 4 or 5: the tee shot's total, yd, unless it was dropped */
+  drive: number | null;
+  penalties: number;
 };
 
 /** a ball this close to the green (m), on rough or fairway, is putted */
@@ -159,6 +173,11 @@ export class CourseGame {
   private mapDrag = false;
   /** where each shot of this hole went, metres: from, to */
   legs: [number, number, number, number][] = [];
+  /** how each finished hole was played, and the one in progress */
+  stats: HoleStat[] = [];
+  stat: HoleStat = newStat();
+  /** the strokes played when the ball reached the green (the rest are putts) */
+  private puttFrom = -1;
   /** the end of the round */
   round: { total: number; par: number; isBest: boolean; previous: number | null; best: number } | null = null;
   said: string[] = [];
@@ -201,6 +220,7 @@ export class CourseGame {
     this.seed += 1;
     this.rng = seeded(this.seed);
     this.scores = [];
+    this.stats = [];
     this.round = null;
     this.startHole(0);
   }
@@ -219,6 +239,8 @@ export class CourseGame {
     this.legs = [];
     this.camReady = false;
     this.putt.course = null;
+    this.stat = newStat();
+    this.puttFrom = -1;
     this.setPhase("tee-card");
     this.prepareShot(true);
     const d = this.hole.def;
@@ -391,6 +413,12 @@ export class CourseGame {
   private baseYaw() {
     const [tx, tz] = this.target();
     return Math.atan2(tx - this.ball[0], tz - this.ball[1]);
+  }
+
+  /** how long this hole's tee card stays up, s */
+  teeCardS() {
+    const k = this.opts.teeCardS;
+    return typeof k === "function" ? k(this.hole.def) : (k ?? TEE_CARD_S);
   }
 
   private canSwing() {
@@ -608,7 +636,7 @@ export class CourseGame {
     switch (this.phase) {
       case "tee-card":
         this.pose = blend(this.pose, poseFor({ kind: "back", u: 0 }, club), 1 - Math.exp(-5 * dt));
-        if (this.phaseT >= TEE_CARD_S) this.setPhase("ready");
+        if (this.phaseT >= this.teeCardS()) this.setPhase("ready");
         break;
       case "ready":
         this.pose = blend(this.pose, poseFor({ kind: "back", u: 0 }, club), 1 - Math.exp(-5 * dt));
@@ -709,6 +737,12 @@ export class CourseGame {
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);
     let msg = `${club.name}: ${Math.round(sh.carry)} yards carry, ${Math.round(sh.total)} total`;
     this.dropped = !!drop;
+    const tee = this.strokes === 1 && def.par > 3;
+    if (tee) {
+      this.stat.fairway = !drop && sh.surface === "fairway";
+      this.stat.drive = drop ? null : Math.round(sh.total);
+    }
+    if (drop) this.stat.penalties += drop.penalty;
     if (drop) {
       this.ball = [drop.x, drop.z];
       this.strokes += drop.penalty;
@@ -739,6 +773,8 @@ export class CourseGame {
     if (this.lie === "green" || this.lie === "fringe" || this.nearGreen()) {
       const [gx, gy] = this.hole.toGreen(this.ball[0], this.ball[1]);
       this.puttRolling = false;
+      this.puttFrom = this.strokes;
+      this.stat.gir = this.strokes <= def.par - 2 && (this.lie === "green" || this.lie === "fringe");
       puttBegin(this.putt, this.hole.green, [gx, gy], this.strokes, { pickUp: def.par + PICK_UP_OVER, onDone: (s, up) => this.holeDone(s, up) }, this.t, this.opts.reduce);
       this.setPhase("putt");
       return;
@@ -751,6 +787,8 @@ export class CourseGame {
     const def = this.hole.def;
     const hs = holeScore(played, def.par, pickedUp);
     this.scores.push(hs);
+    this.stat.putts = this.puttFrom >= 0 ? Math.max(0, played - this.puttFrom) : 0;
+    this.stats.push(this.stat);
     this.strokes = hs.strokes;
     this.setPhase("hole-card");
     this.say(`Hole ${def.n}: ${hs.strokes} ${hs.strokes === 1 ? "stroke" : "strokes"}, ${hs.call.toLowerCase()}.`);
@@ -785,6 +823,10 @@ export class CourseGame {
   get par() {
     return this.hole.def.par;
   }
+}
+
+function newStat(): HoleStat {
+  return { fairway: null, gir: false, putts: 0, drive: null, penalties: 0 };
 }
 
 /** "Wind 4 mph from the left." relative to the aim */

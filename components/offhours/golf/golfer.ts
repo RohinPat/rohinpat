@@ -116,49 +116,7 @@ export function golferDrawable(
   if (!project(cam, origin[0], 0, origin[2], q)) return null;
   const depth = q.d;
 
-  // ---- joints
-  const th = pose.chest, thh = pose.hips;
-  const tau = rad(30);
-  const sp: V = [Math.sin(tau), Math.cos(tau), 0];
-  const pel: V = [pose.sway, 0.98, 0];
-  const lc: V = [Math.sin(th), 0, Math.cos(th)]; // chest's left
-  const lh: V = [Math.sin(thh), 0, Math.cos(thh)];
-  const neck: V = [pel[0] + sp[0] * 0.56, pel[1] + sp[1] * 0.56, 0];
-  const drop = 0.19 * Math.sin(tau) * Math.sin(th);
-  const shL: V = [neck[0] + lc[0] * 0.19, neck[1] - 0.04 - drop, lc[2] * 0.19];
-  const shR: V = [neck[0] - lc[0] * 0.19, neck[1] - 0.04 + drop, -lc[2] * 0.19];
-  const hipL: V = [pel[0] + lh[0] * 0.1, pel[1], lh[2] * 0.1];
-  const hipR: V = [pel[0] - lh[0] * 0.1, pel[1], -lh[2] * 0.1];
-  const footL: V = [0.02, 0.05, 0.22], footR: V = [0.0, 0.05, -0.2];
-  const kneeOf = (hp: V, ft: V, bend: number): V => [(hp[0] + ft[0]) / 2 + bend, (hp[1] + ft[1]) / 2 + 0.01, (hp[2] + ft[2]) / 2];
-  // weight moves: the front knee straightens and the back heel lifts late in the swing
-  const fwd = Math.max(0, pose.sway - 0.06) * 3;
-  const kneeL = kneeOf(hipL, footL, 0.13 - 0.08 * fwd);
-  const kneeR = kneeOf(hipR, footR, 0.14 + 0.05 * fwd);
-  const toeR: V = [footR[0] + 0.18, footR[1] + (fwd > 0.3 ? 0.04 : 0), footR[2] - 0.05];
-  const toeL: V = [footL[0] + 0.18, footL[1], footL[2] + 0.07];
-  const heelR: V = [footR[0] - 0.05, footR[1] + (fwd > 0.3 ? 0.12 : 0), footR[2]];
-  const heelL: V = [footL[0] - 0.05, footL[1], footL[2]];
-
-  const hands = pose.hands;
-  const handL: V = [hands[0], hands[1], hands[2]];
-  const grip = norm(pose.shaft);
-  const handR: V = [hands[0] - grip[0] * 0.09, hands[1] - grip[1] * 0.09, hands[2] - grip[2] * 0.09];
-  const elbow = (s: V, h: V, side: number): V => {
-    const dx = h[0] - s[0], dy = h[1] - s[1], dz = h[2] - s[2];
-    const D = Math.min(0.58, Math.hypot(dx, dy, dz) || 0.1);
-    const bend = Math.sqrt(Math.max(0, 0.3 * 0.3 - (D / 2) * (D / 2)));
-    const u = norm([dx, dy, dz]);
-    // bend direction: down and a little out, made perpendicular to the arm
-    let n: V = [0 - side * lc[0] * 0.25, -1, 0 - side * lc[2] * 0.25];
-    const dot = n[0] * u[0] + n[1] * u[1] + n[2] * u[2];
-    n = norm([n[0] - u[0] * dot, n[1] - u[1] * dot, n[2] - u[2] * dot]);
-    return [s[0] + dx / 2 + n[0] * bend, s[1] + dy / 2 + n[1] * bend, s[2] + dz / 2 + n[2] * bend];
-  };
-  const elL = elbow(shL, handL, 1), elR = elbow(shR, handR, -1);
-  const headC: V = [neck[0] + sp[0] * 0.2 + Math.cos(pose.head) * 0.02, neck[1] + sp[1] * 0.2, 0];
-  const headDir: V = [Math.cos(pose.head), -0.35, -Math.sin(pose.head)];
-  const clubHead: V = [hands[0] + pose.shaft[0] * club.len, hands[1] + pose.shaft[1] * club.len, hands[2] + pose.shaft[2] * club.len];
+  const { pel, neck, shL, shR, hipL, hipR, kneeL, kneeR, footL, footR, toeL, toeR, heelL, heelR, handL, handR, elL, elR, headC, headDir, clubHead } = golferJoints(pose, club);
 
   const segs: Seg[] = [];
   const add = (a: V, b: V, r: number, col: string, edge: string) => {
@@ -309,4 +267,62 @@ export function golferDrawable(
       }
     },
   };
+}
+
+export type Joints = Record<"pel" | "neck" | "shL" | "shR" | "hipL" | "hipR" | "kneeL" | "kneeR" | "footL" | "footR" | "toeL" | "toeR" | "heelL" | "heelR" | "handL" | "handR" | "elL" | "elR" | "headC" | "headDir" | "clubHead", V>;
+
+/** the golfer's joints for a pose, in the local frame (X toward the ball, Y up, Z toward the target); headDir is a direction */
+export function golferJoints(pose: Pose, club: Club): Joints {
+  const th = pose.chest, thh = pose.hips;
+  const tau = rad(30);
+  const sp: V = [Math.sin(tau), Math.cos(tau), 0];
+  const pel: V = [pose.sway, 0.98, 0];
+  const lc: V = [Math.sin(th), 0, Math.cos(th)]; // chest's left
+  const lh: V = [Math.sin(thh), 0, Math.cos(thh)];
+  const neck: V = [pel[0] + sp[0] * 0.56, pel[1] + sp[1] * 0.56, 0];
+  const drop = 0.19 * Math.sin(tau) * Math.sin(th);
+  const shL: V = [neck[0] + lc[0] * 0.19, neck[1] - 0.04 - drop, lc[2] * 0.19];
+  const shR: V = [neck[0] - lc[0] * 0.19, neck[1] - 0.04 + drop, -lc[2] * 0.19];
+  const hipL: V = [pel[0] + lh[0] * 0.1, pel[1], lh[2] * 0.1];
+  const hipR: V = [pel[0] - lh[0] * 0.1, pel[1], -lh[2] * 0.1];
+  const footL: V = [0.02, 0.05, 0.22], footR: V = [0.0, 0.05, -0.2];
+  const kneeOf = (hp: V, ft: V, bend: number): V => [(hp[0] + ft[0]) / 2 + bend, (hp[1] + ft[1]) / 2 + 0.01, (hp[2] + ft[2]) / 2];
+  // weight moves: the front knee straightens and the back heel lifts late in the swing
+  const fwd = Math.max(0, pose.sway - 0.06) * 3;
+  const kneeL = kneeOf(hipL, footL, 0.13 - 0.08 * fwd);
+  const kneeR = kneeOf(hipR, footR, 0.14 + 0.05 * fwd);
+  const toeR: V = [footR[0] + 0.18, footR[1] + (fwd > 0.3 ? 0.04 : 0), footR[2] - 0.05];
+  const toeL: V = [footL[0] + 0.18, footL[1], footL[2] + 0.07];
+  const heelR: V = [footR[0] - 0.05, footR[1] + (fwd > 0.3 ? 0.12 : 0), footR[2]];
+  const heelL: V = [footL[0] - 0.05, footL[1], footL[2]];
+
+  const hands = pose.hands;
+  const handL: V = [hands[0], hands[1], hands[2]];
+  const grip = norm(pose.shaft);
+  const handR: V = [hands[0] - grip[0] * 0.09, hands[1] - grip[1] * 0.09, hands[2] - grip[2] * 0.09];
+  const elbow = (s: V, h: V, side: number): V => {
+    const dx = h[0] - s[0], dy = h[1] - s[1], dz = h[2] - s[2];
+    const D = Math.min(0.58, Math.hypot(dx, dy, dz) || 0.1);
+    const bend = Math.sqrt(Math.max(0, 0.3 * 0.3 - (D / 2) * (D / 2)));
+    const u = norm([dx, dy, dz]);
+    // bend direction: down and a little out, made perpendicular to the arm
+    let n: V = [0 - side * lc[0] * 0.25, -1, 0 - side * lc[2] * 0.25];
+    const dot = n[0] * u[0] + n[1] * u[1] + n[2] * u[2];
+    n = norm([n[0] - u[0] * dot, n[1] - u[1] * dot, n[2] - u[2] * dot]);
+    return [s[0] + dx / 2 + n[0] * bend, s[1] + dy / 2 + n[1] * bend, s[2] + dz / 2 + n[2] * bend];
+  };
+  const elL = elbow(shL, handL, 1), elR = elbow(shR, handR, -1);
+  const headC: V = [neck[0] + sp[0] * 0.2 + Math.cos(pose.head) * 0.02, neck[1] + sp[1] * 0.2, 0];
+  const headDir: V = [Math.cos(pose.head), -0.35, -Math.sin(pose.head)];
+  const clubHead: V = [hands[0] + pose.shaft[0] * club.len, hands[1] + pose.shaft[1] * club.len, hands[2] + pose.shaft[2] * club.len];
+
+  return { pel, neck, shL, shR, hipL, hipR, kneeL, kneeR, footL, footR, toeL, toeR, heelL, heelR, handL, handR, elL, elR, headC, headDir, clubHead };
+}
+
+/** where the golfer stands for a ball at `ball` and an aim `yaw`: the origin of the local frame and its X and Z axes in the world */
+export function golferFrame(ball: V, yaw: number, club: Club): { origin: V; ex: V; ez: V } {
+  const ex: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  const ez: V = [Math.sin(yaw), 0, Math.cos(yaw)];
+  const bl = ballLocal(club);
+  return { origin: [ball[0] - ex[0] * bl[0], 0, ball[2] - ex[2] * bl[0]], ex, ez };
 }
