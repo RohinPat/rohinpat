@@ -30,7 +30,7 @@ const pq = { x: 0, y: 0, d: 0, s: 0 } as P2;
 export type PlayPointer = { x: number; y: number; inside: boolean };
 /** world: false leaves the ground, the scenery, the golfer and the ball to another renderer (the 3D course); the rest is drawn over it on a clear canvas */
 export type PaintOpts = {
-  /** draw the world (the 3D page draws it in WebGL and leaves the overlay to this) */
+  /** draw the world (the 3D page draws it in WebGL and leaves the overlay to this, the putting green too) */
   world?: boolean;
   /** draw the round's scorecard (the 3D page has its own) */
   roundCard?: boolean;
@@ -53,7 +53,8 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
   if (g.phase === "putt" || (g.phase === "hole-card" && g.putt.course && g.putt.ball.sunk)) {
     g.mapView = null;
     puttLayout(g.putt, w, h, true);
-    puttPaint(ctx, g.putt, w, h, g.t, { play: true, say: () => {}, reduce }, pointer);
+    // on the 3D page the green, the ball and the putter are in the 3D scene; this draws the HUD over them
+    puttPaint(ctx, g.putt, w, h, g.t, { play: true, say: () => {}, reduce, touch: g.touch, hudOnly: !world }, pointer);
     if (g.phase === "putt") puttPrompt(ctx, g, w, h);
   } else {
     shotView(ctx, g, w, h, dt, reduce, world);

@@ -105,6 +105,12 @@ export function makeGreen(seed: number, severity: number, n = 1, par = 4): Hole 
   };
 }
 
+/** the green's height at a point, m (the ball rolls on this) */
+export function greenHeight(H: Hole, x: number, y: number) {
+  hg(H, x, y, tmp);
+  return tmp[0];
+}
+
 /** height and its slope at a point (analytic) */
 function hg(H: Hole, x: number, y: number, out: [number, number, number]) {
   let z = H.tilt[0] * x + H.tilt[1] * y;
@@ -203,7 +209,19 @@ function trial(H: Hole, x: number, y: number, ang: number, speed: number) {
 
 // ---------------------------------------------------------------- state
 
-export type PuttEnv = { play: boolean; say: (m: string) => void; /** prefers-reduced-motion: the ball's ring holds still */ reduce?: boolean; /** a touch screen: the prompts leave the keyboard out */ touch?: boolean };
+export type PuttEnv = {
+  play: boolean;
+  say: (m: string) => void;
+  /** prefers-reduced-motion: the ball's ring holds still */
+  reduce?: boolean;
+  /** a touch screen: the prompts leave the keyboard out */
+  touch?: boolean;
+  /** the green, ball and putter are drawn by someone else (the 3D course): paint only the HUD and the pace label */
+  hudOnly?: boolean;
+};
+
+/** how the screen maps to the green when it is not the top-down view (the 3D course's camera); toGreen is null off the ground */
+export type PuttProj = { toScreen: (x: number, y: number) => { x: number; y: number }; toGreen: (px: number, py: number) => { x: number; y: number } | null };
 
 export type Putt = {
   hole: Hole;
@@ -246,6 +264,8 @@ export type Putt = {
   /** playing a hole of the course: when it is holed (or picked up) `onDone` is told the strokes, and there is no round card */
   course: PuttCourse | null;
   pickedUp: boolean;
+  /** set when the green is seen through another camera than the top-down view */
+  proj: PuttProj | null;
 };
 
 export type PuttCourse = {
@@ -293,6 +313,7 @@ export function newPutt(): Putt {
     tap: null,
     course: null,
     pickedUp: false,
+    proj: null,
   };
   setupHole(p, 1);
   return p;
@@ -416,6 +437,36 @@ function toWorld(v: Putt["view"], px: number, py: number) {
   return v.rot ? { x: GW / 2 + (py - v.cy) / v.sc, y: GH / 2 - (px - v.cx) / v.sc } : { x: GW / 2 + (px - v.cx) / v.sc, y: GH / 2 + (py - v.cy) / v.sc };
 }
 
+/** green to screen and back through whichever camera is showing the green */
+function toScr(p: Putt, x: number, y: number) {
+  return p.proj ? p.proj.toScreen(x, y) : { x: sx(p.view, x, y), y: sy(p.view, x, y) };
+}
+function toGrn(p: Putt, px: number, py: number) {
+  return p.proj ? p.proj.toGreen(px, py) : toWorld(p.view, px, py);
+}
+
+/**
+ * The putt being lined up, if any: its direction on the green (unit), its power (0..1), and how far it would roll on a
+ * flat green, m. A pull-back puts the putt the opposite way to the pull; the keys aim with the arrows and charge with Space.
+ */
+export function puttAim(p: Putt, t: number): { dx: number; dy: number; pow: number; flat: number; drag: boolean } | null {
+  if (p.ball.moving || p.ball.sunk || p.reading || p.done || p.putter || p.tap) return null;
+  if (p.aiming) {
+    const sdx = p.aimFrom.x - p.aimTo.x, sdy = p.aimFrom.y - p.aimTo.y;
+    const pow = Math.min(1, Math.hypot(sdx, sdy) / dragMax(p.view));
+    if (pow <= 0.02) return null;
+    const w0 = toGrn(p, p.aimFrom.x, p.aimFrom.y), wb = toGrn(p, p.aimTo.x, p.aimTo.y);
+    if (!w0 || !wb) return null;
+    const dx = w0.x - wb.x, dy = w0.y - wb.y, d = Math.hypot(dx, dy) || 1;
+    return { dx: dx / d, dy: dy / d, pow, flat: (pace(pow) * pace(pow)) / (2 * MU), drag: true };
+  }
+  if (p.kCharging || t - p.kTouched < 3) {
+    const pow = p.kPower;
+    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow, flat: p.kCharging && pow === 0 ? 3 : (pace(pow) * pace(pow)) / (2 * MU), drag: false };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- input
 
 const dragMax = (v: Putt["view"]) => Math.max(110, Math.min(260, Math.min(v.w, v.h) * 0.34));
@@ -427,8 +478,8 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
     return;
   }
   if (p.reading) {
-    if (kind === "down" || (kind === "move" && p.held > 0)) {
-      const wp = toWorld(v, x, y);
+    const wp = kind === "down" || (kind === "move" && p.held > 0) ? toGrn(p, x, y) : null;
+    if (wp) {
       for (let i = 0; i < (kind === "down" ? 90 : 14); i++)
         p.drops.push({ x: wp.x + (Math.random() - 0.5) * 0.9, y: wp.y + (Math.random() - 0.5) * 0.9, vx: 0, vy: 0, trail: [], life: 3.6 });
     }
@@ -441,7 +492,7 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
     // the pull is the drag from where the press landed, laid on the ball: a press anywhere can pull back, and a tap
     // (a click to focus, a look at the cup) is no pull at all, so it does not putt
     p.aimPress = { x, y };
-    p.aimFrom = { x: sx(v, p.ball.x, p.ball.y), y: sy(v, p.ball.x, p.ball.y) };
+    p.aimFrom = toScr(p, p.ball.x, p.ball.y);
     p.aimTo = { ...p.aimFrom };
   } else if (kind === "move") {
     if (p.aiming) p.aimTo = { x: p.aimFrom.x + x - p.aimPress.x, y: p.aimFrom.y + y - p.aimPress.y };
@@ -451,10 +502,10 @@ export function puttPointer(p: Putt, kind: "down" | "move" | "up", x: number, y:
     const dx = p.aimFrom.x - p.aimTo.x, dy = p.aimFrom.y - p.aimTo.y;
     const pow = Math.min(1, Math.hypot(dx, dy) / dragMax(v));
     if (pow < 0.03) return;
-    // screen drag back -> world direction
-    const w0 = toWorld(v, p.aimFrom.x, p.aimFrom.y);
-    const w1 = toWorld(v, p.aimFrom.x + dx, p.aimFrom.y + dy);
-    strike(p, w1.x - w0.x, w1.y - w0.y, pow, t, env);
+    // screen drag back -> the green: the putt goes from where the pull ended, through the ball
+    const w0 = toGrn(p, p.aimFrom.x, p.aimFrom.y), wb = toGrn(p, p.aimTo.x, p.aimTo.y);
+    if (!w0 || !wb) return;
+    strike(p, w0.x - wb.x, w0.y - wb.y, pow, t, env);
   }
 }
 
@@ -688,6 +739,14 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
   const X = (x: number, y: number) => sx(v, x, y);
   const Y = (x: number, y: number) => sy(v, x, y);
 
+  if (env.hudOnly) {
+    // the scene is someone else's: the pace label where a flat putt would stop, and the HUD
+    const aim = play ? puttAim(p, t) : null;
+    if (aim) paceLabel(ctx, toScr(p, p.ball.x + aim.dx * aim.flat, p.ball.y + aim.dy * aim.flat), aim.flat, w);
+    hud(ctx, p, w, h, t, play, pointer, !!env.touch);
+    return;
+  }
+
   const key = `${H.tag ?? ""}${H.n}-${Math.round(w)}-${Math.round(h)}-${play ? 1 : 0}-${p.course ? 1 : 0}`;
   if (p.cache?.key !== key) p.cache = { key, c: renderGreen(H, w, h, p) };
   ctx.drawImage(p.cache.c, 0, 0, w, h);
@@ -911,17 +970,7 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
       ctx.beginPath();
       ctx.arc(mx, my, 6, 0, 7);
       ctx.stroke();
-      const ft = Math.round(flat * 3.281);
-      mono(ctx, 10);
-      const txt = `${ft} FT`;
-      const tw = ctx.measureText(txt).width + 12;
-      const tx = Math.max(6, Math.min(w - tw - 6, mx + 10)), ty = Math.max(16, my - 8);
-      ctx.fillStyle = "rgba(13,16,14,0.78)";
-      ctx.beginPath();
-      ctx.roundRect(tx, ty - 13, tw, 18, 4);
-      ctx.fill();
-      ctx.fillStyle = "#f2ead7";
-      ctx.fillText(txt, tx + 6, ty);
+      paceLabel(ctx, { x: mx, y: my }, flat, w);
     }
   }
 
@@ -933,6 +982,20 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
     ctx.fillStyle = `rgba(13,16,14,${1 - p.fade})`;
     ctx.fillRect(0, 0, w, h);
   }
+}
+
+/** how far a flat putt would roll, in feet, by the point where it would stop */
+function paceLabel(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, flat: number, w: number) {
+  mono(ctx, 10);
+  const txt = `${Math.round(flat * 3.281)} FT`;
+  const tw = ctx.measureText(txt).width + 12;
+  const tx = Math.max(6, Math.min(w - tw - 6, at.x + 10)), ty = Math.max(16, at.y - 8);
+  ctx.fillStyle = "rgba(13,16,14,0.78)";
+  ctx.beginPath();
+  ctx.roundRect(tx, ty - 13, tw, 18, 4);
+  ctx.fill();
+  ctx.fillStyle = "#f2ead7";
+  ctx.fillText(txt, tx + 6, ty);
 }
 
 function drawPutterAt(ctx: CanvasRenderingContext2D, p: Putt, X: (x: number, y: number) => number, Y: (x: number, y: number) => number, sc: number, dx: number, dy: number, pow: number, fwd: number) {

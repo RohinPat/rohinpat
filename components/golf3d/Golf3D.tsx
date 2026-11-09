@@ -16,14 +16,15 @@ import type { paint as Paint } from "@/components/offhours/golf/playDraw";
 import type { CourseRenderer } from "./render3d";
 import { createConfetti } from "./confetti";
 import { flyoverS, flyoverView, mixView, titleView, type View } from "./flyover";
+import { PuttCam } from "./puttcam";
 import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
 
 // The course on its own page, full screen, in 3D. The game is the 2D course's
 // (play.ts): the same holes, swing, physics and putting. The world is drawn by
-// render3d.ts in WebGL; the HUD, the aim line, the tracer, the hole cards and the
-// putting view are drawn by playDraw on a clear canvas over it, which also takes
-// the pointer and the keys. The title, the pause menu and the end of the round
+// render3d.ts in WebGL, the putting green too (the camera drops low behind the
+// ball); the HUD, the aim line, the tracer and the hole cards are drawn by
+// playDraw on a clear canvas over it, which also takes the pointer and the keys. The title, the pause menu and the end of the round
 // are this page's. Its code (three.js among it) loads with this page.
 //
 // Modes come from the URL (modes.ts): a round's link replays it. Nothing is stored.
@@ -61,9 +62,11 @@ function Course() {
   const loaded = useRef<Loaded | null>(null);
   const touch = useRef(false);
   const reduce = useRef(false);
+  /** tests reach the game from the window: with the mock link on, or ?linkmock on the page's first URL (a round's own URL drops it) */
+  const expose = useRef(false);
   const live = useRef({ screen, paused });
   live.current = { screen, paused };
-  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0 });
+  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0, putt: new PuttCam() });
 
   // the page is the game: no scrolling under it
   useEffect(() => {
@@ -77,6 +80,7 @@ function Course() {
   useEffect(() => {
     touch.current = window.matchMedia("(pointer: coarse)").matches;
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    expose.current = process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock");
     setShared(setupFromQuery(new URLSearchParams(location.search)));
     let gone = false;
     Promise.all([import("@/components/offhours/golf/play"), import("@/components/offhours/golf/playDraw"), import("./render3d")])
@@ -91,9 +95,7 @@ function Course() {
         }
         loaded.current = { mods: { play, paint: draw.paint }, gl, attract, game: null };
         setReady(true);
-        if (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock")) {
-          (window as unknown as { __golf3d?: CourseRenderer | null }).__golf3d = gl;
-        }
+        if (expose.current) (window as unknown as { __golf3d?: CourseRenderer | null }).__golf3d = gl;
       })
       .catch(() => {
         if (!gone) setStatus("The course did not load.");
@@ -131,7 +133,7 @@ function Course() {
     setPaused(false);
     setScreen("play");
     history.replaceState(null, "", `/golf${queryFor(s)}`);
-    if (process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock")) (window as unknown as { __golf?: CourseGame }).__golf = game;
+    if (expose.current) (window as unknown as { __golf?: CourseGame }).__golf = game;
     requestAnimationFrame(() => overlay.current?.focus({ preventScroll: true }));
   };
   const toTitle = () => {
@@ -188,6 +190,15 @@ function Course() {
       g.w = w;
       g.h = h;
       if (!stop) g.advance(dt);
+      // on the green the 3D camera is the putt's own, and the putt reads the pointer through it: drawn before the HUD
+      const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
+      if (L.gl && putting) {
+        L.gl.render(g, w, h, F.putt.step(g.hole, g.putt, w, h, stop ? 0 : dt, g.cam, reduce.current));
+        g.putt.proj ??= L.gl.puttProj(g);
+      } else {
+        F.putt.reset();
+        g.putt.proj = null;
+      }
       L.mods.paint(ctx, g, w, h, stop ? 0 : dt, p, { world: !L.gl, roundCard: false, teeHud: !L.gl || reduce.current });
       // under par: paper and a chime over the hole card
       if (g.phase === "hole-card" && F.cheered !== g.scores.length) {
@@ -200,8 +211,6 @@ function Course() {
         }
       }
       F.confetti.draw(ctx, stop ? 0 : dt);
-      // the putting view covers the canvas; the 3D world is not drawn under it
-      const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
       if (!L.gl || putting) return;
       // the tee card flies over the hole; a press that ends it early eases back to the game's camera
       let view: View | undefined;
