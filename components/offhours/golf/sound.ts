@@ -5,7 +5,18 @@ import { burst, getAudio, modal, noise, tone, type Audio } from "../audio";
 // Golf sounds, all synthesized: a putter tick, the ball rattling into the
 // cup, a club whooshing through the air and cracking the ball, turf thuds.
 
-export type Sfx = "putt" | "cup" | "lip" | "tick" | "good" | "swish" | "strikeWood" | "strikeIron" | "thud" | "land" | "pickup" | "fanfare";
+export type Sfx = "putt" | "cup" | "lip" | "tick" | "good" | "swish" | "strikeWood" | "strikeIron" | "thud" | "land" | "pickup" | "fanfare" | "splash" | "sand" | "applause";
+
+/** a small crowd round the green: claps scattered over a second and a half that swell and fade, more of them for more (v up to 2) */
+function applause(au: Audio, v: number) {
+  const n = Math.round(70 * Math.min(2, v));
+  for (let i = 0; i < n; i++) {
+    const u = Math.random();
+    const at = 0.05 + u * 1.6;
+    const env = Math.sin(Math.min(1, u * 1.4) * Math.PI) * 0.9 + 0.1;
+    burst(au, { freq: 1400 + Math.random() * 2200, q: 0.9, dur: 0.018 + Math.random() * 0.02, gain: 0.05 * env, at });
+  }
+}
 
 function swish(au: Audio, power: number, dur: number) {
   const { ctx: c, out } = au;
@@ -80,5 +91,58 @@ export function sfx(kind: Sfx, v = 1) {
     case "land":
       burst(au, { freq: 220, type: "lowpass", dur: 0.1, gain: 0.22 * v });
       break;
+    case "splash":
+      // a plop, then the spray falling back
+      tone(au, { freq: 420, to: 140, dur: 0.12, gain: 0.25 * v });
+      burst(au, { freq: 2600, q: 0.6, dur: 0.45, gain: 0.12 * v, at: 0.03 });
+      burst(au, { freq: 5200, type: "highpass", dur: 0.3, gain: 0.05 * v, at: 0.1 });
+      break;
+    case "sand":
+      // a soft, gritty thump
+      burst(au, { freq: 180, type: "lowpass", dur: 0.12, gain: 0.25 * v });
+      burst(au, { freq: 3200, q: 0.5, dur: 0.22, gain: 0.07 * v, at: 0.01 });
+      break;
+    case "applause":
+      applause(au, v);
+      break;
   }
+}
+
+// ---------------------------------------------------------------- the wind in the trees
+let bed: { c: AudioContext; src: AudioBufferSourceNode; gain: GainNode; f: BiquadFilterNode; level: number } | null = null;
+
+/** a soft bed of wind under the round, louder and brighter as the wind is stronger (m/s), with slow gusts; 0 fades it out */
+export function windBed(speed: number) {
+  const level = Math.round(Math.max(0, Math.min(8, speed)) * 4) / 4;
+  if (bed && bed.level === level) return;
+  if (!bed) {
+    if (level === 0) return;
+    const au = getAudio();
+    if (!au) return;
+    const c = au.ctx;
+    const src = c.createBufferSource();
+    src.buffer = noise(c);
+    src.loop = true;
+    const f = c.createBiquadFilter();
+    f.type = "lowpass";
+    f.Q.value = 0.7;
+    const gain = c.createGain();
+    gain.gain.value = 0;
+    // gusts: a slow wobble on the level
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 0.11;
+    const depth = c.createGain();
+    depth.gain.value = 0.35;
+    const swell = c.createGain();
+    swell.gain.value = 1;
+    lfo.connect(depth).connect(swell.gain);
+    src.connect(f).connect(swell).connect(gain).connect(au.out);
+    src.start();
+    lfo.start();
+    bed = { c, src, gain, f, level: -1 };
+  }
+  const t = bed.c.currentTime;
+  bed.gain.gain.setTargetAtTime(level === 0 ? 0 : 0.012 + level * 0.007, t, 0.6);
+  bed.f.frequency.setTargetAtTime(280 + level * 140, t, 0.6);
+  bed.level = level;
 }
