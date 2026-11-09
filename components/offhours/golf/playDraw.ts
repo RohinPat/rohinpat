@@ -28,6 +28,8 @@ const pp = { x: 0, y: 0, d: 0, s: 0 } as P2;
 const pq = { x: 0, y: 0, d: 0, s: 0 } as P2;
 
 export type PlayPointer = { x: number; y: number; inside: boolean };
+/** world: false leaves the ground, the scenery, the golfer and the ball to another renderer (the 3D course); the rest is drawn over it on a clear canvas */
+export type PaintOpts = { world?: boolean };
 
 /** step the game by `dt` and draw it */
 export function playDraw(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer) {
@@ -38,7 +40,8 @@ export function playDraw(ctx: CanvasRenderingContext2D, g: CourseGame, w: number
 }
 
 /** draw the game as it stands */
-export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer) {
+export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer, opts: PaintOpts = {}) {
+  const world = opts.world !== false;
   const reduce = !!g.opts.reduce;
   if (g.phase === "putt" || (g.phase === "hole-card" && g.putt.course && g.putt.ball.sunk)) {
     g.mapView = null;
@@ -46,7 +49,7 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
     puttPaint(ctx, g.putt, w, h, g.t, { play: true, say: () => {}, reduce }, pointer);
     if (g.phase === "putt") puttPrompt(ctx, g, w, h);
   } else {
-    shotView(ctx, g, w, h, dt, reduce);
+    shotView(ctx, g, w, h, dt, reduce, world);
     // the hole and round cards say it all: the shot's HUD under them would show through on a short canvas
     if (g.phase !== "hole-card" && g.phase !== "round-card") hud(ctx, g, w, h);
     if (!g.mapSet) g.setMap(w >= MAP_WIDE);
@@ -168,7 +171,7 @@ function updateCamera(g: CourseGame, dt: number, w: number, h: number) {
 }
 
 // ------------------------------------------------------------ the shot view
-function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, reduce: boolean) {
+function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, reduce: boolean, world = true) {
   updateCamera(g, dt, w, h);
   const cam: Cam = g.cam;
   prepare(cam, w, h, 0.4);
@@ -177,7 +180,7 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   const [bx, bz] = g.ball;
   const extra: Drawable[] = [];
   // the ball where it lies (in flight it is drawn from the shot)
-  if (g.phase !== "fly" && !(g.phase === "rest" && !g.dropped) && project(cam, bx, 0.03, bz, pp)) {
+  if (world && g.phase !== "fly" && !(g.phase === "rest" && !g.dropped) && project(cam, bx, 0.03, bz, pp)) {
     const k = pp.s, x = pp.x, y = pp.y;
     extra.push({
       d: pp.d + 0.6,
@@ -193,11 +196,13 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       },
     });
   }
-  const gd = golferDrawable(ctx, cam, [bx, 0.02, bz], g.yaw, club, g.pose, g.trail);
-  if (gd) extra.push(gd);
-  // trees between the camera and the golfer only hide the shot
-  const near = project(cam, bx, 0, bz, pp) ? pp.d + 1.5 : 0;
-  drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce, clearNear: near });
+  if (world) {
+    const gd = golferDrawable(ctx, cam, [bx, 0.02, bz], g.yaw, club, g.pose, g.trail);
+    if (gd) extra.push(gd);
+    // trees between the camera and the golfer only hide the shot
+    const near = project(cam, bx, 0, bz, pp) ? pp.d + 1.5 : 0;
+    drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce, clearNear: near });
+  }
   if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w);
   if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h);
 
@@ -227,7 +232,7 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       }
     }
     const inWater = g.splash !== null && g.phase !== "fly";
-    if (!inWater && project(cam, wx, ball[1], wz, pp)) {
+    if (world && !inWater && project(cam, wx, ball[1], wz, pp)) {
       const rad = Math.max(2.4, 0.0215 * pp.s * 1.15);
       if (project(cam, wx, 0.01, wz, pq)) {
         const sc = clamp(1 - ball[1] / 60, 0.3, 1);
