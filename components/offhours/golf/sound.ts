@@ -5,7 +5,7 @@ import { burst, getAudio, modal, noise, tone, type Audio } from "../audio";
 // Golf sounds, all synthesized: a putter tick, the ball rattling into the
 // cup, a club whooshing through the air and cracking the ball, turf thuds.
 
-export type Sfx = "putt" | "cup" | "lip" | "tick" | "good" | "swish" | "strikeWood" | "strikeIron" | "thud" | "land" | "pickup";
+export type Sfx = "putt" | "cup" | "lip" | "tick" | "good" | "swish" | "strikeWood" | "strikeIron" | "thud" | "land" | "pickup" | "fanfare";
 
 function swish(au: Audio, power: number, dur: number) {
   const { ctx: c, out } = au;
@@ -51,6 +51,11 @@ export function sfx(kind: Sfx, v = 1) {
     case "good":
       tone(au, { freq: 660, dur: 0.12, gain: 0.1, type: "triangle" });
       tone(au, { freq: 990, dur: 0.2, gain: 0.1, type: "triangle", at: 0.08 });
+      break;
+    case "fanfare":
+      // under par: a rising chime, brighter for an eagle or better (v > 1)
+      [523, 659, 784, 1047, ...(v > 1 ? [1319] : [])].forEach((f, i) => tone(au, { freq: f, dur: 0.32, gain: 0.09, type: "triangle", at: i * 0.09 }));
+      tone(au, { freq: 1568, dur: 0.6, gain: 0.04, type: "sine", at: 0.4 });
       break;
     case "pickup":
       tone(au, { freq: 300, to: 200, dur: 0.18, gain: 0.12, type: "triangle" });

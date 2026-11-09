@@ -29,7 +29,14 @@ const pq = { x: 0, y: 0, d: 0, s: 0 } as P2;
 
 export type PlayPointer = { x: number; y: number; inside: boolean };
 /** world: false leaves the ground, the scenery, the golfer and the ball to another renderer (the 3D course); the rest is drawn over it on a clear canvas */
-export type PaintOpts = { world?: boolean };
+export type PaintOpts = {
+  /** draw the world (the 3D page draws it in WebGL and leaves the overlay to this) */
+  world?: boolean;
+  /** draw the round's scorecard (the 3D page has its own) */
+  roundCard?: boolean;
+  /** draw the HUD and the map under the tee card (the 3D page flies over the hole there instead) */
+  teeHud?: boolean;
+};
 
 /** step the game by `dt` and draw it */
 export function playDraw(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, pointer: PlayPointer) {
@@ -51,13 +58,14 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
   } else {
     shotView(ctx, g, w, h, dt, reduce, world);
     // the hole and round cards say it all: the shot's HUD under them would show through on a short canvas
-    if (g.phase !== "hole-card" && g.phase !== "round-card") hud(ctx, g, w, h);
+    const quiet = g.phase === "tee-card" && opts.teeHud === false;
+    if (g.phase !== "hole-card" && g.phase !== "round-card" && !quiet) hud(ctx, g, w, h);
     if (!g.mapSet) g.setMap(w >= MAP_WIDE);
-    mapDraw(ctx, g, w, h, carryRing(g));
+    if (!quiet) mapDraw(ctx, g, w, h, carryRing(g));
   }
-  if (g.phase === "tee-card") teeCard(ctx, g, w, h);
+  if (g.phase === "tee-card") teeCard(ctx, g, w, h, opts.teeHud === false);
   else if (g.phase === "hole-card") holeCard(ctx, g, w, h);
-  else if (g.phase === "round-card") roundCard(ctx, g, w, h);
+  else if (g.phase === "round-card" && opts.roundCard !== false) roundCard(ctx, g, w, h);
 }
 
 // ------------------------------------------------------------ camera
@@ -622,10 +630,11 @@ function backdrop(ctx: CanvasRenderingContext2D, w: number, h: number, a: number
   ctx.fillRect(0, 0, w, h);
 }
 
-function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number) {
+/** the hole's name and numbers; `low` puts it near the bottom, out of the flyover's way */
+function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, low = false) {
   const d = g.hole.def;
   const bw = Math.min(420, w - 24), bh = 120;
-  const x = w / 2 - bw / 2, y = Math.max(h * 0.22, 80);
+  const x = w / 2 - bw / 2, y = low ? Math.max(8, h - bh - Math.min(48, h * 0.08)) : Math.max(h * 0.22, 80);
   panel(ctx, x, y, bw, bh);
   ctx.textAlign = "center";
   mono(ctx, 10);
@@ -665,7 +674,7 @@ function holeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   ctx.fillStyle = PAPER;
   const last = g.idx + 1 >= g.defs.length;
   const go = g.touch || w < 560 ? "TAP" : "ANY KEY";
-  ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${d.n + 1}`, w / 2, y + 170);
+  ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${g.defs[g.idx + 1].n}`, w / 2, y + 170);
   ctx.textAlign = "left";
 }
 

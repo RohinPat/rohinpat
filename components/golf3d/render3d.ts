@@ -3,6 +3,8 @@ import { CLUBS, at } from "@/components/offhours/golf/flight";
 import type { CourseGame } from "@/components/offhours/golf/play";
 import { buildHole3D, type Hole3D } from "./hole3d";
 import { buildGolfer3D } from "./golfer3d";
+import { createFx3D } from "./fx3d";
+import type { View } from "./flyover";
 
 // The course in WebGL. The game (play.ts) and its camera rig (playDraw.ts) are
 // the 2D course's own; this draws what the camera sees: sky, hills, the hole,
@@ -26,13 +28,14 @@ const FLAG_MIN_PX = 34;
 const BALL_R = 0.0214;
 
 export type CourseRenderer = {
-  render: (g: CourseGame, w: number, h: number) => void;
+  /** draw the game; `view` puts the camera somewhere other than the game's (the flyover, the title screen) */
+  render: (g: CourseGame, w: number, h: number, view?: View) => void;
   dispose: () => void;
   /** draw calls, triangles and device pixels of the last frame (for the perf test) */
-  info: () => { calls: number; triangles: number; pixels: number; soft: boolean };
+  info: () => { calls: number; triangles: number; pixels: number; soft: boolean; fx: number };
 };
 
-export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixels?: number; lowPower?: boolean } = {}): CourseRenderer {
+export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixels?: number; lowPower?: boolean; reduce?: boolean } = {}): CourseRenderer {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", alpha: false });
   // a software renderer (no usable GPU, or a test runner): the cheapest picture that still reads
   const soft = isSoftware(renderer.getContext());
@@ -112,9 +115,16 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   root.add(blob);
   const golfer = buildGolfer3D();
   root.add(golfer.group);
+  const dust = createFx3D(!!opts.reduce);
+  root.add(dust.group);
+  // the shot whose landings have been shown, and how many of them
+  let fxShot: CourseGame["shot"] = null;
+  let fxBounce = 0;
+  let last = 0;
+  const eye = new THREE.Vector3();
 
   let hole: Hole3D | null = null;
-  let holeN = -1;
+  let holeOf: CourseGame["hole"] | null = null;
   let size = { w: 0, h: 0, pr: 0 };
   const hidden = new Set<number>();
 
@@ -124,9 +134,10 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       hole.dispose();
     }
     hole = buildHole3D(g.hole, { tier: soft ? "soft" : lowPower ? "low" : "high" });
-    holeN = g.hole.def.n;
+    holeOf = g.hole;
     root.add(hole.group);
     hidden.clear();
+    dust.clear();
   };
 
   /** trees close to the line from the camera to the ball only hide the shot: they are left out */
@@ -153,8 +164,11 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     });
   };
 
-  const render = (g: CourseGame, w: number, h: number) => {
+  const render = (g: CourseGame, w: number, h: number, view?: View) => {
     if (w < 2 || h < 2) return;
+    const now = performance.now();
+    const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+    last = now;
     // the pixel budget: never more than maxPixels device pixels, never more than 2x
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pr = Math.min(dpr, Math.sqrt(maxPixels / (w * h)));
@@ -163,8 +177,8 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       renderer.setSize(w, h, false);
       size = { w, h, pr };
     }
-    if (g.hole.def.n !== holeN) setHole(g);
-    const c = g.cam;
+    if (g.hole !== holeOf) setHole(g);
+    const c = view ?? g.cam;
     // the game's camera, mirrored into three.js's frame
     camera.position.set(-c.x, c.y, c.z);
     camera.up.set(0, 1, 0);
@@ -224,6 +238,21 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       clearView(c.x, c.z, gx, gz);
     }
 
+    // dust, sand and spray where the ball meets the ground
+    if (sh !== fxShot) {
+      fxShot = sh;
+      fxBounce = 0;
+      if (sh && g.phase === "fly") dust.strike(sh.ox, sh.oz, g.lie, g.yaw);
+    }
+    if (sh && (g.phase === "fly" || g.phase === "rest")) {
+      const upTo = g.phase === "fly" ? g.shotT : sh.restT;
+      while (fxBounce < sh.bounces.length && sh.bounces[fxBounce].t <= upTo) {
+        const b = sh.bounces[fxBounce++];
+        dust.land(sh.ox + b.x, sh.oz + b.z, b.surface, b.vy);
+      }
+    }
+    dust.step(dt, eye.set(c.x, c.y, c.z), c.F);
+
     // the shadow camera follows what the camera looks at
     const fx = sh && g.phase === "fly" ? bx : (gx + c.tx) / 2;
     const fz = sh && g.phase === "fly" ? bz : (gz + c.tz) / 2;
@@ -234,10 +263,11 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
 
   return {
     render,
-    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixels: Math.round(size.w * size.h * size.pr * size.pr), soft }),
+    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixels: Math.round(size.w * size.h * size.pr * size.pr), soft, fx: dust.count() }),
     dispose: () => {
       hole?.dispose();
       golfer.dispose();
+      dust.dispose();
       skyMat.dispose();
       sky.geometry.dispose();
       ridge.geometry.dispose();
