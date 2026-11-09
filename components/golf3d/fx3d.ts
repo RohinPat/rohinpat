@@ -15,14 +15,14 @@ const PUFFS = 6;
 /** a puff of dust is never smaller than this across, px, at its widest */
 const PUFF_PX = 26;
 
-type P = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; age: number; size: number; drag: number; grav: number; spin: number };
+type P = { x: number; y: number; z: number; fy: number; vx: number; vy: number; vz: number; life: number; age: number; size: number; drag: number; grav: number; spin: number };
 
 export type Fx3D = {
   group: THREE.Group;
   /** a burst where the ball came down on `surface`, at speed `v` (m/s, downward) */
-  land: (x: number, z: number, surface: Surface, v: number) => void;
+  land: (x: number, z: number, surface: Surface, v: number, y?: number) => void;
   /** the strike: grass off the turf, or sand out of a bunker */
-  strike: (x: number, z: number, surface: Surface, yaw: number) => void;
+  strike: (x: number, z: number, surface: Surface, yaw: number, y?: number) => void;
   step: (dt: number, cam: THREE.Vector3, F: number) => void;
   clear: () => void;
   /** chips in the air now */
@@ -71,9 +71,11 @@ export function createFx3D(reduce = false): Fx3D {
     return { m, age: 0, life: 1, r: 1, op: 0.6 };
   });
   let puffNext = 0;
+  /** the ground's height under the burst being made */
+  let gy = 0;
   const puff = (x: number, z: number, color: string, r: number, life: number, op: number) => {
     const p = puffs[puffNext++ % PUFFS];
-    p.m.position.set(x, 0, z);
+    p.m.position.set(x, gy, z);
     (p.m.material as THREE.MeshBasicMaterial).color.set(color);
     p.age = 0;
     p.life = life;
@@ -99,14 +101,14 @@ export function createFx3D(reduce = false): Fx3D {
       const a = opts.dir !== undefined ? opts.dir + rnd(-0.7, 0.7) : rnd(0, Math.PI * 2);
       const o = rnd(0.3, 1) * out;
       add(
-        { x, y: 0.03, z, vx: Math.sin(a) * o, vy: rnd(0.45, 1) * up, vz: Math.cos(a) * o, life: rnd(0.6, 1) * (opts.life ?? 1.1), age: 0, size: rnd(0.6, 1.2) * size, drag: opts.drag ?? 1.2, grav: opts.grav ?? 1, spin: rnd(4, 12) },
+        { x, y: gy + 0.03, z, fy: gy + 0.01, vx: Math.sin(a) * o, vy: rnd(0.45, 1) * up, vz: Math.cos(a) * o, life: rnd(0.6, 1) * (opts.life ?? 1.1), age: 0, size: rnd(0.6, 1.2) * size, drag: opts.drag ?? 1.2, grav: opts.grav ?? 1, spin: rnd(4, 12) },
         pal[i % pal.length],
       );
     }
   };
   const ring = (x: number, z: number, r: number, life: number, delay = 0) => {
     const g = rings[ringNext++ % RINGS];
-    g.m.position.set(x, 0.04, z);
+    g.m.position.set(x, gy + 0.04, z);
     g.age = -delay;
     g.life = life;
     g.r = r;
@@ -116,7 +118,8 @@ export function createFx3D(reduce = false): Fx3D {
 
   return {
     group,
-    land(x, z, surface, v) {
+    land(x, z, surface, v, y = 0) {
+      gy = y;
       const s = Math.min(1, Math.abs(v) / 14);
       if (s < 0.08) return;
       if (surface === "water") {
@@ -133,7 +136,8 @@ export function createFx3D(reduce = false): Fx3D {
         puff(x, z, surface === "green" || surface === "fringe" ? "#f2f8e2" : "#e8efcf", 0.6 + 0.5 * s, 0.8, 0.55);
       }
     },
-    strike(x, z, surface, yaw) {
+    strike(x, z, surface, yaw, y = 0) {
+      gy = y;
       if (surface === "bunker") {
         burst(x, z, "bunker", Math.round(34 * k), 3.6, 2.6, 0.06, { dir: yaw, life: 1.3, drag: 1.4 });
         puff(x + Math.sin(yaw) * 0.6, z + Math.cos(yaw) * 0.6, "#efdcae", 1.2, 1.3, 0.7);
@@ -156,8 +160,8 @@ export function createFx3D(reduce = false): Fx3D {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.z += p.vz * dt;
-        if (p.y < 0.01) {
-          p.y = 0.01;
+        if (p.y < p.fy) {
+          p.y = p.fy;
           p.vy *= -0.2;
           p.vx *= 0.5;
           p.vz *= 0.5;

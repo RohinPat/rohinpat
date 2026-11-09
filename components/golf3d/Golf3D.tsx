@@ -86,7 +86,7 @@ function Course() {
     Promise.all([import("@/components/offhours/golf/play"), import("@/components/offhours/golf/playDraw"), import("./render3d")])
       .then(([play, draw, r3]) => {
         if (gone) return;
-        const attract = new play.CourseGame({ seed: 1 });
+        const attract = new play.CourseGame({ seed: 1, hills: true });
         let gl: CourseRenderer | null = null;
         try {
           if (glRef.current) gl = r3.createCourseRenderer(glRef.current, { lowPower: touch.current, maxPixels: touch.current ? 1.6e6 : 2.4e6, reduce: reduce.current });
@@ -115,6 +115,7 @@ function Course() {
       seed: s.seed,
       holes: s.defs,
       sound: true,
+      hills: true,
       reduce: reduce.current,
       teeCardS: (d) => (reduce.current || !L.gl ? 2 : flyoverS(d.yards)),
       say: setStatus,

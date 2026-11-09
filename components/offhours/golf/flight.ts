@@ -40,6 +40,8 @@ const R = 0.02135;
 const AREA = Math.PI * R * R;
 const MASS = 0.04593;
 const DT = 1 / 240;
+/** a ball rolling down a slope is pulled on by this much of g per unit of slope */
+const ROLL_G = (5 / 7) * G;
 
 const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; keep: number }> = {
   green: { e: 0.22, et: 0.55, mu: 0.8, roll: 0.9, keep: 0.45 },
@@ -64,6 +66,8 @@ export type Lie = {
   launch?: number;
   /** the start line wanders by up to this much either way (the `face` scale, -1..1) */
   faceNoise?: number;
+  /** the start line is pushed this much (the `face` scale; a ball above the feet goes left) */
+  face?: number;
 };
 
 export type ShotIn = {
@@ -92,6 +96,8 @@ export type ShotIn = {
   rng?: () => number;
   /** trees a ball in the air can hit (world metres: x, z, crown radius, height): it loses most of its speed and drops */
   trees?: { x: number; z: number; r: number; h: number }[];
+  /** the ground's height (m) and slope in world coordinates (terrain.ts); flat at 0 without it */
+  ground?: { y: (x: number, z: number) => number; slope: (x: number, z: number) => [number, number] };
 };
 
 export type Shot = {
@@ -111,8 +117,9 @@ export type Shot = {
   launch: number; // degrees
   spin: number; // rpm
   surface: Surface; // where it ended
-  /** the ball's world position when it was struck: pts, bounces and drop are relative to it */
+  /** the ball's world position when it was struck: pts, bounces and drop are relative to it (its height, the ground's there) */
   ox: number;
+  oy: number;
   oz: number;
   /** a ball that ended in water: the last dry ground it passed over (relative to the origin) */
   drop: { x: number; z: number } | null;
@@ -126,6 +133,10 @@ export function simulate(inp: ShotIn): Shot {
   const { club } = inp;
   const [ox, oz] = inp.origin ?? [0, 0];
   const surfAt = (x: number, z: number) => inp.surfaceAt(x + ox, z + oz);
+  // the ground, as a height above the ground the ball was struck from (none: flat, and every step below is the flat one)
+  const gr = inp.ground;
+  const oy = gr ? gr.y(ox, oz) : 0;
+  const gy = (x: number, z: number) => (gr ? gr.y(x + ox, z + oz) - oy : 0);
   // a lie changes the swing before it is flown; with none, every number below is the swing's own
   let sp = inp.speed, contact = inp.contact, face = inp.face, spinMul = 1, launchMul = 1;
   const lie = inp.lie;
@@ -135,6 +146,7 @@ export function simulate(inp: ShotIn): Shot {
     launchMul = lie.launch ?? 1;
     if (lie.contactCap !== undefined) contact = Math.min(contact, lie.contactCap);
     if (lie.faceNoise) face += (((inp.rng ?? Math.random)() * 2) - 1) * lie.faceNoise;
+    if (lie.face) face += lie.face;
   }
   const speed = club.speed * sp * (0.78 + 0.22 * contact);
   const la = ((club.launch * launchMul * (inp.lift ?? 1)) * Math.PI) / 180;
@@ -199,7 +211,7 @@ export function simulate(inp: ShotIn): Shot {
       if (inp.trees && !tree && y > 0) {
         for (const tr of inp.trees) {
           const dx = x + ox - tr.x, dz = z + oz - tr.z;
-          if (y < tr.h && dx * dx + dz * dz < tr.r * tr.r) {
+          if (y < tr.h + (gr ? gr.y(tr.x, tr.z) - oy : 0) && dx * dx + dz * dz < tr.r * tr.r) {
             // into the branches: most of the speed is gone, and the ball drops
             tree = { x, z };
             vx *= 0.12;
@@ -211,12 +223,25 @@ export function simulate(inp: ShotIn): Shot {
           }
         }
       }
-      if (y <= 0 && vy < 0) {
-        y = 0;
+      const floor = gr ? gy(x, z) : 0;
+      // the ground's normal (straight up on the flat)
+      let nx = 0, ny = 1, nz = 0;
+      if (gr && y <= floor) {
+        const [sx, sz] = gr.slope(x + ox, z + oz);
+        const l = Math.hypot(sx, 1, sz);
+        nx = -sx / l;
+        ny = 1 / l;
+        nz = -sz / l;
+      }
+      if (y <= floor && vx * nx + vy * ny + vz * nz < 0) {
+        y = floor;
         const surf = surfAt(x, z);
         const P = SURF[surf];
-        const vh = Math.hypot(vx, vz);
-        const vin = -vy;
+        // into the ground and along it
+        const vn = vx * nx + vy * ny + vz * nz;
+        const tx = vx - vn * nx, ty = vy - vn * ny, tz = vz - vn * nz;
+        const vh = Math.hypot(tx, ty, tz);
+        const vin = -vn;
         if (!bounces.length) {
           landT = t;
           carry = Math.hypot(x, z) / YD;
@@ -238,13 +263,20 @@ export function simulate(inp: ShotIn): Shot {
         const dv = Math.min(full, grip) * Math.sign(s);
         const nvh = vh - dv;
         const k = vh > 1e-6 ? (nvh / vh) * (nvh > 0 ? P.keep : 1) : 0;
-        vx *= k;
-        vz *= k;
         wb -= (2.5 * dv) / R;
         // sidespin skids off, taking some sideways speed with it
         ws *= 0.3;
-        vy = vin * P.e;
-        if (vy < 1.1 || surf === "bunker" || surf === "out") {
+        const up = vin * P.e;
+        if (!gr) {
+          vx *= k;
+          vz *= k;
+          vy = up;
+        } else {
+          vx = tx * k + nx * up;
+          vy = ty * k + ny * up;
+          vz = tz * k + nz * up;
+        }
+        if (up < 1.1 || surf === "bunker" || surf === "out") {
           vy = 0;
           rolling = true;
         }
@@ -261,6 +293,15 @@ export function simulate(inp: ShotIn): Shot {
         break;
       }
       const dec = SURF[surf].roll;
+      // downhill pulls a rolling ball on (5/7 of g along the slope, for a ball that rolls without slipping)
+      let ax = 0, az = 0;
+      if (gr) {
+        const [sx, sz] = gr.slope(x + ox, z + oz);
+        ax = -ROLL_G * sx;
+        az = -ROLL_G * sz;
+        vx += ax * DT;
+        vz += az * DT;
+      }
       const vh = Math.hypot(vx, vz);
       const d = Math.min(vh, dec * DT);
       if (vh > 1e-6) {
@@ -269,20 +310,22 @@ export function simulate(inp: ShotIn): Shot {
       }
       x += vx * DT;
       z += vz * DT;
-      if (vh - d < 0.04) {
+      y = gy(x, z);
+      // it stops when it is slow and the slope cannot start it again
+      if (vh - d < 0.04 && Math.hypot(ax, az) < dec) {
         vx = 0;
         vz = 0;
         t += DT;
         steps++;
-        if (steps % 4 === 0) pts.push(t, x, 0, z);
+        if (steps % 4 === 0) pts.push(t, x, y, z);
         break;
       }
     }
     t += DT;
     steps++;
-    if (steps % 4 === 0) pts.push(t, x, Math.max(0, y), z);
+    if (steps % 4 === 0) pts.push(t, x, gr ? Math.max(gy(x, z), y) : Math.max(0, y), z);
   }
-  pts.push(t, x, 0, z);
+  pts.push(t, x, gy(x, z), z);
   const n = pts.length / 4;
   const total = Math.hypot(x, z) / YD;
   const rx = Math.cos(az), rz = -Math.sin(az);
@@ -320,6 +363,7 @@ export function simulate(inp: ShotIn): Shot {
     spin: Math.round((back0 * 60) / (2 * Math.PI) / 10) * 10,
     surface,
     ox,
+    oy,
     oz,
     drop,
     tree,

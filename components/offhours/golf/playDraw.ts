@@ -1,5 +1,5 @@
 import { display, mono } from "../font";
-import { CLUBS, at } from "./flight";
+import { CLUBS, at, type Shot } from "./flight";
 import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
 import { CourseGame, swingLen } from "./play";
@@ -98,8 +98,10 @@ function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: numb
  * height, looking far down the hole. A short one: it rises and pitches down onto the target, zoomed, so the green and what
  * guards it sit well above the horizon.
  */
-function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number, h: number): Rig {
+function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number, h: number, G: Ground): Rig {
   const yaw = g.yaw;
+  // heights are over the ground at the ball; where it looks, over the ground there
+  const gb = G(bx, bz);
   const a: V = [Math.sin(yaw), 0, Math.cos(yaw)];
   const rt: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
   const F0 = Math.max(w * 0.9, h * 1.1);
@@ -117,45 +119,55 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   }
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
   const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
-  if (k <= 0) return { dx: bx + lo.ex, dy: lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lo.ty, tz: bz + lo.tz, F: lo.F };
+  if (k <= 0) return { dx: bx + lo.ex, dy: gb + lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lookY(G, gb, bx + lo.tx, bz + lo.tz, lo.ty), tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
   const rng = Math.hypot(HIGH, D);
   const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 4400);
   const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
   const m = (p: number, q: number) => p + (q - p) * k;
-  return { dx: bx + m(lo.ex, hi.ex), dy: m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx: bx + m(lo.tx, hi.tx), ty: m(lo.ty, hi.ty), tz: bz + m(lo.tz, hi.tz), F: m(lo.F, hi.F) };
+  const tx = bx + m(lo.tx, hi.tx), tz = bz + m(lo.tz, hi.tz);
+  return { dx: bx + m(lo.ex, hi.ex), dy: gb + m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx, ty: lookY(G, gb, tx, tz, m(lo.ty, hi.ty)), tz, F: m(lo.F, hi.F) };
 }
 
-function updateCamera(g: CourseGame, dt: number, w: number, h: number) {
+/** the ground's height for the picture: the hole's hills when another renderer draws them, else flat (the 2D course is drawn flat) */
+type Ground = (x: number, z: number) => number;
+/** a point the camera looks at, `up` over the ground there */
+const lookY = (G: Ground, _gb: number, x: number, z: number, up: number) => G(x, z) + up;
+
+function updateCamera(g: CourseGame, dt: number, w: number, h: number, G: Ground) {
   const c = g.cam;
   const yaw = g.yaw;
   const a: V = [Math.sin(yaw), 0, Math.cos(yaw)];
   const rt: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
   const F0 = Math.max(w * 0.9, h * 1.1);
   const sh = g.shot;
-  let rig = addressRig(g, g.ball[0], g.ball[1], g.yardsToTarget(), w, h);
+  let rig = addressRig(g, g.ball[0], g.ball[1], g.yardsToTarget(), w, h, G);
   let posRate = 3, tgtRate = 3;
   if (g.phase === "fly" && sh) {
     const [tx0, tz0] = g.target();
     const yd0 = Math.hypot(tx0 - sh.ox, tz0 - sh.oz) / YD;
     if (liftFor(yd0) > 0.5) {
       // a short shot is watched from the raised camera, which stays where it was
-      rig = addressRig(g, sh.ox, sh.oz, yd0, w, h);
+      rig = addressRig(g, sh.ox, sh.oz, yd0, w, h, G);
     } else {
       // a long one is followed: the camera dollies down the hole to where it lands
       const ball = at(sh, g.shotT);
-      const bw: V = [sh.ox + ball[0], ball[1], sh.oz + ball[2]];
+      const bw: V = [sh.ox + ball[0], drawnY(g, sh, G, sh.ox + ball[0], ball[1], sh.oz + ball[2]), sh.oz + ball[2]];
       const land: V = sh.bounces[0] ? [sh.ox + sh.bounces[0].x, 0, sh.oz + sh.bounces[0].z] : [bw[0], 0, bw[2]];
+      land[1] = G(land[0], land[2]);
       const dist = Math.hypot(land[0] - sh.ox, land[2] - sh.oz);
       const e = dist < 30 ? 0 : smooth(clamp((g.shotT - sh.apexT * 0.55) / Math.max(0.5, sh.landT - sh.apexT * 0.55), 0, 1));
       const bk = Math.min(58, 12 + dist * 0.26);
       const sd = Math.min(16, 4 + dist * 0.06);
-      const c1: V = [land[0] - a[0] * bk + rt[0] * sd, 6, land[2] - a[2] * bk + rt[2] * sd];
+      const c1: V = [land[0] - a[0] * bk + rt[0] * sd, 0, land[2] - a[2] * bk + rt[2] * sd];
+      // 6 m over the landing, or over the ground under the camera if that is higher
+      c1[1] = Math.max(land[1], G(c1[0], c1[2])) + 6;
       const c0: V = [rig.dx, rig.dy, rig.dz];
       const dx = c0[0] + (c1[0] - c0[0]) * e, dy = c0[1] + (c1[1] - c0[1]) * e, dz = c0[2] + (c1[2] - c0[2]) * e;
       const tx = bw[0], tz = bw[2];
-      let ty = bw[1] * 0.9 + 0.5;
+      const gUnder = G(tx, tz);
+      let ty = gUnder + (bw[1] - gUnder) * 0.9 + 0.5;
       // never tilt up more than about 22 degrees
       ty = Math.min(ty, dy + Math.hypot(tx - dx, tz - dz) * 0.4);
       const d = Math.hypot(tx - dx, ty - dy, tz - dz);
@@ -177,11 +189,23 @@ function updateCamera(g: CourseGame, dt: number, w: number, h: number) {
     c.tx += (rig.tx - c.tx) * kt; c.ty += (rig.ty - c.ty) * kt; c.tz += (rig.tz - c.tz) * kt;
     c.F += (rig.F - c.F) * kf;
   }
+  // never into a hill
+  const floor = G(c.x, c.z) + 1.2;
+  if (c.y < floor) c.y = floor;
 }
+
+/** the height a point of a shot is drawn at: over the ground it was struck from, plus that ground's height in a world with hills; drawn flat, its height over the ground under it */
+function drawnY(g: CourseGame, sh: Shot, G: Ground, x: number, y: number, z: number) {
+  const abs = sh.oy + y;
+  return G === flatGround ? Math.max(0, abs - g.terrain.y(x, z)) : abs;
+}
+const flatGround: Ground = () => 0;
 
 // ------------------------------------------------------------ the shot view
 function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, dt: number, reduce: boolean, world = true) {
-  updateCamera(g, dt, w, h);
+  // the 2D course draws the ground flat; under the 3D one it has its hills
+  const G: Ground = world ? flatGround : (x, z) => g.terrain.y(x, z);
+  updateCamera(g, dt, w, h, G);
   const cam: Cam = g.cam;
   prepare(cam, w, h, 0.4);
   const club = CLUBS[g.club];
@@ -212,23 +236,24 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
     const near = project(cam, bx, 0, bz, pp) ? pp.d + 1.5 : 0;
     drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce, clearNear: near });
   }
-  if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w);
-  if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h);
+  if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w, G);
+  if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h, G);
 
   // ---- the flight
   if (sh && (g.phase === "fly" || g.phase === "rest")) {
     const upTo = g.phase === "fly" ? g.shotT : sh.restT;
     const fadeA = g.phase === "rest" ? clamp(1 - (g.restT - 0.7) / 0.8, 0, 1) : 1;
     ctx.globalAlpha = fadeA;
-    trace(ctx, cam, sh, upTo, 7, 3, "#ff5a4a", sh.ox, sh.oz);
-    trace(ctx, cam, sh, upTo, 0, 1.3, "#fff1e6", sh.ox, sh.oz);
+    const yOf = (x: number, y: number, z: number) => drawnY(g, sh, G, x, y, z);
+    trace(ctx, cam, sh, upTo, 7, 3, "#ff5a4a", sh.ox, sh.oz, yOf);
+    trace(ctx, cam, sh, upTo, 0, 1.3, "#fff1e6", sh.ox, sh.oz, yOf);
     ctx.globalAlpha = 1;
     const ball = at(sh, upTo);
     const wx = sh.ox + ball[0], wz = sh.oz + ball[2];
     // a splash: rings on the water
     if (g.splash) {
       const age = g.t - g.splash.t;
-      if (age < 1.4 && project(cam, g.splash.x, 0.02, g.splash.z, pp)) {
+      if (age < 1.4 && project(cam, g.splash.x, G(g.splash.x, g.splash.z) + 0.02, g.splash.z, pp)) {
         for (let i = 0; i < 2; i++) {
           const u = clamp(age / 1.2 - i * 0.25, 0, 1);
           if (u <= 0) continue;
@@ -241,16 +266,17 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       }
     }
     const inWater = g.splash !== null && g.phase !== "fly";
-    if (world && !inWater && project(cam, wx, ball[1], wz, pp)) {
+    const by = drawnY(g, sh, G, wx, ball[1], wz);
+    if (world && !inWater && project(cam, wx, by, wz, pp)) {
       const rad = Math.max(2.4, 0.0215 * pp.s * 1.15);
       if (project(cam, wx, 0.01, wz, pq)) {
-        const sc = clamp(1 - ball[1] / 60, 0.3, 1);
+        const sc = clamp(1 - by / 60, 0.3, 1);
         ctx.fillStyle = `rgba(10,40,20,${0.3 * sc})`;
         ctx.beginPath();
         ctx.ellipse(pq.x, pq.y, rad * 1.5 * sc + 1, rad * 0.55 * sc + 0.5, 0, 0, 7);
         ctx.fill();
       }
-      if (g.phase === "fly" && ball[1] > 3) {
+      if (g.phase === "fly" && by > 3) {
         const gl = ctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, rad * 4.5);
         gl.addColorStop(0, "rgba(255,255,255,0.7)");
         gl.addColorStop(1, "rgba(255,255,255,0)");
@@ -269,7 +295,7 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
     if (b0 && (g.phase === "rest" || g.shotT >= b0.t)) {
       const age = g.phase === "rest" ? g.restT + (sh.restT - b0.t) : g.shotT - b0.t;
       const fade = clamp(1 - (age - 3.5) / 1.2, 0, 1) * clamp(age / 0.2, 0, 1);
-      if (fade > 0 && project(cam, sh.ox + b0.x, 0, sh.oz + b0.z, pp)) tag(ctx, pp.x, pp.y - Math.max(18, 4 * pp.s), `${Math.round(sh.carry)} YD CARRY`, fade, w);
+      if (fade > 0 && project(cam, sh.ox + b0.x, G(sh.ox + b0.x, sh.oz + b0.z), sh.oz + b0.z, pp)) tag(ctx, pp.x, pp.y - Math.max(18, 4 * pp.s), `${Math.round(sh.carry)} YD CARRY`, fade, w);
     }
   }
 }
@@ -287,7 +313,7 @@ export function carryRing(g: CourseGame): { x: number; z: number; yd: number } {
 }
 
 /** a thin dashed line along the aim from the ball, and a ring where the club's carry comes down (the look of the range's flight line and the putt's pace ring) */
-function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number) {
+function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number, G: Ground) {
   const ring = carryRing(g);
   const [bx, bz] = g.ball;
   const len = Math.hypot(ring.x - bx, ring.z - bz);
@@ -299,7 +325,8 @@ function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: num
   let pen = false;
   for (let d = 0; d <= len; d += 1.5) {
     const u = d / len;
-    if (!project(cam, bx + (ring.x - bx) * u, 0.03, bz + (ring.z - bz) * u, pp)) {
+    const px = bx + (ring.x - bx) * u, pz = bz + (ring.z - bz) * u;
+    if (!project(cam, px, G(px, pz) + 0.03, pz, pp)) {
       pen = false;
       continue;
     }
@@ -316,17 +343,18 @@ function aimGuide(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: num
   let ok = true;
   for (let i = 0; i <= 28 && ok; i++) {
     const a = (i / 28) * Math.PI * 2;
-    if (!project(cam, ring.x + Math.cos(a) * 2.2, 0.03, ring.z + Math.sin(a) * 2.2, pp)) ok = false;
+    const px = ring.x + Math.cos(a) * 2.2, pz = ring.z + Math.sin(a) * 2.2;
+    if (!project(cam, px, G(px, pz) + 0.03, pz, pp)) ok = false;
     else if (i) ctx.lineTo(pp.x, pp.y);
     else ctx.moveTo(pp.x, pp.y);
   }
   if (ok) ctx.stroke();
-  if (project(cam, ring.x, 0.03, ring.z, pp) && pp.y > 40) tag(ctx, pp.x, pp.y - Math.max(10, 3 * pp.s), `${Math.round(ring.yd)} YD`, 1, w);
+  if (project(cam, ring.x, G(ring.x, ring.z) + 0.03, ring.z, pp) && pp.y > 40) tag(ctx, pp.x, pp.y - Math.max(10, 3 * pp.s), `${Math.round(ring.yd)} YD`, 1, w);
 }
 
 /** when the ball is below the bottom of the picture (the raised camera), a marker pointing down to it */
-function ballMarker(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number, h: number) {
-  const seen = project(cam, g.ball[0], 0.03, g.ball[1], pp);
+function ballMarker(ctx: CanvasRenderingContext2D, g: CourseGame, cam: Cam, w: number, h: number, G: Ground) {
+  const seen = project(cam, g.ball[0], G(g.ball[0], g.ball[1]) + 0.03, g.ball[1], pp);
   if (seen && pp.y < h - 96 && pp.y > 0 && pp.x > 0 && pp.x < w) return;
   const x = clamp(seen ? pp.x : w / 2, 110, w - 110);
   const y = h - 150;
@@ -421,7 +449,8 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   ctx.fillStyle = DIM;
   const toPin = g.yardsToPin();
   const onGreen = g.lie === "green" || g.lie === "fringe";
-  ctx.fillText(onGreen ? `${Math.round(toPin * 3)} FT TO THE PIN` : `${Math.round(toPin)} YD TO THE PIN`, pad + 10, pad + 46);
+  const plays = onGreen || (g.phase !== "ready" && g.phase !== "swing") ? null : g.playsLike();
+  ctx.fillText(onGreen ? `${Math.round(toPin * 3)} FT TO THE PIN` : plays !== null ? `${Math.round(toPin)} YD · PLAYS ${plays}` : `${Math.round(toPin)} YD TO THE PIN`, pad + 10, pad + 46);
   ctx.fillText(`STROKES ${g.strokes}`, pad + 10, pad + 62);
 
   // ---- top right: the wind, arrow relative to the aim (up = downrange)
@@ -511,6 +540,12 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   }
   // a short canvas (a phone on its side) has the aim's yardage where the cue would go: the cue stands off to the right
   if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, h < 380 ? w / 2 + Math.min(160, w * 0.24) : w / 2, h < 380 ? slot0 - 64 : slot0 - 84, g.t, !!g.opts.reduce);
+  // the slope under the ball, while the shot is lined up
+  const slope = g.phase === "ready" || (g.phase === "swing" && s.sub === "back") ? g.slopeSay() : null;
+  if (slope) {
+    mono(ctx, 10);
+    pill(ctx, slope, w / 2, slot0 - 28, GOLD);
+  }
   // what the last shot did
   if (g.phase === "rest" && g.result) {
     mono(ctx, 10);

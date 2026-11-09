@@ -4,13 +4,14 @@ import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { GH, GW, greenHeight } from "@/components/offhours/golf/green";
+import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
 // into one top-down texture, so their edges are as crisp as the outlines, and that
-// texture is laid over a terrain mesh: flat where the ball can be (the physics is
-// flat), rising into wooded hills beyond the trees. The green is its own finer
+// texture is laid over a terrain mesh: the hole's own ground where the ball can be
+// (terrain.ts, which the ball plays on), rising into wooded hills beyond the trees. The green is its own finer
 // mesh on top, shaped by the putt's height field (relief.ts), with a sharper
 // texture, since the putting camera looks at it from a metre or two. Trees are instanced low-poly
 // shapes; water is a glossy sheet on top of the painted pond.
@@ -40,10 +41,12 @@ const COL = {
 
 export type Hole3D = {
   group: THREE.Group;
-  /** visual ground height (m) of the hills; 0 wherever the ball can be */
+  /** the ground's height as drawn (m): the hole's, and the wooded hills beyond it */
   heightAt: (x: number, z: number) => number;
-  /** the height of the ground the ball lies on, m: the green's relief, 0 elsewhere */
+  /** the height of the ground the ball plays on, m */
   surfaceY: (x: number, z: number) => number;
+  /** the height of a pond's or creek's surface, m */
+  waterY: (x: number, z: number) => number;
   /** the flag's group, scaled from the outside so it can be found from far away */
   flag: THREE.Group;
   cloth: THREE.Mesh;
@@ -77,13 +80,15 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   const W = X1 - X0, L = Z1 - Z0;
 
   // ---------------------------------------------------------------- ground height
-  // flat out to 30 m past the rough (the trees stand there), then hills
+  // the hole's ground, and from 30 m past the rough (the trees stand there) hills rising out of it
+  const ground = terrainOf(hole);
   const noise = (x: number, z: number) =>
     0.5 + 0.22 * Math.sin(x * 0.013 + 1.7) * Math.cos(z * 0.011 - 0.4) + 0.18 * Math.sin((x + z) * 0.021 + def.n) + 0.1 * Math.cos((x - z) * 0.047);
   const heightAt = (x: number, z: number) => {
     const m = hole.margin(x, z) - rough;
-    if (m < 30) return 0;
-    return smooth(30, 150, m) * (5 + 26 * noise(x, z));
+    const y = ground.y(x, z);
+    if (m < 30) return y;
+    return y + smooth(30, 150, m) * (5 + 26 * noise(x, z));
   };
 
   // ---------------------------------------------------------------- the painted surfaces
@@ -221,8 +226,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
     const x = xs[i], z = zs[j], y = H[j * nx + i];
     pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
     uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
-    // the hills are tinted by height: brighter and yellower higher up
-    const u = Math.min(1, y / 30);
+    // the hills are tinted by their height over the hole's ground: brighter and yellower higher up
+    const u = Math.max(0, Math.min(1, (y - ground.y(x, z)) / 30));
     hill.setRGB(1 + u * 0.55, 1 + u * 0.6, 1 + u * 0.25);
     col[k * 3] = hill.r; col[k * 3 + 1] = hill.g; col[k * 3 + 2] = hill.b;
     k++;
@@ -238,30 +243,94 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   tg.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
   tg.setAttribute("color", new THREE.BufferAttribute(col, 3));
   tg.computeVertexNormals();
-  const tm = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
+  // where the ball plays, the ground is lit smooth and as if four times steeper than it is, so a few per cent of slope
+  // shows as light and shade; the hills beyond keep their flat facets
+  {
+    const SHADE = 4, e = 1;
+    const gn = new Float32Array(nx * nz * 4);
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        const x = xs[i], z = zs[j], q = (j * nx + i) * 4;
+        const w = 1 - smooth(18, 34, hole.margin(x, z) - rough);
+        if (w <= 0) continue;
+        const sx = (ground.y(x + e, z) - ground.y(x - e, z)) / (2 * e), sz = (ground.y(x, z + e) - ground.y(x, z - e)) / (2 * e);
+        const l = Math.hypot(SHADE * sx, 1, SHADE * sz);
+        gn[q] = (-SHADE * sx) / l;
+        gn[q + 1] = 1 / l;
+        gn[q + 2] = (-SHADE * sz) / l;
+        gn[q + 3] = w;
+      }
+    const na = tg.attributes.normal as THREE.BufferAttribute;
+    let v = 0;
+    const set = (i: number, j: number) => {
+      const q = (j * nx + i) * 4, w = gn[q + 3];
+      if (w > 0) {
+        const fx = na.getX(v) + (gn[q] - na.getX(v)) * w, fy = na.getY(v) + (gn[q + 1] - na.getY(v)) * w, fz = na.getZ(v) + (gn[q + 2] - na.getZ(v)) * w;
+        const l = Math.hypot(fx, fy, fz) || 1;
+        na.setXYZ(v, fx / l, fy / l, fz / l);
+      }
+      v++;
+    };
+    for (let j = 0; j < nz - 1; j++)
+      for (let i = 0; i < nx - 1; i++) {
+        set(i, j); set(i, j + 1); set(i + 1, j);
+        set(i + 1, j); set(i, j + 1); set(i + 1, j + 1);
+      }
+    na.needsUpdate = true;
+  }
+  const tm =new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
   const terrain = new THREE.Mesh(tg, tm);
   terrain.receiveShadow = true;
   group.add(terrain);
   disposables.push(tg, tm);
 
   // ---------------------------------------------------------------- the green
-  const relief = reliefOf(hole);
   group.add(buildGreen(hole, canvas, { X0, Z0, s }, tier, disposables));
 
   // ---------------------------------------------------------------- water
+  // a pond is a level sheet; a creek is a strip down its path, following the ground it is dug into
   if (hole.world.water.length) {
     const wm = new THREE.MeshPhongMaterial({ color: "#4f97c0", specular: "#e8f6ff", shininess: 90, transparent: true, opacity: 0.82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     disposables.push(wm);
-    for (const ring of hole.world.water) {
-      const shape = new THREE.Shape(ring.map(([x, z]) => new THREE.Vector2(x, -z)));
-      const g = new THREE.ShapeGeometry(shape);
-      g.rotateX(-Math.PI / 2);
+    def.water.forEach((w, wi) => {
+      let g: THREE.BufferGeometry;
+      if ("path" in w) {
+        const path = w.path.map(([x, z]) => [x * YD, z * YD] as P);
+        const hw = (w.w * YD) / 2;
+        const pts: P[] = [];
+        for (let i = 0; i < path.length - 1; i++) {
+          const [ax, az] = path[i], [bx, bz] = path[i + 1];
+          const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 2));
+          for (let k = 0; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+        }
+        pts.push(path[path.length - 1]);
+        const pos: number[] = [], idx: number[] = [];
+        pts.forEach(([x, z], i) => {
+          const [ax, az] = pts[Math.max(0, i - 1)], [bx, bz] = pts[Math.min(pts.length - 1, i + 1)];
+          const l = Math.hypot(bx - ax, bz - az) || 1;
+          const nx = (bz - az) / l, nz = -(bx - ax) / l;
+          for (const s of [-1, 1]) {
+            const px = x + s * nx * hw, pz = z + s * nz * hw;
+            pos.push(px, ground.waterY(px, pz), pz);
+          }
+          if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i, 2 * i - 1, 2 * i + 1);
+        });
+        g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+      } else {
+        const ring = hole.world.water[wi];
+        const shape = new THREE.Shape(ring.map(([x, z]) => new THREE.Vector2(x, -z)));
+        g = new THREE.ShapeGeometry(shape);
+        g.rotateX(-Math.PI / 2);
+        g.translate(0, ground.waterY(w.x * YD, w.z * YD), 0);
+      }
       const m = new THREE.Mesh(g, wm);
-      m.position.y = 0.01;
       m.receiveShadow = true;
       group.add(m);
       disposables.push(g);
-    }
+    });
   }
 
   // ---------------------------------------------------------------- trees
@@ -278,7 +347,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
       const mat = new THREE.MeshLambertMaterial({ color: pc[m.label] ?? "#f2ead7", flatShading: true });
       disposables.push(mat);
       const post = new THREE.Mesh(pg, mat);
-      post.position.set(m.x, 0, m.z);
+      post.position.set(m.x, ground.y(m.x, m.z), m.z);
       post.castShadow = true;
       group.add(post);
     }
@@ -293,7 +362,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
     disposables.push(mg, mm);
     for (const side of [-1, 1]) {
       const m = new THREE.Mesh(mg, mm);
-      m.position.set(Math.cos(yaw) * side * 2.6 + Math.sin(yaw) * 1.2, 0.07, -Math.sin(yaw) * side * 2.6 + Math.cos(yaw) * 1.2);
+      const mx = Math.cos(yaw) * side * 2.6 + Math.sin(yaw) * 1.2, mz = -Math.sin(yaw) * side * 2.6 + Math.cos(yaw) * 1.2;
+      m.position.set(mx, ground.y(mx, mz) + 0.07, mz);
       m.castShadow = true;
       group.add(m);
     }
@@ -304,7 +374,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   const cloth = new THREE.Mesh();
   {
     const [px, pz] = hole.pin;
-    const py = relief.y(px, pz);
+    const py = ground.y(px, pz);
     flag.position.set(px, py, pz);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 2.4, 6), new THREE.MeshLambertMaterial({ color: "#f7f3e8" }));
     pole.position.y = 1.2;
@@ -327,7 +397,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   return {
     group,
     heightAt,
-    surfaceY: relief.y,
+    surfaceY: ground.y,
+    waterY: ground.waterY,
     flag,
     cloth,
     trees,
@@ -432,11 +503,18 @@ function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: numb
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   disposables.push(tex);
 
-  // ---- mesh: only the cells that rise off the flat ground
+  // ---- mesh: only the cells where the green rises off its pad
   const cell = tier.gcell;
   const nx = Math.ceil(W / cell) + 1, nz = Math.ceil(L / cell) + 1;
   const Y = new Float32Array(nx * nz);
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) Y[j * nx + i] = relief.y(x0 + i * cell, z0 + j * cell);
+  const R = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++)
+    for (let i = 0; i < nx; i++) {
+      const x = x0 + i * cell, z = z0 + j * cell;
+      Y[j * nx + i] = relief.y(x, z);
+      const [gx, gy] = hole.toGreen(x, z);
+      R[j * nx + i] = relief.rise(gx, gy);
+    }
   const EX = 3;
   const pos: number[] = [], nor: number[] = [], uv: number[] = [];
   const idx = new Map<number, number>();
@@ -459,7 +537,7 @@ function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: numb
   };
   for (let j = 0; j < nz - 1; j++)
     for (let i = 0; i < nx - 1; i++) {
-      if (Y[j * nx + i] <= 0 && Y[j * nx + i + 1] <= 0 && Y[(j + 1) * nx + i] <= 0 && Y[(j + 1) * nx + i + 1] <= 0) continue;
+      if (R[j * nx + i] <= 0 && R[j * nx + i + 1] <= 0 && R[(j + 1) * nx + i] <= 0 && R[(j + 1) * nx + i + 1] <= 0) continue;
       // the bank stops at a pond's edge, so the water stays where it is drawn
       if (hole.surfaceAt(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell) === "water") continue;
       // wound like the terrain, so the faces point up in the course's own frame

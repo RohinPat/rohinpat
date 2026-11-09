@@ -1,4 +1,5 @@
 import type { BuiltHole } from "@/components/offhours/golf/course";
+import { terrainOf } from "@/components/offhours/golf/terrain";
 
 // The hole from the air, while its card is up: the camera starts high over the
 // green and glides back down the middle of the hole to the tee, looking ahead the
@@ -56,7 +57,8 @@ export function flyoverView(hole: BuiltHole, u: number, w: number, h: number, en
   const [ex, ez] = along(p, s - 75);
   const [tx, tz] = along(p, s + 25 * (1 - k) + 60 * k);
   const high = 10 + 30 * (1 - k) + 18 * Math.sin(Math.PI * k);
-  const v: View = { x: ex, y: high, z: ez, tx, ty: 0, tz, F: F0 };
+  const G = terrainOf(hole).y;
+  const v: View = { x: ex, y: Math.max(G(ex, ez), G(tx, tz)) + high, z: ez, tx, ty: G(tx, tz), tz, F: F0 };
   // the last stretch eases into the game's camera
   const m = smooth(clamp((u - 0.72) / 0.28, 0, 1));
   if (m <= 0) return v;
@@ -76,5 +78,6 @@ export function titleView(hole: BuiltHole, t: number, w: number, h: number): Vie
   const [mx, mz] = along(p, p.total * 0.55);
   const a = -2.4 + t * 0.045;
   const R = 150 + p.total * 0.3;
-  return { x: mx + Math.sin(a) * R, y: 95 + p.total * 0.12, z: mz + Math.cos(a) * R, tx: mx, ty: 0, tz: mz, F: Math.max(w * 0.9, h * 1.1) };
+  const my = terrainOf(hole).y(mx, mz);
+  return { x: mx + Math.sin(a) * R, y: my + 95 + p.total * 0.12, z: mz + Math.cos(a) * R, tx: mx, ty: my, tz: mz, F: Math.max(w * 0.9, h * 1.1) };
 }

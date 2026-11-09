@@ -324,5 +324,6 @@ export function golferFrame(ball: V, yaw: number, club: Club): { origin: V; ex: 
   const ex: V = [Math.cos(yaw), 0, -Math.sin(yaw)];
   const ez: V = [Math.sin(yaw), 0, Math.cos(yaw)];
   const bl = ballLocal(club);
-  return { origin: [ball[0] - ex[0] * bl[0], 0, ball[2] - ex[2] * bl[0]], ex, ez };
+  // the feet on the ground the ball lies on (ball[1] is that ground's height)
+  return { origin: [ball[0] - ex[0] * bl[0], ball[1], ball[2] - ex[2] * bl[0]], ex, ez };
 }

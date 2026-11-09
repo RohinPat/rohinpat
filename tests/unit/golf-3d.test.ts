@@ -17,8 +17,10 @@ describe("the golfer's joints", () => {
   it("the frame stands the golfer beside the ball, facing the aim", () => {
     const club = CLUBS[0];
     const yaw = 0.4;
-    const ball: [number, number, number] = [12, 0, 80];
+    // on ground 2.5 m up a hill: the feet are on it
+    const ball: [number, number, number] = [12, 2.5, 80];
     const { origin, ex, ez } = golferFrame(ball, yaw, club);
+    expect(origin[1]).toBe(2.5);
     const b = ballLocal(club);
     // the ball in the local frame maps back to where it lies
     expect(origin[0] + ex[0] * b[0] + ez[0] * b[2]).toBeCloseTo(ball[0], 6);

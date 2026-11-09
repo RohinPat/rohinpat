@@ -27,12 +27,12 @@ function project(v: View, p: [number, number, number], w: number, h: number) {
 }
 
 describe("the green's relief", () => {
-  it("is flat ground away from the green and never below it", () => {
+  it("rises off its pad and nowhere else", () => {
     for (const hole of holes) {
       const rel = reliefOf(hole);
-      expect(rel.y(0, 0)).toBe(0); // the tee
-      for (let gy = -8; gy <= GH + 8; gy += 0.7) for (let gx = -8; gx <= GW + 8; gx += 0.7) expect(rel.yG(gx, gy)).toBeGreaterThanOrEqual(0);
-      expect(rel.yG(-8, -8)).toBe(0);
+      for (let gy = -8; gy <= GH + 8; gy += 0.7) for (let gx = -8; gx <= GW + 8; gx += 0.7) expect(rel.rise(gx, gy)).toBeGreaterThanOrEqual(0);
+      expect(rel.rise(-8, -8)).toBe(0);
+      expect(rel.rise(GW / 2, GH / 2)).toBeGreaterThan(0);
     }
   });
   it("slopes exactly as the putt's green does wherever a putt is played", () => {
@@ -59,7 +59,7 @@ describe("the green's relief", () => {
           expect(Math.abs(y - prev)).toBeLessThan(0.03);
           prev = y;
         }
-        expect(prev).toBe(0);
+        expect(rel.rise(GW / 2 + Math.cos(a) * 18, GH / 2 + Math.sin(a) * 18)).toBe(0);
       }
     }
   });
