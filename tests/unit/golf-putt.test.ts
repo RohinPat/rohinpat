@@ -55,7 +55,7 @@ describe("the cup", () => {
 });
 
 describe("tap-in", () => {
-  it("a ball that stops within 0.45 m of the cup is holed after a short beat, as one more stroke", () => {
+  it("a ball that stops within 0.45 m of the cup is tapped in after a beat, as one more stroke", () => {
     expect(TAP_IN).toBe(0.45);
     const p = newPutt();
     const e = env();
@@ -70,7 +70,14 @@ describe("tap-in", () => {
     expect(e.said).toContain("Tap in.");
     expect(p.ball.sunk).toBe(false);
     expect(p.strokes).toBe(1);
-    run(p, e, 0.6, t);
+    // the putter steps up first: the ball has not moved, and the stroke is not counted yet
+    const t2 = run(p, e, 0.45, t);
+    expect(p.tap).not.toBeNull();
+    expect(p.ball.x).toBe(p.tap!.x);
+    expect(p.strokes).toBe(1);
+    expect(p.call).toBe("TAP IN");
+    // the tap: the stroke counts, and the ball is in
+    run(p, e, 0.6, t2);
     expect(p.ball.sunk).toBe(true);
     expect(p.tap).toBeNull();
     expect(p.strokes).toBe(2);

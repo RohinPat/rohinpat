@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
-import { GH, GW, greenHeight, puttAim, zone, type Putt } from "@/components/offhours/golf/green";
+import { GH, GW, TAP_HIT, greenHeight, puttAim, zone, type Putt } from "@/components/offhours/golf/green";
 import { reliefOf } from "./relief";
 
 // Putting on the 3D green. The putt itself is green.ts's (its ball, its physics,
@@ -147,7 +147,7 @@ export function createPutt3D(): Putt3D {
     const b = p.ball;
 
     // ---- the putter
-    let pv: { dx: number; dy: number; back: number; alpha: number } | null = null;
+    let pv: { dx: number; dy: number; back: number; alpha: number; x?: number; y?: number } | null = null;
     const aim = puttAim(p, t);
     if (p.putter) {
       const pt = p.putter;
@@ -158,14 +158,22 @@ export function createPutt3D(): Putt3D {
       else if (pt.t < arrive) back = startBack * (1 - smooth(pt.t / arrive) ** 1.4);
       else back = -Math.min(0.24, (pt.t - arrive) * 1.6) * (0.4 + pt.pull);
       pv = { dx: pt.dx, dy: pt.dy, back, alpha: pt.t > 0.32 ? Math.max(0, 1 - (pt.t - 0.32) / 0.18) : 1 };
-    } else if (!b.moving && !b.sunk && !p.tap && !p.reading && !p.done) {
+    } else if (p.tap) {
+      // a tap-in: the putter steps up behind where the ball stopped, draws back a little and taps it at the cup
+      const tp = p.tap;
+      const [cx, cy] = p.hole.cup;
+      const l = Math.hypot(cx - tp.x, cy - tp.y) || 1;
+      const k = smooth((tp.t - 0.3) / (TAP_HIT - 0.3 - 0.12));
+      const back = tp.t < TAP_HIT - 0.12 ? 0.04 + 0.1 * k : tp.t < TAP_HIT ? 0.14 * (1 - smooth((tp.t - TAP_HIT + 0.12) / 0.12)) : -Math.min(0.1, (tp.t - TAP_HIT) * 0.8);
+      pv = { dx: (cx - tp.x) / l, dy: (cy - tp.y) / l, back, alpha: Math.min(1, tp.t / 0.2) * (tp.t > TAP_HIT + 0.15 ? Math.max(0, 1 - (tp.t - TAP_HIT - 0.15) / 0.2) : 1), x: tp.x, y: tp.y };
+    } else if (!b.moving && !b.sunk && !p.reading && !p.done) {
       const d = aim ?? { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: 0 };
       pv = { dx: d.dx, dy: d.dy, back: 0.05 + d.pow * 0.42, alpha: 1 };
     }
     putter.visible = !!pv && pv.alpha > 0.02;
     if (pv && putter.visible) {
       // the face 2 cm behind the ball at address, square to the line; the shaft leans up to the golfer on its left
-      const hx = b.x - pv.dx * (pv.back + 0.035), hy = b.y - pv.dy * (pv.back + 0.035);
+      const hx = (pv.x ?? b.x) - pv.dx * (pv.back + 0.035), hy = (pv.y ?? b.y) - pv.dy * (pv.back + 0.035);
       const [x, y, z] = ground(hx, hy, 0);
       const ux = pv.dx, uz = -pv.dy;
       putter.position.set(x, y, z);

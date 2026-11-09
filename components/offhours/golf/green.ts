@@ -15,7 +15,9 @@ export const GH = 12.5;
 export const CUP_R = 0.07;
 /** a ball that comes to rest this close to the cup (m) is holed for one more stroke, after a short beat */
 export const TAP_IN = 0.45;
-const TAP_BEAT = 0.45;
+/** a tap-in: the putter steps up, taps the ball at TAP_HIT s (the stroke counts then), and it is in the cup at TAP_BEAT s */
+export const TAP_HIT = 0.75;
+export const TAP_BEAT = 1.1;
 /** the arrow keys' aim steps, radians: Alt for fine, none for normal, Shift for big */
 export const AIM_STEP = { fine: 0.005, normal: 0.03, big: 0.1 };
 export const MU = 0.065 * 9.81;
@@ -651,15 +653,20 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     }
   } else if (!p.ball.moving) p.trailAge += dt;
   if (p.tap) {
-    // a beat, then the ball rolls the last few inches in, and it counts as one more stroke
+    // a beat while the putter steps up, a tap (one more stroke), and the ball rolls the last few inches in
     const tp = p.tap;
+    const was = tp.t;
     tp.t += dt;
-    const u = Math.min(1, Math.max(0, (tp.t - 0.2) / (TAP_BEAT - 0.2)));
-    p.ball.x = tp.x + (H.cup[0] - tp.x) * u * u;
-    p.ball.y = tp.y + (H.cup[1] - tp.y) * u * u;
+    if (was < TAP_HIT && tp.t >= TAP_HIT) {
+      p.strokes++;
+      if (env.play) sfx("putt", 0.1);
+    }
+    const u = Math.min(1, Math.max(0, (tp.t - TAP_HIT) / (TAP_BEAT - TAP_HIT)));
+    const e = u * (2 - u);
+    p.ball.x = tp.x + (H.cup[0] - tp.x) * e;
+    p.ball.y = tp.y + (H.cup[1] - tp.y) * e;
     if (tp.t >= TAP_BEAT) {
       p.tap = null;
-      p.strokes++;
       p.ball.x = H.cup[0];
       p.ball.y = H.cup[1];
       p.ball.sunk = true;
