@@ -41,11 +41,15 @@ export function waterWithin(surfaceAt: (x: number, z: number) => Surface, x: num
 
 /** how far back from the water's edge a dropped ball is put, m */
 export const DROP_CLEAR = 2;
+/** water whose way back along the line is longer than this (m) to playable ground (a creek in the woods) is dropped beside, as the woods are */
+export const DROP_BACK_MAX = 23;
 
 /**
  * A ball that ended in water or the woods: where it is dropped, and what that costs (null: play it as it lies).
  * Water: back along the flight line from where it crossed in, to the first dry ground at least DROP_CLEAR from the
- * water, the fairway if there is any on the line, else the rough.
+ * water, the fairway if there is any on the line, else the rough. If that is more than DROP_BACK_MAX back (water in
+ * the woods, with nothing playable on the line until near the tee), it is dropped beside where it went in, toward the
+ * middle of the hole, as a ball in the woods is.
  */
 export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: number) => [number, number], surfaceAt?: (x: number, z: number) => Surface): Drop | null {
   const n = shot.n;
@@ -69,12 +73,30 @@ export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: nu
         } else rough ??= { x, z };
       }
       if (!found && rough) best = rough;
+      const cx = shot.ox + shot.pts[from * 4 + 1], cz = shot.oz + shot.pts[from * 4 + 3];
+      if (Math.hypot(best.x - cx, best.z - cz) > DROP_BACK_MAX) {
+        const side = besideWater(cx, cz, edgeDrop, surfaceAt);
+        if (side && Math.hypot(side.x - cx, side.z - cz) < Math.hypot(best.x - cx, best.z - cz)) best = side;
+      }
     }
     return { x: best.x, z: best.z, why: "water", penalty: 1, say: "Water. One stroke added. Dropping." };
   }
   if (ground === "out") {
     const [x, z] = edgeDrop(ex, ez);
     return { x, z, why: "out", penalty: 1, say: "In the trees. One stroke added. Dropping." };
+  }
+  return null;
+}
+
+/** a drop beside the water at (x, z): the woods' drop toward the middle of the hole, then on until it is DROP_CLEAR clear (null if it never is) */
+function besideWater(x: number, z: number, edgeDrop: (x: number, z: number) => [number, number], surfaceAt: (x: number, z: number) => Surface) {
+  const [ex, ez] = edgeDrop(x, z);
+  const dx = ex - x, dz = ez - z, l = Math.hypot(dx, dz);
+  if (l < 1e-6) return null;
+  for (let d = l; d <= l + 25; d += 0.5) {
+    const px = x + (dx / l) * d, pz = z + (dz / l) * d;
+    const sf = surfaceAt(px, pz);
+    if ((sf === "fairway" || sf === "rough") && waterWithin(surfaceAt, px, pz, DROP_CLEAR) === null) return { x: px, z: pz };
   }
   return null;
 }
