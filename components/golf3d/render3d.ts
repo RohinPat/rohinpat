@@ -252,7 +252,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     // the golfer stands at the ball until it is struck, then watches it go from where it was
     const gx = sh && (g.phase === "fly" || g.phase === "rest") ? sh.ox : g.ball[0];
     const gz = sh && (g.phase === "fly" || g.phase === "rest") ? sh.oz : g.ball[1];
-    golfer.update([gx, 0.02 + (hole ? hole.surfaceY(gx, gz) : 0), gz], g.yaw, club, g.pose);
+    golfer.update([gx, hole ? hole.surfaceY(gx, gz) : 0, gz], g.yaw, club, g.pose);
     golfer.group.visible = !putting && Math.hypot(gx - c.x, gz - c.z) < 90;
 
     // the flag: waves in the wind, and grows far off so it can always be found
