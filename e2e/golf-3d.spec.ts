@@ -24,8 +24,8 @@ type Game = {
 };
 type Win = { __golf: Game };
 
-/** the title, then a round of six holes */
-async function openCourse(p: Page, mode = /Six holes/) {
+/** the title, then a round of nine holes */
+async function openCourse(p: Page, mode = /Nine holes/) {
   await p.goto("/golf?linkmock");
   await expect(p.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
   await p.getByRole("button", { name: mode }).click();
@@ -37,7 +37,7 @@ test("the 3D course covers the page and is not indexed", async ({ page }) => {
   await page.goto("/golf");
   await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
   await expect(page.getByRole("heading", { name: "Golf" })).toBeVisible();
-  await page.getByRole("button", { name: /Six holes/ }).click();
+  await page.getByRole("button", { name: /Nine holes/ }).click();
   await expect(page).toHaveURL(/\/golf\?seed=\d+/);
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
   // the site's navigation is underneath: what is at the top of the screen is the game's toolbar
@@ -150,7 +150,7 @@ test("the 3D course's controls pass axe", async ({ page }) => {
   const axe = () => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   const title = await axe();
   expect(title.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
-  await page.getByRole("button", { name: /Six holes/ }).click();
+  await page.getByRole("button", { name: /Nine holes/ }).click();
   await expect(page.locator("[data-golf-phase]")).toBeVisible(SLOW);
   const r = await axe();
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);

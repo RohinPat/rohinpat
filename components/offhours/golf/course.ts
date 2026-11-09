@@ -198,6 +198,85 @@ export const HOLE_DEFS: HoleDef[] = [
   },
 ];
 
+/** the back three, which make the six a nine (the 3D course plays all nine; the dialog's flat course the six) */
+export const BACK_DEFS: HoleDef[] = [
+  {
+    // uphill to a ridge at 235 yd: a drive that clears its top runs down the far side and leaves a pitch; one short of it
+    // stops on the climb and leaves a long, uphill second
+    n: 7,
+    name: "The Ridge",
+    par: 4,
+    yards: 385,
+    line: [[0, 0], [0, 240], [-14, 387]],
+    half: [14, 20, 18],
+    rough: 14,
+    pin: [-13, 383],
+    green: { c: [-14, 386], seed: 4707, severity: 0.75 },
+    bunkers: [
+      { x: -18, z: 238, rx: 5, rz: 9 },
+      { x: 19, z: 212, rx: 5, rz: 8 },
+      { x: 0, z: 374, rx: 5, rz: 4, rot: -0.4 },
+    ],
+    water: [],
+    trees: { seed: 71, edge: 6, spacing: 6 },
+    wind: { speed: 2.2, dir: 2.6 },
+    landing: [0, 235],
+    ground: { rise: [[0, 0], [120, 4], [225, 9], [245, 9.5], [275, 7], [387, 3]], tilt: [[200, 0], [240, 0.02], [300, 0]] },
+  },
+  {
+    // a long right-hander with a lake down the right of the second shot and a pond off the front right of the green; the
+    // ground and the wind both lean toward the water. Get home in two over the pond, or lay up left
+    n: 8,
+    name: "Long Water",
+    par: 5,
+    yards: 520,
+    line: [[0, 0], [0, 280], [45, 522]],
+    half: [15, 21, 19],
+    rough: 14,
+    pin: [44, 518],
+    green: { c: [45, 521], seed: 4808, severity: 0.7 },
+    bunkers: [
+      { x: -20, z: 262, rx: 5, rz: 10 },
+      { x: 29, z: 514, rx: 4, rz: 6 },
+    ],
+    water: [
+      { x: 64, z: 400, rx: 15, rz: 34, rot: -0.18 },
+      { x: 67, z: 499, rx: 8, rz: 10 },
+    ],
+    trees: { seed: 83, edge: 6, spacing: 6 },
+    wind: { speed: 2, dir: 1.2 },
+    landing: [0, 262],
+    ground: { rise: [[0, 0], [150, -2], [280, -3], [420, -5], [522, -4]], tilt: [[300, 0], [400, -0.025], [480, 0]], swell: 0.7 },
+  },
+  {
+    // home from a raised tee: down to a dogleg left with a stand of trees on the inside of the corner, the ground kicking
+    // to the outside toward a bunker, and a green on a shelf with a pond long and left
+    n: 9,
+    name: "Homeward",
+    par: 4,
+    yards: 415,
+    line: [[0, 0], [0, 200], [-70, 410]],
+    half: [16, 22, 18],
+    rough: 14,
+    pin: [-68, 406],
+    green: { c: [-70, 409], seed: 4909, severity: 0.85 },
+    bunkers: [
+      { x: 26, z: 212, rx: 5, rz: 9 },
+      { x: -84, z: 397, rx: 5, rz: 4, rot: 0.5 },
+      { x: -55, z: 421, rx: 4, rz: 5 },
+    ],
+    water: [{ x: -93, z: 428, rx: 10, rz: 7, rot: 0.4 }],
+    trees: { seed: 97, edge: 6, spacing: 6 },
+    copse: [[-38, 148, 17], [-44, 159, 19], [-36, 169, 16], [-48, 173, 18], [-40, 184, 20], [-52, 189, 17]],
+    wind: { speed: 3, dir: -2.2 },
+    landing: [-5, 215],
+    ground: { rise: [[0, 0], [60, -2], [200, -7], [300, -8], [415, -6]], tilt: [[160, 0], [210, -0.03], [290, 0]] },
+  },
+];
+
+/** all nine */
+export const NINE_DEFS: HoleDef[] = [...HOLE_DEFS, ...BACK_DEFS];
+
 const blobHit = (b: Blob, x: number, z: number) => {
   const dx = x - b.x * YD, dz = z - b.z * YD;
   const c = Math.cos(b.rot ?? 0), s = Math.sin(b.rot ?? 0);

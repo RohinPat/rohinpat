@@ -1,12 +1,12 @@
 import { seeded } from "@/components/offhours/useCanvas";
-import { HOLE_DEFS, type HoleDef } from "@/components/offhours/golf/course";
+import { NINE_DEFS, type HoleDef } from "@/components/offhours/golf/course";
 import type { HoleScore } from "@/components/offhours/golf/score";
 import type { CourseGame } from "@/components/offhours/golf/play";
 
 // The ways to play the course, all from the URL (nothing is stored):
-// - full: the six holes, a fresh wind each time;
+// - full: the nine holes, a fresh wind each time;
 // - quick: three of them, picked by the seed;
-// - daily: the six holes with the day's winds, the same for everyone that day.
+// - daily: the nine with the day's winds, the same for everyone that day.
 // A round's link carries its mode and seed, so a friend can play the same one.
 
 export type Mode = "full" | "quick" | "daily";
@@ -32,17 +32,17 @@ export function setupFor(mode: Mode, opts: { seed?: number; day?: string } = {})
     const seed = 1 + hash(`golf:${day}`);
     const r = seeded(seed);
     // the day's winds: from calm to a two-club breeze, from anywhere
-    const defs = HOLE_DEFS.map((d) => ({ ...d, wind: { speed: Math.round((0.6 + r() * 3.8) * 10) / 10, dir: Math.round(r() * 628) / 100 } }));
+    const defs = NINE_DEFS.map((d) => ({ ...d, wind: { speed: Math.round((0.6 + r() * 3.8) * 10) / 10, dir: Math.round(r() * 628) / 100 } }));
     return { mode, seed, defs, day };
   }
   const seed = opts.seed && opts.seed > 0 ? Math.floor(opts.seed) : 1 + Math.floor(Math.random() * 1e6);
   if (mode === "quick") {
     const r = seeded(seed);
-    const order = HOLE_DEFS.map((d) => ({ d, k: r() })).sort((a, b) => a.k - b.k);
+    const order = NINE_DEFS.map((d) => ({ d, k: r() })).sort((a, b) => a.k - b.k);
     const defs = order.slice(0, 3).map((o) => o.d).sort((a, b) => a.n - b.n);
     return { mode, seed, defs, day: null };
   }
-  return { mode, seed, defs: HOLE_DEFS, day: null };
+  return { mode, seed, defs: NINE_DEFS, day: null };
 }
 
 /** read a round from the page's query: ?daily, ?daily=2026-11-08, ?quick=1234, ?seed=1234 */
@@ -63,7 +63,7 @@ export function modeName(s: Setup) {
     const [y, m, d] = (s.day ?? today()).split("-").map(Number);
     return `Daily · ${new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
   }
-  return s.mode === "quick" ? "Quick 3" : "Six holes";
+  return s.mode === "quick" ? "Quick 3" : "Nine holes";
 }
 
 /** the round as text to paste somewhere: the mode, the score, each hole, and the link */

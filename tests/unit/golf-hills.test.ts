@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLUBS, simulate, type ShotIn } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { GH, GW } from "@/components/offhours/golf/green";
 import { bothLies, lieFor, slopeLie, slopeWords, waterWithin } from "@/components/offhours/golf/lie";
 import { CourseGame } from "@/components/offhours/golf/play";
@@ -209,5 +209,30 @@ describe("the bots on the hills: measured bands, pinned", () => {
     expect(c).toBeLessThanOrEqual(37.5);
     expect(k).toBeGreaterThanOrEqual(25.5);
     expect(k).toBeLessThanOrEqual(29.5);
+  });
+});
+
+describe("the nine on the hills (the 3D course's round): measured bands, pinned", () => {
+  // 30 seeded rounds over all nine holes (par 36)
+  const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true, holes: NINE_DEFS }, maxSeconds: 1400 }));
+  const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
+  it("skilled: par + 3 to par + 8, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
+    const rs = rounds(BOTS.skilled);
+    expect(rs.every((r) => r.finished)).toBe(true);
+    expect(total(rs)).toBeGreaterThanOrEqual(39);
+    expect(total(rs)).toBeLessThanOrEqual(44);
+    rs[0].pars.forEach((par, h) => {
+      const m = mean(rs.map((r) => r.holes[h]));
+      expect(m, `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.6);
+      expect(m, `hole ${h + 1}`).toBeLessThanOrEqual(par + 2);
+    });
+    expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(3);
+  });
+  it("the keyboard's three presses play like the skilled player; a casual one is well behind", { timeout: 120_000 }, () => {
+    const k = total(rounds(BOTS.keyboard)), c = rounds(BOTS.casual);
+    expect(k).toBeGreaterThanOrEqual(38.5);
+    expect(k).toBeLessThanOrEqual(44.5);
+    expect(c.every((r) => r.finished)).toBe(true);
+    expect(total(c)).toBeGreaterThan(k + 6);
   });
 });

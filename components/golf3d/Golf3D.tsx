@@ -40,8 +40,8 @@ export default function Golf3D() {
 }
 
 const MODES: { mode: Mode; label: string; sub: (d: string) => string }[] = [
-  { mode: "full", label: "Six holes", sub: () => "Par 23" },
-  { mode: "quick", label: "Quick 3", sub: () => "Three of the six" },
+  { mode: "full", label: "Nine holes", sub: () => "Par 36" },
+  { mode: "quick", label: "Quick 3", sub: () => "Three of the nine" },
   { mode: "daily", label: "Daily", sub: (d) => `Today's winds · ${d}` },
 ];
 
