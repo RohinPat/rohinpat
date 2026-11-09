@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
 import { HOLE_DEFS, buildHole, type Blob, type HoleDef, type Water } from "@/components/offhours/golf/course";
 import { GH, GW, zone } from "@/components/offhours/golf/green";
-import { DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
+import { DROP_BACK_MAX, DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
 import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound, shouldPickUp, toPar } from "@/components/offhours/golf/score";
 
@@ -206,11 +206,11 @@ describe("the lie table", () => {
       expect(pond(d.x, d.z)).toBe("fairway");
       expect(d.z).toBeGreaterThan(80);
     });
-    it("the drop is on dry ground, fairway or rough, at least 2 m from the water, back along the flight line", () => {
+    it("the drop is on dry ground, fairway or rough, at least 2 m from the water, back along the flight line (or beside where it went in, when the line has nothing close)", () => {
       const b = buildHole(HOLE_DEFS[1]);
       const sw = (x: number, z: number) => b.surfaceAt(x, z);
       const d = HOLE_DEFS[1].water[0] as Blob;
-      let seen = 0;
+      let seen = 0, beside = 0;
       for (const club of [3, 4]) {
         for (const aimX of [-24, -17, -12]) {
           for (const sp of [0.8, 0.9, 1.0]) {
@@ -221,15 +221,21 @@ describe("the lie table", () => {
             expect(sw(dr.x, dr.z), `${club} ${aimX} ${sp}`).not.toBe("water");
             expect(["fairway", "rough"]).toContain(sw(dr.x, dr.z));
             expect(waterWithin(sw, dr.x, dr.z, DROP_CLEAR)).toBeNull();
-            // back toward the tee, and on the line the ball flew
-            expect(dr.z).toBeLessThan(s.bounces[s.bounces.length - 1].z);
+            // back toward the tee, and on the line the ball flew, or else close beside where it went in
+            const inAt = s.bounces[s.bounces.length - 1];
+            expect(dr.z).toBeLessThan(inAt.z);
             let on = 1e9;
             for (let i = 0; i < s.n; i++) on = Math.min(on, Math.hypot(s.pts[i * 4 + 1] - dr.x, s.pts[i * 4 + 3] - dr.z));
-            expect(on).toBeLessThan(0.3);
+            if (on >= 0.3) {
+              beside++;
+              expect(Math.hypot(dr.x - inAt.x, dr.z - inAt.z), `${club} ${aimX} ${sp}`).toBeLessThan(DROP_BACK_MAX);
+            }
           }
         }
       }
       expect(seen).toBeGreaterThanOrEqual(6);
+      // most are on the line; a wedge pulled left over the rough beside the pond is dropped beside it
+      expect(beside).toBeLessThanOrEqual(2);
     });
     it("the woods: one stroke, dropped by the edge function", () => {
       const s = simulate({ club: CLUBS[3], speed: 1, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: () => "out" });

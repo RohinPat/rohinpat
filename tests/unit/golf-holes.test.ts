@@ -7,6 +7,7 @@ import { carryRing, paint } from "@/components/offhours/golf/playDraw";
 import { YD, project } from "@/components/offhours/golf/scene";
 import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, greenRoll, lieCarry, meterFace, overSpeed, sfOf, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
 import { forgetBest } from "@/components/offhours/golf/score";
+import { DROP_CLEAR, waterWithin } from "@/components/offhours/golf/lie";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
 // these play real shots and rounds, which run many times slower under coverage on CI
@@ -710,6 +711,30 @@ describe("found in play", () => {
     run(g, () => g.phaseT > 1, 3);
     look("round card");
     expect(drawn.map(([s]) => s)).toContain("TAP TO PLAY AGAIN");
+  });
+  it("a drive into the creek in the woods on hole 6 is dropped beside it, not back near the tee, and is no better off than the trees", () => {
+    const tee = (deg: number) => {
+      const g = onHole(6);
+      g.aim(rad(deg));
+      g.yaw = g.yawT;
+      g.setClub(0);
+      g.remoteSwing(PURE);
+      expect(run(g, () => g.phase === "rest")).toBe(true);
+      return g;
+    };
+    const wet = tee(-12);
+    expect(wet.result).toBe("WATER · +1");
+    expect(["fairway", "rough"]).toContain(wet.lie);
+    expect(waterWithin(wet.hole.surfaceAt, wet.ball[0], wet.ball[1], DROP_CLEAR)).toBeNull();
+    // it went in about 230 yd out: the drop is within 40 yd of that, not 50 yd off the tee
+    const s = wet.shot!;
+    const inAt = s.bounces[s.bounces.length - 1];
+    expect(Math.hypot(wet.ball[0] - inAt.x, wet.ball[1] - inAt.z) / YD).toBeLessThan(40);
+    expect(wet.yardsToPin()).toBeLessThan(200);
+    // a little further left is the trees: the water costs about the same, not 200 yd more
+    const dry = tee(-14);
+    expect(dry.result).toBe("TREES · +1");
+    expect(wet.yardsToPin() - dry.yardsToPin()).toBeLessThan(50);
   });
   it("a keyboard swing a little off the line still finds the fairway on the first hole", () => {
     // 40 ms either way is two frames: it was the trees, it is the fairway now
