@@ -72,6 +72,40 @@ test("a tee shot on the 3D course flies and comes to rest", async ({ page }) => 
   expect(s.z).toBeGreaterThan(150);
 });
 
+test("on the green a pull-back putts the ball, through the 3D camera when there is one", async ({ page }) => {
+  await openCourse(page);
+  // the ball on the green, 5 m short of the cup
+  await page.evaluate(() => {
+    const g = (window as unknown as Win).__golf as unknown as Game & {
+      hole: { green: { cup: [number, number] }; fromGreen: (x: number, y: number) => [number, number] };
+      lie: string;
+      afterRest: () => void;
+    };
+    for (let i = 0; i < 600 && g.phase !== "ready"; i++) g.step(1 / 60);
+    const [cx, cy] = g.hole.green.cup;
+    g.ball = g.hole.fromGreen(cx - 5, cy);
+    g.lie = "green";
+    g.afterRest();
+  });
+  await expect(page.locator("[data-golf-phase]")).toHaveAttribute("data-golf-phase", "putt", SLOW);
+  type P = { putt: { strokes: number; proj: object | null; ball: { moving: boolean } } };
+  const gl = await page.evaluate(() => !!(window as unknown as { __golf3d: unknown }).__golf3d);
+  if (gl) await expect.poll(() => page.evaluate(() => !!((window as unknown as Win).__golf as unknown as P).putt.proj), SLOW).toBe(true);
+  const box = (await page.locator("canvas[data-autofocus]").boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height * 0.4;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(x, y + i * 14);
+  await page.mouse.up();
+  // the putter swings through on the game's clock: step it on
+  await page.evaluate(() => {
+    const g = (window as unknown as Win).__golf;
+    for (let i = 0; i < 60; i++) g.step(1 / 60);
+  });
+  const s = await page.evaluate(() => ((window as unknown as Win).__golf as unknown as P).putt.strokes);
+  expect(s).toBe(1);
+});
+
 test("quick 3 ends on a scorecard with a link that replays it", async ({ page }) => {
   await openCourse(page, /Quick 3/);
   await expect(page).toHaveURL(/\/golf\?quick=\d+/);

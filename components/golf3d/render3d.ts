@@ -5,6 +5,8 @@ import { buildHole3D, type Hole3D } from "./hole3d";
 import { buildGolfer3D } from "./golfer3d";
 import { createFx3D } from "./fx3d";
 import type { View } from "./flyover";
+import { createPutt3D } from "./putt3d";
+import type { PuttProj } from "@/components/offhours/golf/green";
 
 // The course in WebGL. The game (play.ts) and its camera rig (playDraw.ts) are
 // the 2D course's own; this draws what the camera sees: sky, hills, the hole,
@@ -30,6 +32,8 @@ const BALL_R = 0.0214;
 export type CourseRenderer = {
   /** draw the game; `view` puts the camera somewhere other than the game's (the flyover, the title screen) */
   render: (g: CourseGame, w: number, h: number, view?: View) => void;
+  /** the putt's map between the screen and the green through the last frame's camera */
+  puttProj: (g: CourseGame) => PuttProj;
   dispose: () => void;
   /** draw calls, triangles and device pixels of the last frame (for the perf test) */
   info: () => { calls: number; triangles: number; pixels: number; soft: boolean; fx: number };
@@ -117,6 +121,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   root.add(golfer.group);
   const dust = createFx3D(!!opts.reduce);
   root.add(dust.group);
+  const putt = createPutt3D();
+  root.add(putt.group);
+  const flagMats: THREE.Material[] = [];
   // the shot whose landings have been shown, and how many of them
   let fxShot: CourseGame["shot"] = null;
   let fxBounce = 0;
@@ -138,6 +145,15 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     root.add(hole.group);
     hidden.clear();
     dust.clear();
+    // the flag can ghost when a putt is close to the cup
+    flagMats.length = 0;
+    hole.flag.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (m) {
+        m.transparent = true;
+        flagMats.push(m);
+      }
+    });
   };
 
   /** trees close to the line from the camera to the ball only hide the shot: they are left out */
@@ -206,26 +222,45 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       bz = sh.oz + p[2];
     }
     if (g.splash && (g.phase === "fly" || g.phase === "rest") && g.t - g.splash.t > 0) showBall = g.phase === "rest" && g.dropped && g.restT > 0.9;
+    // on the green the ball is the putt's, and the golfer steps away: the putter addresses it
+    const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
+    let ground = hole ? hole.surfaceY(bx, bz) : 0;
+    let near = false;
+    if (putting) {
+      const pb = g.putt.ball;
+      [bx, bz] = g.hole.fromGreen(pb.x, pb.y);
+      ground = hole ? hole.surfaceY(bx, bz) : 0;
+      by = ground + BALL_R;
+      // into the cup: down and out of sight
+      if (pb.sunk) by -= Math.min(1, g.putt.dropT / 0.25) * BALL_R * 3;
+      showBall = !pb.sunk || g.putt.dropT < 0.3;
+      near = Math.hypot(pb.x - g.hole.green.cup[0], pb.y - g.hole.green.cup[1]) < 2.4 && !pb.sunk;
+      putt.update(g.hole, g.putt, g.t, !!opts.reduce);
+    } else {
+      by += ground;
+      putt.hide();
+    }
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
     ball.position.set(bx, by, bz);
     ball.scale.setScalar(Math.max(1, (BALL_MIN_PX * dBall) / (c.F * BALL_R)));
     blob.visible = showBall;
-    blob.position.set(bx, 0.005, bz);
-    const lift = Math.max(0, by - BALL_R);
+    blob.position.set(bx, ground + 0.005, bz);
+    const lift = Math.max(0, by - ground - BALL_R);
     blob.scale.setScalar(Math.max(0.035, BALL_R * 1.4 * ball.scale.x) * (1 + lift * 0.02));
     (blob.material as THREE.MeshBasicMaterial).opacity = 0.35 * Math.max(0.15, 1 - lift / 40);
 
     // the golfer stands at the ball until it is struck, then watches it go from where it was
     const gx = sh && (g.phase === "fly" || g.phase === "rest") ? sh.ox : g.ball[0];
     const gz = sh && (g.phase === "fly" || g.phase === "rest") ? sh.oz : g.ball[1];
-    golfer.update([gx, 0.02, gz], g.yaw, club, g.pose);
-    golfer.group.visible = Math.hypot(gx - c.x, gz - c.z) < 90;
+    golfer.update([gx, 0.02 + (hole ? hole.surfaceY(gx, gz) : 0), gz], g.yaw, club, g.pose);
+    golfer.group.visible = !putting && Math.hypot(gx - c.x, gz - c.z) < 90;
 
     // the flag: waves in the wind, and grows far off so it can always be found
     if (hole) {
       const [px, pz] = g.hole.pin;
       const dFlag = Math.hypot(px - c.x, pz - c.z);
+      for (const m of flagMats) m.opacity = near ? 0.3 : 1;
       hole.flag.scale.setScalar(Math.max(1, (FLAG_MIN_PX * dFlag) / (c.F * 2.4)));
       const wa = Math.atan2(g.wind[0], g.wind[1]);
       hole.cloth.rotation.y = -Math.PI / 2 + wa + Math.sin(g.t * 3.1) * 0.12;
@@ -235,7 +270,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
         pa.setZ(i, Math.sin(g.t * 6 + x * 9) * 0.03 * x);
       }
       pa.needsUpdate = true;
-      clearView(c.x, c.z, gx, gz);
+      if (!putting) clearView(c.x, c.z, gx, gz);
     }
 
     // dust, sand and spray where the ball meets the ground
@@ -254,20 +289,48 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     dust.step(dt, eye.set(c.x, c.y, c.z), c.F);
 
     // the shadow camera follows what the camera looks at
-    const fx = sh && g.phase === "fly" ? bx : (gx + c.tx) / 2;
-    const fz = sh && g.phase === "fly" ? bz : (gz + c.tz) / 2;
+    const fx = putting ? bx : sh && g.phase === "fly" ? bx : (gx + c.tx) / 2;
+    const fz = putting ? bz : sh && g.phase === "fly" ? bz : (gz + c.tz) / 2;
     sun.target.position.set(fx, 0, fz);
     sun.position.set(fx + SUN.x * 120, SUN.y * 120, fz + SUN.z * 120);
     renderer.render(scene, camera);
   };
 
+  // ---------------------------------------------------------------- the screen and the green
+  const v3 = new THREE.Vector3();
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const puttProj = (g: CourseGame): PuttProj => ({
+    toScreen: (x, y) => {
+      const [cx, cz] = g.hole.fromGreen(x, y);
+      v3.set(-cx, hole ? hole.surfaceY(cx, cz) : 0, cz).project(camera);
+      return { x: ((v3.x + 1) / 2) * size.w, y: ((1 - v3.y) / 2) * size.h };
+    },
+    toGreen: (px, py) => {
+      // the ground at the ball's height under the pointer
+      const pb = g.putt.ball;
+      const [bx, bz] = g.hole.fromGreen(pb.x, pb.y);
+      const y0 = hole ? hole.surfaceY(bx, bz) : 0;
+      ndc.set((px / size.w) * 2 - 1, 1 - (py / size.h) * 2);
+      ray.setFromCamera(ndc, camera);
+      const d = ray.ray.direction, o = ray.ray.origin;
+      if (d.y > -1e-4) return null;
+      const t = (y0 - o.y) / d.y;
+      if (t <= 0) return null;
+      const [gx, gy] = g.hole.toGreen(-(o.x + d.x * t), o.z + d.z * t);
+      return { x: gx, y: gy };
+    },
+  });
+
   return {
     render,
+    puttProj,
     info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixels: Math.round(size.w * size.h * size.pr * size.pr), soft, fx: dust.count() }),
     dispose: () => {
       hole?.dispose();
       golfer.dispose();
       dust.dispose();
+      putt.dispose();
       skyMat.dispose();
       sky.geometry.dispose();
       ridge.geometry.dispose();

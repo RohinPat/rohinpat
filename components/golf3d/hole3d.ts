@@ -3,12 +3,16 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
+import { GH, GW, greenHeight } from "@/components/offhours/golf/green";
+import { PAD as GPAD, reliefOf } from "./relief";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
 // into one top-down texture, so their edges are as crisp as the outlines, and that
 // texture is laid over a terrain mesh: flat where the ball can be (the physics is
-// flat), rising into wooded hills beyond the trees. Trees are instanced low-poly
+// flat), rising into wooded hills beyond the trees. The green is its own finer
+// mesh on top, shaped by the putt's height field (relief.ts), with a sharper
+// texture, since the putting camera looks at it from a metre or two. Trees are instanced low-poly
 // shapes; water is a glossy sheet on top of the painted pond.
 //
 // The hole's frame: x right, z downrange, y up, metres. course.ts's frame is
@@ -36,8 +40,10 @@ const COL = {
 
 export type Hole3D = {
   group: THREE.Group;
-  /** visual ground height (m); 0 wherever the ball can be */
+  /** visual ground height (m) of the hills; 0 wherever the ball can be */
   heightAt: (x: number, z: number) => number;
+  /** the height of the ground the ball lies on, m: the green's relief, 0 elsewhere */
+  surfaceY: (x: number, z: number) => number;
   /** the flag's group, scaled from the outside so it can be found from far away */
   flag: THREE.Group;
   cloth: THREE.Mesh;
@@ -53,7 +59,11 @@ const smooth = (a: number, b: number, v: number) => {
 
 /** how much to draw: "low" (a phone) has a smaller texture, coarser ground and half the trees in the woods; "soft" (no GPU) less again */
 export type Tier = "high" | "low" | "soft";
-const TIERS = { high: { tex: 4096, cell: 2.5, perTree: 70 }, low: { tex: 2048, cell: 4, perTree: 140 }, soft: { tex: 1024, cell: 6, perTree: 700 } };
+const TIERS = {
+  high: { tex: 4096, cell: 2.5, perTree: 70, gcell: 0.2, gtex: 48 },
+  low: { tex: 2048, cell: 4, perTree: 140, gcell: 0.33, gtex: 30 },
+  soft: { tex: 1024, cell: 6, perTree: 700, gcell: 0.6, gtex: 14 },
+};
 
 export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D {
   const tier = TIERS[opts.tier ?? "high"];
@@ -234,6 +244,10 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   group.add(terrain);
   disposables.push(tg, tm);
 
+  // ---------------------------------------------------------------- the green
+  const relief = reliefOf(hole);
+  group.add(buildGreen(hole, canvas, { X0, Z0, s }, tier, disposables));
+
   // ---------------------------------------------------------------- water
   if (hole.world.water.length) {
     const wm = new THREE.MeshPhongMaterial({ color: "#4f97c0", specular: "#e8f6ff", shininess: 90, transparent: true, opacity: 0.82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -290,7 +304,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   const cloth = new THREE.Mesh();
   {
     const [px, pz] = hole.pin;
-    flag.position.set(px, 0, pz);
+    const py = relief.y(px, pz);
+    flag.position.set(px, py, pz);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 2.4, 6), new THREE.MeshLambertMaterial({ color: "#f7f3e8" }));
     pole.position.y = 1.2;
     pole.castShadow = true;
@@ -304,7 +319,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
     group.add(flag);
     const cup = new THREE.Mesh(new THREE.CircleGeometry(0.054, 16), new THREE.MeshBasicMaterial({ color: "#16201a", polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
     cup.rotation.x = -Math.PI / 2;
-    cup.position.set(px, 0.004, pz);
+    cup.position.set(px, py + 0.004, pz);
     group.add(cup);
     disposables.push(pole.geometry, pole.material as THREE.Material, cg, cloth.material as THREE.Material, cup.geometry, cup.material as THREE.Material);
   }
@@ -312,11 +327,156 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   return {
     group,
     heightAt,
+    surfaceY: relief.y,
     flag,
     cloth,
     trees,
     dispose: () => disposables.forEach((d) => d.dispose()),
   };
+}
+
+// -------------------------------------------------------------------- the green
+
+/**
+ * The green and its bank as a fine grid in the course's frame, lit as if its slopes were three times steeper than they
+ * are, so a two per cent break shows as light and shade. Its texture repaints the green, the fringe and what lies
+ * around them at several times the hole texture's resolution, with faint contour lines on the putting surface.
+ */
+function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: number; Z0: number; s: number }, tier: { gcell: number; gtex: number }, disposables: { dispose: () => void }[]) {
+  const relief = reliefOf(hole);
+  const [ax, az] = hole.fromGreen(-GPAD, GH + GPAD);
+  const [bx, bz] = hole.fromGreen(GW + GPAD, -GPAD);
+  const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), z0 = Math.min(az, bz), z1 = Math.max(az, bz);
+  const W = x1 - x0, L = z1 - z0;
+
+  // ---- texture
+  const T = tier.gtex;
+  const cw = Math.round(W * T), ch = Math.round(L * T);
+  const cv = document.createElement("canvas");
+  cv.width = cw;
+  cv.height = ch;
+  const c = cv.getContext("2d")!;
+  c.imageSmoothingEnabled = true;
+  c.drawImage(canvas, (x0 - main.X0) * main.s, (z0 - main.Z0) * main.s, W * main.s, L * main.s, 0, 0, cw, ch);
+  const gr = hole.world.greens[0];
+  const path = (rad: number) => {
+    c.beginPath();
+    gr.ring(rad).forEach(([x, , z], i) => (i ? c.lineTo((x - x0) * T, (z - z0) * T) : c.moveTo((x - x0) * T, (z - z0) * T)));
+    c.closePath();
+  };
+  path(gr.r + 1.1);
+  c.fillStyle = COL.fringe;
+  c.fill();
+  c.save();
+  path(gr.r);
+  c.fillStyle = COL.green;
+  c.fill();
+  c.clip();
+  c.fillStyle = COL.greenB;
+  for (let x = gr.x - 40; x < gr.x + 40; x += 5) c.fillRect((x - x0) * T, 0, 2.5 * T, ch);
+  c.restore();
+  // contours every 2.5 cm on the green and the fringe (marching squares, stroked smooth), then grain over everything
+  {
+    const g = 0.2, LV = 0.025;
+    const nx = Math.ceil(W / g) + 1, nz = Math.ceil(L / g) + 1;
+    const Hh = new Float32Array(nx * nz);
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        const [gx, gy] = hole.toGreen(x0 + i * g, z0 + j * g);
+        Hh[j * nx + i] = greenHeight(hole.green, gx, gy) / LV;
+      }
+    c.save();
+    path(gr.r + 1.1);
+    c.clip();
+    c.beginPath();
+    const P = (i: number, j: number): [number, number] => [i * g * T, j * g * T];
+    for (let j = 0; j < nz - 1; j++)
+      for (let i = 0; i < nx - 1; i++) {
+        const a = Hh[j * nx + i], b = Hh[j * nx + i + 1], cc = Hh[(j + 1) * nx + i + 1], d = Hh[(j + 1) * nx + i];
+        const lo = Math.ceil(Math.min(a, b, cc, d)), hi = Math.floor(Math.max(a, b, cc, d));
+        for (let lv = lo; lv <= hi; lv++) {
+          // where the level crosses each edge of the cell
+          const pts: [number, number][] = [];
+          const edge = (p: number, q: number, A: [number, number], B: [number, number]) => {
+            if ((p < lv) !== (q < lv)) {
+              const u = (lv - p) / (q - p);
+              pts.push([A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u]);
+            }
+          };
+          edge(a, b, P(i, j), P(i + 1, j));
+          edge(b, cc, P(i + 1, j), P(i + 1, j + 1));
+          edge(cc, d, P(i + 1, j + 1), P(i, j + 1));
+          edge(d, a, P(i, j + 1), P(i, j));
+          for (let k = 0; k + 1 < pts.length; k += 2) {
+            c.moveTo(pts[k][0], pts[k][1]);
+            c.lineTo(pts[k + 1][0], pts[k + 1][1]);
+          }
+        }
+      }
+    c.strokeStyle = "rgba(20,60,20,0.08)";
+    c.lineWidth = Math.max(1, T * 0.025);
+    c.stroke();
+    c.restore();
+    const r = seeded(hole.def.n * 131 + 7);
+    const count = Math.round((cw * ch) / 70);
+    for (let i = 0; i < count; i++) {
+      c.fillStyle = r() > 0.5 ? "rgba(255,255,230,0.05)" : "rgba(0,30,0,0.06)";
+      c.fillRect(r() * cw, r() * ch, 1 + r() * 1.5, 1 + r() * 1.5);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.anisotropy = 8;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  disposables.push(tex);
+
+  // ---- mesh: only the cells that rise off the flat ground
+  const cell = tier.gcell;
+  const nx = Math.ceil(W / cell) + 1, nz = Math.ceil(L / cell) + 1;
+  const Y = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) Y[j * nx + i] = relief.y(x0 + i * cell, z0 + j * cell);
+  const EX = 3;
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [];
+  const idx = new Map<number, number>();
+  const tri: number[] = [];
+  const n = new THREE.Vector3();
+  const vert = (i: number, j: number) => {
+    const key = j * nx + i;
+    const got = idx.get(key);
+    if (got !== undefined) return got;
+    const v = pos.length / 3;
+    idx.set(key, v);
+    const x = x0 + i * cell, z = z0 + j * cell;
+    pos.push(x, Y[key], z);
+    const yl = Y[j * nx + Math.max(0, i - 1)], yr = Y[j * nx + Math.min(nx - 1, i + 1)];
+    const yd = Y[Math.max(0, j - 1) * nx + i], yu = Y[Math.min(nz - 1, j + 1) * nx + i];
+    n.set((-EX * (yr - yl)) / (2 * cell), 1, (-EX * (yu - yd)) / (2 * cell)).normalize();
+    nor.push(n.x, n.y, n.z);
+    uv.push((x - x0) / W, (z - z0) / L);
+    return v;
+  };
+  for (let j = 0; j < nz - 1; j++)
+    for (let i = 0; i < nx - 1; i++) {
+      if (Y[j * nx + i] <= 0 && Y[j * nx + i + 1] <= 0 && Y[(j + 1) * nx + i] <= 0 && Y[(j + 1) * nx + i + 1] <= 0) continue;
+      // the bank stops at a pond's edge, so the water stays where it is drawn
+      if (hole.surfaceAt(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell) === "water") continue;
+      // wound like the terrain, so the faces point up in the course's own frame
+      const a = vert(i, j), b = vert(i, j + 1), cc = vert(i + 1, j), d = vert(i + 1, j + 1);
+      tri.push(a, b, cc, cc, b, d);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(tri);
+  // a constant nudge only: a slope-scaled one would pull the green in front of the putting line at a grazing angle
+  const m = new THREE.MeshLambertMaterial({ map: tex, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: -2 });
+  disposables.push(g, m);
+  const mesh = new THREE.Mesh(g, m);
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 // -------------------------------------------------------------------- trees
