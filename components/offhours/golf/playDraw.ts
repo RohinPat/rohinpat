@@ -47,7 +47,8 @@ export function paint(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h
     if (g.phase === "putt") puttPrompt(ctx, g, w, h);
   } else {
     shotView(ctx, g, w, h, dt, reduce);
-    hud(ctx, g, w, h);
+    // the hole and round cards say it all: the shot's HUD under them would show through on a short canvas
+    if (g.phase !== "hole-card" && g.phase !== "round-card") hud(ctx, g, w, h);
     if (!g.mapSet) g.setMap(w >= MAP_WIDE);
     mapDraw(ctx, g, w, h, carryRing(g));
   }
@@ -488,13 +489,14 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   const room = w - 2 * pad - 20;
   let msgs: string[] = [];
   if (g.phase === "fly") msgs = g.fast ? ["4X"] : g.taken < 3 ? ["PRESS TO SPEED UP", "PRESS TO SKIP"] : [];
-  else if (g.phase === "ready") msgs = g.taken < 3 && !g.linked ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"] : [];
+  else if (g.phase === "ready") msgs = g.taken < 3 && !g.linked ? ["DRAG DOWN, THEN SWING UP · OR SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"].slice(g.touch ? 1 : 0) : [];
   else if (g.phase === "swing" && s.src !== "remote") msgs = s.sub === "back" ? [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"] : [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
   if (msgs.length) {
     mono(ctx, 10);
     pill(ctx, fit(ctx, msgs, room), w / 2, slot0);
   }
-  if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, w / 2, slot0 - 84, g.t, !!g.opts.reduce);
+  // a short canvas (a phone on its side) has the aim's yardage where the cue would go: the cue stands off to the right
+  if (g.phase === "ready" && g.taken === 0 && !g.linked) swingCue(ctx, h < 380 ? w / 2 + Math.min(160, w * 0.24) : w / 2, h < 380 ? slot0 - 64 : slot0 - 84, g.t, !!g.opts.reduce);
   // what the last shot did
   if (g.phase === "rest" && g.result) {
     mono(ctx, 10);
@@ -605,7 +607,7 @@ function swingCue(ctx: CanvasRenderingContext2D, x: number, y: number, t: number
 function puttPrompt(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number) {
   if (g.scores.length > 0 || g.phaseT > 12 || g.putt.strokes > g.strokes) return;
   mono(ctx, 10);
-  const msg = fit(ctx, ["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK, LET GO"], w - 40);
+  const msg = fit(ctx, ["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(g.touch ? 1 : 0), w - 40);
   pill(ctx, msg, w / 2, h - 36);
 }
 
@@ -629,7 +631,7 @@ function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: num
   ctx.fillText(`HOLE ${d.n} · PAR ${d.par} · ${d.yards} YD`, w / 2, y + 68);
   mono(ctx, 10);
   ctx.fillStyle = DIM;
-  ctx.fillText(g.phaseT < 0.6 ? "" : w < 560 ? "TAP TO START" : "ANY KEY TO START", w / 2, y + 98);
+  ctx.fillText(g.phaseT < 0.6 ? "" : g.touch || w < 560 ? "TAP TO START" : "ANY KEY TO START", w / 2, y + 98);
   ctx.textAlign = "left";
 }
 
@@ -639,7 +641,8 @@ function holeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   const d = g.hole.def;
   backdrop(ctx, w, h, 0.35);
   const bw = Math.min(380, w - 24), bh = 196;
-  const x = w / 2 - bw / 2, y = Math.max(h * 0.2, 70);
+  // a short canvas (a phone on its side): the card is centred so it all fits
+  const x = w / 2 - bw / 2, y = Math.min(Math.max(h * 0.2, 70), Math.max(8, (h - bh) / 2));
   panel(ctx, x, y, bw, bh);
   ctx.textAlign = "center";
   mono(ctx, 10);
@@ -656,7 +659,7 @@ function holeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
   ctx.fillText(`ROUND ${total} · ${toPar(total, par)}`, w / 2, y + 134);
   ctx.fillStyle = PAPER;
   const last = g.idx + 1 >= g.defs.length;
-  const go = w < 560 ? "TAP" : "ANY KEY";
+  const go = g.touch || w < 560 ? "TAP" : "ANY KEY";
   ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${d.n + 1}`, w / 2, y + 170);
   ctx.textAlign = "left";
 }
@@ -668,7 +671,7 @@ function roundCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: n
   const n = g.defs.length;
   const cell = 44, lab = w < 420 ? 0 : 46;
   const bw = Math.min(w - 24, Math.max(340, lab + n * cell + 90)), bh = 264;
-  const x = w / 2 - bw / 2, y = Math.max(h * 0.14, 50);
+  const x = w / 2 - bw / 2, y = Math.min(Math.max(h * 0.14, 50), Math.max(8, (h - bh) / 2));
   panel(ctx, x, y, bw, bh);
   ctx.textAlign = "center";
   mono(ctx, 10);
@@ -720,6 +723,6 @@ function roundCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: n
   ctx.fillStyle = DIM;
   ctx.fillText(best === null ? "" : r.isBest ? (r.previous === null ? `BEST THIS VISIT ${best}` : `NEW BEST THIS VISIT ${best}`) : `BEST THIS VISIT ${best}`, w / 2, y + 204);
   ctx.fillStyle = PAPER;
-  ctx.fillText(g.phaseT < 0.8 ? "" : w < 560 ? "TAP TO PLAY AGAIN" : "ANY KEY TO PLAY AGAIN", w / 2, y + 238);
+  ctx.fillText(g.phaseT < 0.8 ? "" : g.touch || w < 560 ? "TAP TO PLAY AGAIN" : "ANY KEY TO PLAY AGAIN", w / 2, y + 238);
   ctx.textAlign = "left";
 }

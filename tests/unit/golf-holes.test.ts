@@ -5,7 +5,7 @@ import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
 import { YD, project } from "@/components/offhours/golf/scene";
-import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, lieCarry, meterFace, overSpeed, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
+import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, greenRoll, lieCarry, meterFace, overSpeed, sfOf, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
@@ -636,6 +636,80 @@ describe("found in play", () => {
     const g = onHole(3);
     place(g, 60 * YD, 260 * YD);
     expect(g.target()).toEqual(g.hole.pin);
+  });
+  it("an iron that lands on the green stops on it: a wedge runs a few yards, a long iron about ten, a driver more", () => {
+    expect(greenRoll(5, 1)).toBeLessThan(4);
+    expect(greenRoll(4, 1)).toBeLessThan(7);
+    expect(greenRoll(3, 1)).toBeLessThan(9);
+    expect(greenRoll(2, 1)).toBeLessThan(12);
+    expect(greenRoll(0, 1)).toBeGreaterThan(greenRoll(2, 1));
+    // the rough takes the spin off: it runs further
+    expect(greenRoll(3, 1, "rough")).toBeGreaterThan(greenRoll(3, 1));
+  });
+  it("a pure approach at the suggested club and swing finishes on the green, from 60 to 180 yd on every hole", () => {
+    for (let n = 1; n <= 6; n++) {
+      for (const D of [60, 100, 140, 180]) {
+        const g = onHole(n);
+        const pin = g.hole.pin;
+        // the middle of the fairway D yards short of the pin
+        let at: [number, number] | null = null, bd = 4 * YD;
+        for (const p of g.hole.line) {
+          const d = Math.abs(Math.hypot(p[0] - pin[0], p[1] - pin[1]) - D * YD);
+          if (d < bd && p[1] < pin[1]) [bd, at] = [d, p];
+        }
+        if (!at || g.hole.surfaceAt(...at) !== "fairway") continue;
+        place(g, at[0], at[1], "fairway", 1);
+        if (g.target() !== g.hole.pin) continue;
+        const sg = g.suggested();
+        g.setClub(sg.club);
+        g.remoteSwing({ ...PURE, power: sg.power });
+        expect(run(g, () => g.phase === "rest" || g.phase === "putt")).toBe(true);
+        expect(["green", "fringe"], `hole ${n} from ${D}`).toContain(g.lie);
+        expect(g.yardsToPin(), `hole ${n} from ${D}`).toBeLessThan(10);
+      }
+    }
+    // and the swing asked for lands short and runs up: less carry than the distance
+    const g = onHole(1);
+    place(g, 0, (339.5 - 140) * YD, "fairway", 1);
+    const sg = g.suggested();
+    expect(carryAtPower(sg.club, sg.power)).toBeLessThan(g.yardsToPin());
+    expect(carryAtPower(sg.club, sg.power) + greenRoll(sg.club, sfOf(sg.power))).toBeGreaterThan(g.yardsToPin() - 3);
+  });
+  it("on a phone on its side (830x304) the hole and round cards fit, the shot HUD stays off them, and a touch screen is told to tap", () => {
+    const g = onHole(2);
+    g.touch = true;
+    const drawn: [string, number][] = [];
+    const ctx = new Proxy(fakeCtx() as object, {
+      get: (t, k) => (k === "fillText" ? (s: string, _x: number, y: number) => drawn.push([s, y]) : Reflect.get(t, k)),
+      set: () => true,
+    }) as unknown as CanvasRenderingContext2D;
+    const look = (phase: string) => {
+      drawn.length = 0;
+      paint(ctx, g, 830, 304, 1 / 60, ptr);
+      expect(drawn.some(([s]) => s === "POWER"), phase).toBe(false);
+      // the card's last line, the prompt, is on the canvas
+      const tap = drawn.find(([s]) => s.startsWith("TAP "));
+      expect(tap, phase).toBeDefined();
+      expect(tap![1], phase).toBeLessThan(304 - 8);
+    };
+    let seen = false;
+    for (let i = 0; i < 40000 && g.phase !== "round-card"; i++) {
+      if (g.phase === "ready") g.remoteSwing({ ...PURE, power: g.suggested().power });
+      if (g.phase === "putt" && !g.puttState().rolling) {
+        const ps = g.puttState();
+        g.puttShoot(Math.atan2(ps.cup[1] - ps.ball[1], ps.cup[0] - ps.ball[0]), 0.35);
+      }
+      if (g.phase === "hole-card" && g.phaseT > 1 && !seen) {
+        seen = true;
+        look("hole card");
+        g.key({ key: " " }, true);
+      }
+      g.step(STEP);
+    }
+    expect(g.phase).toBe("round-card");
+    run(g, () => g.phaseT > 1, 3);
+    look("round card");
+    expect(drawn.map(([s]) => s)).toContain("TAP TO PLAY AGAIN");
   });
   it("a keyboard swing a little off the line still finds the fairway on the first hole", () => {
     // 40 ms either way is two frames: it was the trees, it is the fairway now

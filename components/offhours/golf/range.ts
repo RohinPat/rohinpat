@@ -26,7 +26,7 @@ const PANEL = "rgba(13,16,14,0.74)";
 type V = [number, number, number];
 type Phase = "ready" | "back" | "down" | "fly" | "rest";
 export type RangeMode = "practice" | "challenge";
-export type RangeEnv = { play: boolean; say: (m: string) => void; club?: (i: number) => void };
+export type RangeEnv = { play: boolean; say: (m: string) => void; club?: (i: number) => void; /** a touch screen: the prompts leave the keyboard out */ touch?: boolean };
 
 type Particle = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; max: number; kind: "turf" | "dust" | "sand"; size: number; c: string };
 type Card = { club: Club; shot: Shot; label: string; t: number; /** a meter swing: ms off the line, + late, - early */ timing: number | null };
@@ -763,7 +763,7 @@ export function rangeDraw(ctx: CanvasRenderingContext2D, r: Range, w: number, h:
   }
 
   // ---- HUD
-  if (play) hud(ctx, r, w, h, t);
+  if (play) hud(ctx, r, w, h, t, !!env.touch);
   else previewHud(ctx, r, w, h, t);
 }
 
@@ -824,7 +824,7 @@ function fitText(ctx: CanvasRenderingContext2D, opts: string[], max: number) {
   return opts.find((o) => ctx.measureText(o).width <= max) ?? opts[opts.length - 1];
 }
 
-function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: number) {
+function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: number, touch: boolean) {
   const compact = w < 640;
   const club = CLUBS[r.club];
   const pad = compact ? 8 : 14;
@@ -1056,10 +1056,10 @@ function hud(ctx: CanvasRenderingContext2D, r: Range, w: number, h: number, t: n
   mono(ctx, 10);
   const room = w - 2 * pad - 20;
   let msgs: string[] = [];
-  if (r.mode === "challenge" && r.ch.done) msgs = [`ROUND OVER · ${r.ch.score} POINTS · CLICK OR PRESS SPACE TO PLAY AGAIN`, `ROUND OVER · ${r.ch.score} POINTS · TAP TO PLAY AGAIN`, "TAP TO PLAY AGAIN"];
+  if (r.mode === "challenge" && r.ch.done) msgs = [`ROUND OVER · ${r.ch.score} POINTS · CLICK OR PRESS SPACE TO PLAY AGAIN`, `ROUND OVER · ${r.ch.score} POINTS · TAP TO PLAY AGAIN`, "TAP TO PLAY AGAIN"].slice(touch ? 1 : 0);
   else if (r.mode === "challenge" && t - r.lockT < 2.6) msgs = [LOCK_MSG];
   else if (r.phase === "fly") msgs = r.fast ? ["4X"] : r.taken < 3 ? ["PRESS TO SPEED UP", "PRESS TO SKIP"] : [];
-  else if (ballStill(r)) msgs = ["DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL · OR PRESS SPACE THREE TIMES", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"];
+  else if (ballStill(r)) msgs = ["DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL · OR PRESS SPACE THREE TIMES", "DRAG DOWN TO TAKE IT BACK, THEN SWING UP THROUGH THE BALL", "DRAG DOWN, THEN SWING UP", "DRAG DOWN, SWING UP"].slice(touch ? 1 : 0);
   else if (r.phase === "back") msgs = s.src === "remote" ? [] : [s.src === "meter" ? "SPACE AGAIN TO SET THE POWER" : "NOW SWING UP"];
   else if (r.phase === "down") msgs = s.src === "remote" ? [] : [s.src === "meter" ? "SPACE ON THE LINE" : "KEEP IT STRAIGHT UP"];
   if (msgs.length) {
