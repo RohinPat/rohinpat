@@ -1,6 +1,7 @@
 import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
+import type { Ground } from "./terrain";
 import { YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
 // The course: hand-authored holes (the decision on each hole is the design) and
@@ -58,6 +59,8 @@ export type HoleDef = {
   wind: { speed: number; dir: number };
   /** the aim for the tee shot on a par 4 or 5 (yd); a par 3 aims at the pin */
   landing: [number, number];
+  /** the shape of the ground (terrain.ts); flat without one */
+  ground?: Ground;
 };
 
 export const HOLE_DEFS: HoleDef[] = [
@@ -76,6 +79,8 @@ export const HOLE_DEFS: HoleDef[] = [
     trees: { seed: 11, edge: 6, spacing: 6 },
     wind: { speed: 1.5, dir: 0.6 },
     landing: [0, 252],
+    // off a raised tee, down into a wide landing area that leans right, then up a little to the green
+    ground: { rise: [[0, 0], [40, -1], [150, -5], [250, -6], [342, -4]], tilt: [[150, -0.02], [260, -0.03], [330, 0]], mounds: [[-30, 180, 9, 1.4], [32, 300, 10, 1.6]] },
   },
   {
     n: 2,
@@ -92,6 +97,8 @@ export const HOLE_DEFS: HoleDef[] = [
     trees: { seed: 23, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
+    // a long way down to the green: it plays shorter than it reads
+    ground: { rise: [[0, 0], [35, -1], [110, -7], [137, -8]], swell: 0.3 },
   },
   {
     // a dogleg right at 205 yd. The inside of the bend is a bunker and a stand of trees: a driver aimed over them gets home,
@@ -114,6 +121,8 @@ export const HOLE_DEFS: HoleDef[] = [
     copse: [[44, 150, 17], [50, 160, 19], [42, 170, 16], [54, 176, 20], [46, 186, 18], [58, 192, 17], [47, 199, 19], [60, 206, 16]],
     wind: { speed: 2.5, dir: 0.9 },
     landing: [0, 180],
+    // the bend banks to the right, toward the corner, and the green sits up on a hill
+    ground: { rise: [[0, 0], [150, 1], [215, 2], [290, 6], [345, 9]], tilt: [[160, 0], [205, -0.04], [250, -0.02], [300, 0]], mounds: [[-26, 120, 10, 1.5]] },
   },
   {
     // a creek across the fairway, 320 to 334 yd from the tee, and the green 136 yd past it
@@ -134,6 +143,8 @@ export const HOLE_DEFS: HoleDef[] = [
     trees: { seed: 41, edge: 6, spacing: 6 },
     wind: { speed: 2.5, dir: 0.3 },
     landing: [0, 255],
+    // the fairway runs down to the creek, so a lay-up keeps rolling toward it; then up again to a raised green
+    ground: { rise: [[0, 0], [110, 2], [230, 0], [300, -2], [327, -3.5], [370, -1.5], [430, 2], [474, 3.5]], tilt: [[200, 0.02], [300, 0], [420, -0.015]] },
   },
   {
     // the green ringed with sand, a pond on its left edge, the strongest wind of the six blowing toward the pond
@@ -159,6 +170,8 @@ export const HOLE_DEFS: HoleDef[] = [
     trees: { seed: 53, edge: 6, spacing: 6 },
     wind: { speed: 4.2, dir: -1.2 },
     landing: [3, 174],
+    // uphill to the green: it plays longer than it reads
+    ground: { rise: [[0, 0], [80, 0.5], [150, 3], [177, 5]], swell: 0.3 },
   },
   {
     // a long dogleg left with water along the inside of the bend and the wind in your face
@@ -180,6 +193,8 @@ export const HOLE_DEFS: HoleDef[] = [
     copse: [[-47, 128, 18], [-53, 139, 20], [-45, 150, 16], [-58, 154, 19], [-50, 165, 17], [-60, 172, 18], [-52, 180, 20]],
     wind: { speed: 2.8, dir: 3.4 },
     landing: [-26, 225],
+    // downhill off the tee; the ground at the bend leans left, toward the water, then rises to the green
+    ground: { rise: [[0, 0], [170, -4], [260, -5], [330, -3], [372, -1]], tilt: [[150, 0], [210, 0.03], [280, 0.02], [340, 0]] },
   },
 ];
 

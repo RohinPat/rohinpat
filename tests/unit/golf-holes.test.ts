@@ -589,10 +589,10 @@ describe("found in play", () => {
       }
     }
   });
-  it("from the rough, the club it picks carries the distance (the rough keeps 55 to 67% of a club's carry)", () => {
+  it("from the rough, the club it picks carries the distance (the rough keeps about two thirds to four fifths of a club's carry)", () => {
     for (let c = 0; c < CLUBS.length; c++) {
-      expect(lieCarry("rough", c)).toBeGreaterThan(0.5);
-      expect(lieCarry("rough", c)).toBeLessThan(0.7);
+      expect(lieCarry("rough", c)).toBeGreaterThan(0.62);
+      expect(lieCarry("rough", c)).toBeLessThan(0.8);
       expect(lieCarry("fairway", c)).toBe(1);
     }
     const g = onHole(1);

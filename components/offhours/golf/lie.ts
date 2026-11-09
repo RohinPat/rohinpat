@@ -1,4 +1,4 @@
-import type { Lie, Shot, Surface } from "./flight";
+import { CLUBS, type Lie, type Shot, type Surface } from "./flight";
 
 // How the ball lies, in one table, and what happens when it ends somewhere it
 // should not. The table is multipliers on the swing (flight.ts applies them);
@@ -11,8 +11,8 @@ const SAND_WEDGE = 5;
 export function lieFor(surface: Surface, club: number): Lie | undefined {
   switch (surface) {
     case "rough":
-      // grass in the face: slower, no check, a poorer strike, and the face wanders a little
-      return { speed: 0.82, spin: 0.5, contactCap: 0.8, faceNoise: 0.1 };
+      // grass in the face: slower, little check, a poorer strike, and the face wanders a little
+      return { speed: 0.88, spin: 0.55, contactCap: 0.85, faceNoise: 0.1 };
     case "bunker":
       return club === SAND_WEDGE ? { speed: 0.8, contactCap: 0.9 } : { speed: 0.5, contactCap: 0.6, launch: 0.6 };
     case "fringe":
@@ -20,6 +20,47 @@ export function lieFor(surface: Surface, club: number): Lie | undefined {
     default:
       return undefined;
   }
+}
+
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** a slope under the ball smaller than this (rise per metre) is played as flat */
+export const SLOPE_FLAT = 0.025;
+
+/**
+ * The ground under the ball tilted, for a shot along `yaw`: up the line of the shot adds loft (higher and shorter), down
+ * it takes loft away; across it, a ball above the golfer's feet starts left and one below them right. (The golfer stands
+ * to the left of the ball, looking down the line.) `sx` and `sz` are the ground's rise per metre to +x and +z.
+ */
+export function slopeLie(sx: number, sz: number, yaw: number, club: number): Lie | undefined {
+  const up = sx * Math.sin(yaw) + sz * Math.cos(yaw);
+  const side = sx * Math.cos(yaw) - sz * Math.sin(yaw);
+  if (Math.abs(up) < SLOPE_FLAT && Math.abs(side) < SLOPE_FLAT) return undefined;
+  const deg = (Math.atan(up) * 180) / Math.PI;
+  return { launch: clamp(1 + deg / CLUBS[club].launch, 0.6, 1.6), face: clamp(-side * 9, -0.6, 0.6) };
+}
+
+/** two lies at once (sand on a slope): the multipliers multiply, the caps and wanders take the worse, the pushes add */
+export function bothLies(a: Lie | undefined, b: Lie | undefined): Lie | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const cap = Math.min(a.contactCap ?? 1, b.contactCap ?? 1);
+  return {
+    speed: (a.speed ?? 1) * (b.speed ?? 1),
+    spin: (a.spin ?? 1) * (b.spin ?? 1),
+    launch: (a.launch ?? 1) * (b.launch ?? 1),
+    contactCap: cap < 1 ? cap : undefined,
+    faceNoise: Math.max(a.faceNoise ?? 0, b.faceNoise ?? 0) || undefined,
+    face: (a.face ?? 0) + (b.face ?? 0) || undefined,
+  };
+}
+
+/** the slope under the ball in a few words, or null when it is not enough to call out */
+export function slopeWords(sx: number, sz: number, yaw: number): string | null {
+  const up = sx * Math.sin(yaw) + sz * Math.cos(yaw);
+  const side = sx * Math.cos(yaw) - sz * Math.sin(yaw);
+  if (Math.max(Math.abs(up), Math.abs(side)) < SLOPE_FLAT * 1.4) return null;
+  if (Math.abs(up) >= Math.abs(side)) return up > 0 ? "UPHILL LIE" : "DOWNHILL LIE";
+  return side > 0 ? "BALL ABOVE FEET" : "BALL BELOW FEET";
 }
 
 /** the lies from best to worst: a shot from a later one never goes further than from an earlier one, club for club */

@@ -3,12 +3,13 @@ import { CLUBS, at, simulate, type Club, type Shot, type Surface } from "./fligh
 import { HOLE_DEFS, buildHole, type BuiltHole, type HoleDef } from "./course";
 import { blend, poseFor, type Pose } from "./golfer";
 import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, type Putt, type PuttEnv } from "./green";
-import { dropFor, lieFor } from "./lie";
+import { bothLies, dropFor, lieFor, slopeLie, slopeWords } from "./lie";
+import { FLAT, terrainOf, type Terrain } from "./terrain";
 import type { RemoteShot } from "./remoteSwing";
 import { YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { CHIP_YD, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, carryIn, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -41,6 +42,8 @@ export type CourseOpts = {
   onMap?: (open: boolean) => void;
   /** how long the tee card stays up before play, s (the 3D page flies over the hole under it) */
   teeCardS?: number | ((def: HoleDef) => number);
+  /** the ground has its hills (terrain.ts); without, every hole is flat */
+  hills?: boolean;
 };
 
 /** how a hole was played, for the end of the round: the tee shot, the green, the putts */
@@ -127,6 +130,8 @@ export class CourseGame {
   t = 0;
   idx = 0;
   hole!: BuiltHole;
+  /** the ground the ball flies over and rolls on: the hole's hills, or flat */
+  terrain: Pick<Terrain, "y" | "slope"> = FLAT;
   /** the ball, metres in the hole's frame, and what it lies on */
   ball: [number, number] = [0, 0];
   lie: Surface = "fairway";
@@ -228,6 +233,7 @@ export class CourseGame {
   private startHole(i: number) {
     this.idx = i;
     this.hole = buildHole(this.defs[i]);
+    this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
     this.ball = [0, 0];
     this.lie = "fairway";
     this.strokes = 0;
@@ -270,7 +276,7 @@ export class CourseGame {
   /** a pin out of reach: the furthest point down the middle of the fairway that the longest club carries, or null */
   private downTheFairway(): [number, number] | null {
     let reach = 0;
-    for (let c = 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    for (let c = this.lie === "rough" ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
     const [bx, bz] = this.ball;
     const R = (reach + REACH_ROLL) * YD;
     if (this.hole.toPin(bx, bz) <= R) return null;
@@ -305,13 +311,51 @@ export class CourseGame {
     const lay = this.layUp();
     const yd = lay ?? this.yardsToTarget();
     const sw = CLUBS.length - 1;
-    if (this.lie === "bunker") return { club: sw, power: Math.min(1, yd / (fullCarry(sw) * this.carryK(sw))) };
+    // the carry it plays like: up or down hill, with the wind or into it
+    const plays = this.conditions(lay);
+    if (this.lie === "bunker") return { club: sw, power: Math.min(1, (yd * plays.ratio(sw, 1)) / (fullCarry(sw) * this.carryK(sw))) };
     const k = (c: number) => this.carryK(c);
-    let sg = suggestCourse(yd, k);
+    const pick = (carry: number) => {
+      let sg = suggestCourse(carry, k);
+      for (let i = 0; i < 2; i++) sg = suggestCourse(carry * plays.ratio(sg.club, sfOf(sg.power)), k);
+      // no driver out of the rough
+      if (sg.club === 0 && this.lie === "rough") sg = { club: 1, power: 1 };
+      return sg;
+    };
+    let sg = pick(yd);
     if (lay !== null || this.target() !== this.hole.pin) return sg;
     // the run on the green depends on the club and swing, which depend on the carry: a few rounds settle it
-    for (let i = 0; i < 3; i++) sg = suggestCourse(this.runUpCarry(yd, greenRoll(sg.club, sfOf(sg.power), this.lie)), k);
+    for (let i = 0; i < 3; i++) sg = pick(this.runUpCarry(yd, greenRoll(sg.club, sfOf(sg.power), this.lie)));
     return sg;
+  }
+  /**
+   * What a shot toward the target (or `lay` yd short of it) plays like: the ground's rise to where it comes down (m), the
+   * wind along it (m/s, + behind), and how much a carry has to grow (or shrink) for them.
+   */
+  private conditions(lay: number | null = null) {
+    const [bx, bz] = this.ball;
+    const [tx, tz] = this.target();
+    const d = Math.hypot(tx - bx, tz - bz) || 1;
+    const ux = (tx - bx) / d, uz = (tz - bz) / d;
+    const reach = lay !== null ? Math.min(d, lay * YD) : d;
+    const dh = this.terrain.y(bx + ux * reach, bz + uz * reach) - this.terrain.y(bx, bz);
+    const wind = this.wind[0] * ux + this.wind[1] * uz;
+    return { dh, wind, ratio: (club: number, sf: number) => carryIn(club, sf, 0, 0) / Math.max(1, carryIn(club, sf, dh, wind)) };
+  }
+  /** the distance to the pin as it plays with the suggested club (yd), or null when that is within a couple of yards of the real one */
+  playsLike(): number | null {
+    if (this.lie === "green" || this.lie === "fringe" || this.target() !== this.hole.pin) return null;
+    const sg = this.suggested();
+    const yd = this.yardsToPin();
+    const sf = this.chipping() ? sfOfChip(sg.club, this.meterSuggest().power) : sfOf(sg.power);
+    const plays = Math.round(yd * this.conditions().ratio(sg.club, sf));
+    return Math.abs(plays - yd) >= 2.5 ? plays : null;
+  }
+  /** the slope under the ball, in a few words, when it is enough to matter */
+  slopeSay(): string | null {
+    if (this.lie === "green" || this.lie === "fringe") return null;
+    const [sx, sz] = this.terrain.slope(this.ball[0], this.ball[1]);
+    return slopeWords(sx, sz, this.yaw);
   }
   /** the carry (yd) that runs `run` yd on to finish at `yd`, but lands on the green (GREEN_IN past its front) */
   private runUpCarry(yd: number, run: number) {
@@ -346,7 +390,7 @@ export class CourseGame {
     }
     if (near < 0) return null;
     let reach = 0;
-    for (let c = 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    for (let c = this.lie === "rough" ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
     if (reach >= far / YD + LAY_OVER) return null;
     return Math.max(10, near / YD - LAY_SHORT);
   }
@@ -388,7 +432,7 @@ export class CourseGame {
     const sg = this.suggested();
     if (!this.chipping()) return sg;
     const lay = this.layUp();
-    const yd = lay ?? this.yardsToTarget();
+    const yd = (lay ?? this.yardsToTarget()) * this.conditions(lay).ratio(sg.club, sfOfChip(sg.club, 0.7));
     const k = this.carryK(sg.club);
     let power = chipPowerFor(sg.club, yd / k);
     if (lay === null && this.lie !== "bunker" && this.target() === this.hole.pin)
@@ -594,7 +638,8 @@ export class CourseGame {
       wind: this.wind,
       surfaceAt: this.hole.surfaceAt,
       origin: this.ball,
-      lie: lieFor(this.lie, this.club),
+      lie: bothLies(lieFor(this.lie, this.club), slopeLie(...this.terrain.slope(this.ball[0], this.ball[1]), this.yaw, this.club)),
+      ground: this.opts.hills ? this.terrain : undefined,
       rng: this.rng,
       trees: this.hole.blockers.length ? this.hole.blockers : undefined,
     });

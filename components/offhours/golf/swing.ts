@@ -29,6 +29,25 @@ function carryFor(club: number, sf: number): number {
   return v;
 }
 export const fullCarry = (club: number) => carryFor(club, 1);
+const condCache = new Map<string, number>();
+/**
+ * The carry (yd) of a pure swing with this club at `sf` of its ball speed that comes down `dh` m above the ground it was
+ * struck from, with `wind` m/s behind it (negative: into it). dh is taken to 0.5 m and the wind to 0.25 m/s.
+ */
+export function carryIn(club: number, sf: number, dh: number, wind: number): number {
+  dh = Math.round(dh * 2) / 2;
+  wind = Math.round(wind * 4) / 4;
+  if (dh === 0 && wind === 0) return carryFor(club, sf);
+  const key = `${club}:${sf.toFixed(3)}:${dh}:${wind}`;
+  let v = condCache.get(key);
+  if (v === undefined) {
+    // a level plane dh above the spot the ball is struck from
+    const ground = { y: (x: number, z: number) => (x === 0 && z === 0 ? 0 : dh), slope: () => [0, 0] as [number, number] };
+    v = simulate({ club: CLUBS[club], speed: sf, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, wind], surfaceAt: flatSurf, ground }).carry;
+    condCache.set(key, v);
+  }
+  return v;
+}
 /** the no-wind carry (yd) of a swing of `power` (a backswing fraction, 0..1) with this club, in steps of 2% so a drag does not fill the cache */
 export const carryAtPower = (club: number, power: number) => carryFor(club, sfOf(Math.round(clamp(power, 0, 1) * 50) / 50));
 /** the swing fraction (0..1 backswing) that carries `yd` with this club, or null if it can't */

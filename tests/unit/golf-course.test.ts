@@ -189,9 +189,9 @@ describe("the lie table", () => {
   });
   it("the rough has no check: less spin, a poorer strike, and the face wanders", () => {
     const r = lieFor("rough", 3)!;
-    expect(r.speed).toBeCloseTo(0.82, 9);
-    expect(r.spin).toBeCloseTo(0.5, 9);
-    expect(r.contactCap).toBeLessThanOrEqual(0.8);
+    expect(r.speed).toBeCloseTo(0.88, 9);
+    expect(r.spin).toBeCloseTo(0.55, 9);
+    expect(r.contactCap).toBeLessThanOrEqual(0.85);
     expect(r.faceNoise).toBeGreaterThan(0);
   });
 

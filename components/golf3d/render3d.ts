@@ -208,13 +208,14 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
 
     const club = CLUBS[g.club];
     const sh = g.shot;
-    // where the ball is: in the air, from the shot; else where it lies
-    let bx = g.ball[0], by = BALL_R, bz = g.ball[1];
+    // where the ball is: in the air, from the shot (its heights are over the ground it was struck from); else where it lies
+    let bx = g.ball[0], bz = g.ball[1];
+    let air: number | null = null;
     let showBall = true;
     if (sh && g.phase === "fly") {
       const p = at(sh, g.shotT);
       bx = sh.ox + p[0];
-      by = p[1] + BALL_R;
+      air = sh.oy + p[1] + BALL_R;
       bz = sh.oz + p[2];
     } else if (sh && g.phase === "rest" && !g.dropped) {
       const p = at(sh, sh.restT);
@@ -225,6 +226,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     // on the green the ball is the putt's, and the golfer steps away: the putter addresses it
     const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
     let ground = hole ? hole.surfaceY(bx, bz) : 0;
+    let by = air ?? ground + BALL_R;
     let near = false;
     if (putting) {
       const pb = g.putt.ball;
@@ -236,10 +238,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       showBall = !pb.sunk || g.putt.dropT < 0.3;
       near = Math.hypot(pb.x - g.hole.green.cup[0], pb.y - g.hole.green.cup[1]) < 2.4 && !pb.sunk;
       putt.update(g.hole, g.putt, g.t, !!opts.reduce);
-    } else {
-      by += ground;
-      putt.hide();
-    }
+    } else putt.hide();
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
     ball.position.set(bx, by, bz);
@@ -277,13 +276,14 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     if (sh !== fxShot) {
       fxShot = sh;
       fxBounce = 0;
-      if (sh && g.phase === "fly") dust.strike(sh.ox, sh.oz, g.lie, g.yaw);
+      if (sh && g.phase === "fly") dust.strike(sh.ox, sh.oz, g.lie, g.yaw, hole ? hole.surfaceY(sh.ox, sh.oz) : 0);
     }
     if (sh && (g.phase === "fly" || g.phase === "rest")) {
       const upTo = g.phase === "fly" ? g.shotT : sh.restT;
       while (fxBounce < sh.bounces.length && sh.bounces[fxBounce].t <= upTo) {
         const b = sh.bounces[fxBounce++];
-        dust.land(sh.ox + b.x, sh.oz + b.z, b.surface, b.vy);
+        const lx = sh.ox + b.x, lz = sh.oz + b.z;
+        dust.land(lx, lz, b.surface, b.vy, hole ? (b.surface === "water" ? hole.waterY(lx, lz) : hole.surfaceY(lx, lz)) : 0);
       }
     }
     dust.step(dt, eye.set(c.x, c.y, c.z), c.F);
@@ -291,8 +291,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     // the shadow camera follows what the camera looks at
     const fx = putting ? bx : sh && g.phase === "fly" ? bx : (gx + c.tx) / 2;
     const fz = putting ? bz : sh && g.phase === "fly" ? bz : (gz + c.tz) / 2;
-    sun.target.position.set(fx, 0, fz);
-    sun.position.set(fx + SUN.x * 120, SUN.y * 120, fz + SUN.z * 120);
+    const fy = hole ? hole.surfaceY(fx, fz) : 0;
+    sun.target.position.set(fx, fy, fz);
+    sun.position.set(fx + SUN.x * 120, fy + SUN.y * 120, fz + SUN.z * 120);
     renderer.render(scene, camera);
   };
 

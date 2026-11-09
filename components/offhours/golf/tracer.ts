@@ -6,9 +6,10 @@ type V = [number, number, number];
 /**
  * A ball's flight as a line in the picture: a soft glow under a bright core, up to time `upTo`. The line is clipped in
  * camera space against a near plane, so nothing behind (or beside) the camera can wrap around the screen. `ox`, `oz`
- * move a shot that was flown from the ball into the world it is drawn in.
+ * move a shot that was flown from the ball into the world it is drawn in; `yOf` turns a point's height (over the ground
+ * it was struck from) into the height it is drawn at (by default, never under 0).
  */
-export function trace(ctx: CanvasRenderingContext2D, cam: Cam, sh: Shot, upTo: number, glow: number, core: number, col: string, ox = 0, oz = 0) {
+export function trace(ctx: CanvasRenderingContext2D, cam: Cam, sh: Shot, upTo: number, glow: number, core: number, col: string, ox = 0, oz = 0, yOf: (x: number, y: number, z: number) => number = (_x, y) => Math.max(0, y)) {
   const pts = sh.pts, n = sh.n;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -30,7 +31,7 @@ export function trace(ctx: CanvasRenderingContext2D, cam: Cam, sh: Shot, upTo: n
       return [dx * cam.rx + dy * cam.ry + dz * cam.rz, dx * cam.ux + dy * cam.uy + dz * cam.uz, dx * cam.fx + dy * cam.fy + dz * cam.fz];
     };
     const feed = (x: number, y: number, z: number) => {
-      const c = toCam(x + ox, Math.max(0, y), z + oz);
+      const c = toCam(x + ox, yOf(x + ox, y, z + oz), z + oz);
       if (prev) {
         const a = prev, inA = a[2] >= NEARZ, inB = c[2] >= NEARZ;
         if (inA !== inB) {
