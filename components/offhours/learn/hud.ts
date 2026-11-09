@@ -73,10 +73,14 @@ export function drawLearnHud(ctx: CanvasRenderingContext2D, w: number, h: number
     ctx.textAlign = "center";
     const lines = ctx.measureText(INTRO).width > w - 40 ? 2 : 1;
     const text = lines === 1 ? [INTRO] : [INTRO.slice(0, INTRO.indexOf(".") + 1), INTRO.slice(INTRO.indexOf(".") + 2)];
-    const y = narrow ? y0 + 150 : 64;
+    const bw = Math.min(w - 24, Math.max(...text.map((t) => ctx.measureText(t).width)) + 28);
+    // centred, the strip would run into the heading when the stage is not much wider than both: then it goes under the chart
+    font(ctx, "d", 32, 800);
+    const clear = w / 2 - bw / 2 > 16 + ctx.measureText(main).width + 24;
+    font(ctx, "d", size, 800);
+    const y = narrow ? y0 + 150 : clear ? 64 : 90 + 52 + size + 22;
     ctx.globalAlpha = hud.intro;
     ctx.fillStyle = INK;
-    const bw = Math.min(w - 24, Math.max(...text.map((t) => ctx.measureText(t).width)) + 28);
     ctx.fillRect(w / 2 - bw / 2, y - size - 4, bw, size * lines * 1.2 + 14);
     ctx.fillStyle = CREAM;
     text.forEach((t, i) => ctx.fillText(t, w / 2, y + i * size * 1.2));

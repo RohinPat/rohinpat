@@ -20,6 +20,27 @@ export type StageMeta = { index: number; label: string; title: string; how: stri
 export type StageLabel = { title: string; how?: string[] };
 const StageLabelContext = createContext<((l: StageLabel | null) => void) | null>(null);
 
+/** A phone on its side, or any window this short: the stage's heading is one line (see the header below). */
+export const SHORT_QUERY = "(max-height: 500px)";
+const onShortChange = (fn: () => void) => {
+  const mq = window.matchMedia(SHORT_QUERY);
+  mq.addEventListener("change", fn);
+  return () => mq.removeEventListener("change", fn);
+};
+/** true while the stage is in its short (one-line heading) layout */
+export function useShortStage() {
+  return useSyncExternalStore(onShortChange, () => window.matchMedia(SHORT_QUERY).matches, () => false);
+}
+
+// On a short screen the heading row has room a piece can borrow: a piece with a
+// mode switch (Cars) puts it there, next to Sound, so the game keeps its top edge.
+const StageSlotContext = createContext<HTMLElement | null>(null);
+/** where in the heading a piece can portal a control on a short screen (null until the stage has mounted, or when it isn't short) */
+export function useStageSlot() {
+  const slot = useContext(StageSlotContext);
+  return useShortStage() ? slot : null;
+}
+
 /** Call from inside a piece (play mode only): the stage's heading and hints show this instead of the piece's own. */
 export function useStageLabel(label: StageLabel | null) {
   const set = useContext(StageLabelContext);
@@ -59,6 +80,7 @@ export default function Stage({
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
   const [label, setLabel] = useState<StageLabel | null>(null);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const title = label?.title ?? meta.title;
@@ -216,6 +238,7 @@ export default function Stage({
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <span ref={setSlot} className="contents" />
           <PairChip tone="dark" />
           <SoundPrompt returnFocus={() => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true })} />
           <button
@@ -255,7 +278,9 @@ export default function Stage({
         ))}
       </ul>
       <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 [@media(max-height:500px)]:!mx-1.5 [@media(max-height:500px)]:!mb-1.5 rounded-[14px] overflow-hidden border border-white/10">
-        <StageLabelContext.Provider value={setLabel}>{children}</StageLabelContext.Provider>
+        <StageLabelContext.Provider value={setLabel}>
+          <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
+        </StageLabelContext.Provider>
       </div>
     </div>,
     document.body,

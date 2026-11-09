@@ -28,7 +28,12 @@ export type HudOptions = {
   linked: boolean;
   /** lift the bottom of the dash this many px (the touch pads sit there) */
   lift: number;
+  /** a short stage (a phone on its side): the page's switches stand in a column on the right from this x, and the cards go left of it */
+  panel?: number;
 };
+
+/** where a card (the title, the end screen) was drawn: the page's tests check nothing sits on it */
+export type CardBox = { x: number; y: number; w: number; h: number };
 
 const fontCache = new Map<string, string>();
 type Stretchy = CanvasRenderingContext2D & { fontStretch?: string; letterSpacing?: string };
@@ -134,13 +139,14 @@ export function drawAttractHud(ctx: CanvasRenderingContext2D, w: number, h: numb
   void w;
 }
 
-export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, g: NightGame, opt: HudOptions, now: number, reduce: boolean) {
+export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, g: NightGame, opt: HudOptions, now: number, reduce: boolean): CardBox | null {
   const u = Math.max(0.72, Math.min(1.3, Math.min(w, h * 1.5) / 720));
   const car = g.car;
   ctx.textBaseline = "alphabetic";
   ctx.lineCap = "round";
 
-  if (g.phase === "ready") drawReady(ctx, w, h, u, opt, g);
+  let card: CardBox | null = null;
+  if (g.phase === "ready") card = opt.panel === undefined ? drawReady(ctx, w, h, u, opt, g) : drawReadyShort(ctx, w, h, u, opt, g, opt.panel);
   if (g.phase === "count" || g.phase === "run") drawDash(ctx, w, h, u, g, now, opt.lift, reduce, opt.touch);
   if (g.phase === "count") drawCount(ctx, w, h, u, g, reduce);
   if (g.phase === "run") {
@@ -174,9 +180,10 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, g: 
   }
   if (g.phase === "done") {
     drawDash(ctx, w, h, u, g, now, opt.lift, reduce, opt.touch);
-    drawResult(ctx, w, h, u, g, opt);
+    card = drawResult(ctx, w, h, u, g, opt);
   }
   void car;
+  return card;
 }
 
 function drawDash(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, now: number, lift: number, reduce: boolean, touch: boolean) {
@@ -566,7 +573,7 @@ function drawCount(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.globalAlpha = 1;
 }
 
-function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, opt: HudOptions, g: NightGame) {
+function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, opt: HudOptions, g: NightGame): CardBox {
   ctx.fillStyle = "rgba(4,7,6,0.5)";
   ctx.fillRect(0, 0, w, h);
   ctx.textAlign = "center";
@@ -600,6 +607,47 @@ function drawReady(ctx: CanvasRenderingContext2D, w: number, h: number, u: numbe
   ctx.fill();
   ctx.fillStyle = "#c4c7bc";
   lines.forEach((l, i) => ctx.fillText(l, w / 2, y0 + i * lh));
+  const top = cy - 62 * u - 12 * u;
+  return { x: w / 2 - widest / 2 - 16, y: top, w: widest + 32, h: y0 - 18 * u + lines.length * lh + 14 * u - top };
+}
+
+/** the touch pads' strip at the bottom (88px pads in 12px of padding) and a little air over it */
+const PADS_H = 108;
+
+// A short stage: the title card stands on the left, left-aligned, between the
+// top and the pads, and the page's switches have the right. No how-to card:
+// there is no room for it beside the title, and the pads are labelled.
+function drawReadyShort(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, opt: HudOptions, g: NightGame, right: number): CardBox {
+  ctx.fillStyle = "rgba(4,7,6,0.5)";
+  ctx.fillRect(0, 0, w, h);
+  ctx.textAlign = "left";
+  const x = 20;
+  const room = Math.max(80, right - 20 - x);
+  const top = opt.linked ? 52 : 14; // under the "steer with your phone" pill
+  const bottom = h - (opt.touch ? PADS_H : 14);
+  const strap = 12 * u;
+  const go = 13 * u;
+  let size = Math.min(84 * u, (bottom - top) * 0.42);
+  font(ctx, "d", size, 800);
+  const tw = ctx.measureText("NIGHT RUN").width;
+  if (tw > room) size *= room / tw;
+  const cap = size * 0.74;
+  const blockH = strap + 12 * u + cap + 18 * u + go;
+  const y = top + Math.max(0, (bottom - top - blockH) / 2);
+  font(ctx, "m", strap, 700);
+  ctx.fillStyle = MINT;
+  ctx.fillText(g.track.strap, x, y + strap);
+  let widest = ctx.measureText(g.track.strap).width;
+  font(ctx, "d", size, 800);
+  ctx.fillStyle = CREAM;
+  ctx.fillText("NIGHT RUN", x, y + strap + 12 * u + cap);
+  widest = Math.max(widest, ctx.measureText("NIGHT RUN").width);
+  font(ctx, "m", go, 700);
+  ctx.fillStyle = MINT;
+  const line = opt.touch ? "HOLD GAS TO START" : opt.linked ? "HOLD ↑ OR SPACE, OR GAS ON YOUR PHONE" : "HOLD ↑ OR SPACE TO START";
+  ctx.fillText(line, x, y + blockH);
+  widest = Math.max(widest, ctx.measureText(line).width);
+  return { x, y, w: widest, h: blockH };
 }
 
 /** how tall the end card is, in the dash's own units, and where its bottom edge is on the canvas (the button goes under it) */
@@ -614,15 +662,18 @@ export function resultBottom(w: number, h: number, opt: { touch: boolean }) {
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: number, g: NightGame, opt: HudOptions) {
+function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u0: number, g: NightGame, opt: HudOptions): CardBox | null {
   const r = g.result;
-  if (!r) return;
+  if (!r) return null;
   ctx.fillStyle = "rgba(4,7,6,0.62)";
   ctx.fillRect(0, 0, w, h);
-  const pw = Math.min(460 * u, w - 32);
+  // a short stage: the card stands on the left, as tall as the stage allows, and the buttons are in the column on the right
+  const short = opt.panel !== undefined;
+  const u = short ? Math.min(u0, (h - 24) / RESULT_H) : u0;
+  const pw = short ? Math.min(460 * u, (opt.panel ?? w) - 28) : Math.min(460 * u, w - 32);
   const ph = RESULT_H * u;
-  const x = w / 2 - pw / 2;
-  const y = Math.max(16, h * 0.5 - ph / 2 - 10 * u);
+  const x = short ? 12 : w / 2 - pw / 2;
+  const y = short ? Math.max(12, (h - ph) / 2) : Math.max(16, h * 0.5 - ph / 2 - 10 * u);
   ctx.fillStyle = "rgba(10,13,12,0.9)";
   rr(ctx, x, y, pw, ph, 18 * u);
   ctx.fill();
@@ -681,4 +732,5 @@ function drawResult(ctx: CanvasRenderingContext2D, w: number, h: number, u: numb
   const above = status ? 1 : 0;
   tipLines.forEach((l, i) => ctx.fillText(l, x + 28 * u, lineY - (above + tipLines.length - 1 - i) * 20 * u - (status ? 6 * u : 0)));
   void LIMIT;
+  return { x, y, w: pw, h: ph };
 }

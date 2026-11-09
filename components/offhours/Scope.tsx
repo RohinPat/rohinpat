@@ -96,7 +96,7 @@ export default function Scope({ paused = false, compact = false }: { paused?: bo
         ref={ref}
         role="img"
         aria-label="A live spectrum of the sound this piece is making, low notes on the left and high on the right."
-        className="mt-1 block w-full h-[84px]"
+        className="mt-1 block w-full h-[84px] [@media(max-height:500px)]:h-[56px]"
       />
     </div>
   );
