@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { queryFor, roundStats, setupFor, setupFromQuery, shareText, today } from "@/components/golf3d/modes";
 import { flyoverS, flyoverView, titleView } from "@/components/golf3d/flyover";
 
@@ -18,8 +18,8 @@ describe("modes", () => {
     expect(a.defs.map((d) => d.wind)).toEqual(b.defs.map((d) => d.wind));
     expect(a.seed).not.toBe(c.seed);
     expect(a.defs.map((d) => d.wind)).not.toEqual(c.defs.map((d) => d.wind));
-    // the holes are the six, only the wind is the day's, and it stays playable
-    expect(a.defs.map((d) => d.n)).toEqual(HOLE_DEFS.map((d) => d.n));
+    // the holes are the nine, only the wind is the day's, and it stays playable
+    expect(a.defs.map((d) => d.n)).toEqual(NINE_DEFS.map((d) => d.n));
     for (const d of a.defs) expect(d.wind.speed).toBeGreaterThan(0.5), expect(d.wind.speed).toBeLessThan(4.5);
   });
 

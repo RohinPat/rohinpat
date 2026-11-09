@@ -311,11 +311,11 @@ export class CourseGame {
     const lay = this.layUp();
     const yd = lay ?? this.yardsToTarget();
     const sw = CLUBS.length - 1;
-    // the carry it plays like: up or down hill, with the wind or into it
-    const plays = this.conditions(lay);
-    if (this.lie === "bunker") return { club: sw, power: Math.min(1, (yd * plays.ratio(sw, 1)) / (fullCarry(sw) * this.carryK(sw))) };
+    // the carry it plays like: up or down hill to where it comes down, with the wind or into it
+    if (this.lie === "bunker") return { club: sw, power: Math.min(1, (yd * this.conditions(yd).ratio(sw, 1)) / (fullCarry(sw) * this.carryK(sw))) };
     const k = (c: number) => this.carryK(c);
     const pick = (carry: number) => {
+      const plays = this.conditions(carry);
       let sg = suggestCourse(carry, k);
       for (let i = 0; i < 2; i++) sg = suggestCourse(carry * plays.ratio(sg.club, sfOf(sg.power)), k);
       // no driver out of the rough
@@ -329,18 +329,22 @@ export class CourseGame {
     return sg;
   }
   /**
-   * What a shot toward the target (or `lay` yd short of it) plays like: the ground's rise to where it comes down (m), the
-   * wind along it (m/s, + behind), and how much a carry has to grow (or shrink) for them.
+   * What a shot toward the target that comes down `carry` yd away (the target itself without) plays like: the ground's
+   * rise to where it comes down (m), the wind along it (m/s, + behind), and how much a carry has to grow (or shrink) for them.
    */
-  private conditions(lay: number | null = null) {
+  private conditions(carry: number | null = null) {
     const [bx, bz] = this.ball;
     const [tx, tz] = this.target();
     const d = Math.hypot(tx - bx, tz - bz) || 1;
     const ux = (tx - bx) / d, uz = (tz - bz) / d;
-    const reach = lay !== null ? Math.min(d, lay * YD) : d;
+    const reach = carry !== null ? Math.min(d, carry * YD) : d;
     const dh = this.terrain.y(bx + ux * reach, bz + uz * reach) - this.terrain.y(bx, bz);
     const wind = this.wind[0] * ux + this.wind[1] * uz;
-    return { dh, wind, ratio: (club: number, sf: number) => carryIn(club, sf, 0, 0) / Math.max(1, carryIn(club, sf, dh, wind)) };
+    // a slope under the ball changes the launch, and so the carry
+    const [sx, sz] = this.terrain.slope(bx, bz);
+    const yaw = Math.atan2(ux, uz);
+    const launch = (club: number) => slopeLie(sx, sz, yaw, club)?.launch ?? 1;
+    return { dh, wind, ratio: (club: number, sf: number) => carryIn(club, sf, 0, 0) / Math.max(1, carryIn(club, sf, dh, wind, launch(club))) };
   }
   /** the distance to the pin as it plays with the suggested club (yd), or null when that is within a couple of yards of the real one */
   playsLike(): number | null {
@@ -432,7 +436,8 @@ export class CourseGame {
     const sg = this.suggested();
     if (!this.chipping()) return sg;
     const lay = this.layUp();
-    const yd = (lay ?? this.yardsToTarget()) * this.conditions(lay).ratio(sg.club, sfOfChip(sg.club, 0.7));
+    const yd0 = lay ?? this.yardsToTarget();
+    const yd = yd0 * this.conditions(yd0).ratio(sg.club, sfOfChip(sg.club, 0.7));
     const k = this.carryK(sg.club);
     let power = chipPowerFor(sg.club, yd / k);
     if (lay === null && this.lie !== "bunker" && this.target() === this.hole.pin)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, buildHole, type Blob, type HoleDef, type Water } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole, type Blob, type HoleDef, type Water } from "@/components/offhours/golf/course";
 import { GH, GW, zone } from "@/components/offhours/golf/green";
 import { DROP_BACK_MAX, DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
@@ -40,10 +40,13 @@ const MARKERS: Record<number, string[]> = {
   4: ["100", "100", "200"],
   5: ["100", "100", "150", "150"],
   6: ["100", "100", "150", "150", "200", "200"],
+  7: ["100", "100", "150", "200", "200"],
+  8: ["100", "100", "150", "150", "200", "200"],
+  9: ["100", "100", "150", "150", "200", "200"],
 };
 
 describe("course data", () => {
-  for (const def of HOLE_DEFS) {
+  for (const def of NINE_DEFS) {
     const b = buildHole(def);
     describe(`hole ${def.n}, ${def.name}`, () => {
       it("tee to pin, along the line, is the yardage it is sold at, within 5 yards (and a dogleg is not much shorter as the crow flies)", () => {
@@ -151,6 +154,15 @@ describe("course data", () => {
       [6, "Last Light", 4, 395],
     ]);
     expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(23);
+  });
+  it("the back three make a nine: par 36", () => {
+    expect(NINE_DEFS.slice(6).map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
+      [7, "The Ridge", 4, 385],
+      [8, "Long Water", 5, 520],
+      [9, "Homeward", 4, 415],
+    ]);
+    expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);
+    expect(NINE_DEFS.slice(0, 6)).toEqual(HOLE_DEFS);
   });
   it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {
     const d = HOLE_DEFS[1];

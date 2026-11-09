@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
@@ -33,7 +33,7 @@ const run = (g: CourseGame, until: () => boolean, max = 40) => {
 };
 /** a game on hole `n` (1-based) alone, past the tee card, with no wind */
 function onHole(n: number, opts = {}) {
-  const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[n - 1]], ...opts });
+  const g = new CourseGame({ seed: 5, holes: [NINE_DEFS[n - 1]], ...opts });
   g.key({ key: " " }, true);
   g.wind = [0, 0];
   return g;
@@ -647,10 +647,11 @@ describe("found in play", () => {
     // the rough takes the spin off: it runs further
     expect(greenRoll(3, 1, "rough")).toBeGreaterThan(greenRoll(3, 1));
   });
-  it("a pure approach at the suggested club and swing finishes on the green, from 60 to 180 yd on every hole", () => {
-    for (let n = 1; n <= 6; n++) {
-      for (const D of [60, 100, 140, 180]) {
-        const g = onHole(n);
+  it("a pure approach at the suggested club and swing finishes on the green, from 60 to 180 yd on every hole of the nine, flat or on the hills", { timeout: 30_000 }, () => {
+    for (let n = 1; n <= 9; n++) for (const hills of [false, true]) {
+      // (on the hills a 180 yd shot up to hole 3's raised green plays nearer 200, a 3 wood that will not hold a front pin)
+      for (const D of hills ? [60, 100, 140] : [60, 100, 140, 180]) {
+        const g = onHole(n, { hills });
         const pin = g.hole.pin;
         // the middle of the fairway D yards short of the pin
         let at: [number, number] | null = null, bd = 4 * YD;
@@ -665,8 +666,8 @@ describe("found in play", () => {
         g.setClub(sg.club);
         g.remoteSwing({ ...PURE, power: sg.power });
         expect(run(g, () => g.phase === "rest" || g.phase === "putt")).toBe(true);
-        expect(["green", "fringe"], `hole ${n} from ${D}`).toContain(g.lie);
-        expect(g.yardsToPin(), `hole ${n} from ${D}`).toBeLessThan(10);
+        expect(["green", "fringe"], `hole ${n} from ${D}${hills ? " on the hills" : ""}`).toContain(g.lie);
+        expect(g.yardsToPin(), `hole ${n} from ${D}${hills ? " on the hills" : ""}`).toBeLessThan(10);
       }
     }
     // and the swing asked for lands short and runs up: less carry than the distance

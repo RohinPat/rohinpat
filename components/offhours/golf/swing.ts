@@ -32,18 +32,20 @@ export const fullCarry = (club: number) => carryFor(club, 1);
 const condCache = new Map<string, number>();
 /**
  * The carry (yd) of a pure swing with this club at `sf` of its ball speed that comes down `dh` m above the ground it was
- * struck from, with `wind` m/s behind it (negative: into it). dh is taken to 0.5 m and the wind to 0.25 m/s.
+ * struck from, with `wind` m/s behind it (negative: into it), from a lie that changes the launch by `launch` (a slope
+ * under the ball). dh is taken to 0.5 m, the wind to 0.25 m/s and the launch to 2%.
  */
-export function carryIn(club: number, sf: number, dh: number, wind: number): number {
+export function carryIn(club: number, sf: number, dh: number, wind: number, launch = 1): number {
   dh = Math.round(dh * 2) / 2;
   wind = Math.round(wind * 4) / 4;
-  if (dh === 0 && wind === 0) return carryFor(club, sf);
-  const key = `${club}:${sf.toFixed(3)}:${dh}:${wind}`;
+  launch = Math.round(launch * 50) / 50;
+  if (dh === 0 && wind === 0 && launch === 1) return carryFor(club, sf);
+  const key = `${club}:${sf.toFixed(3)}:${dh}:${wind}:${launch}`;
   let v = condCache.get(key);
   if (v === undefined) {
     // a level plane dh above the spot the ball is struck from
     const ground = { y: (x: number, z: number) => (x === 0 && z === 0 ? 0 : dh), slope: () => [0, 0] as [number, number] };
-    v = simulate({ club: CLUBS[club], speed: sf, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, wind], surfaceAt: flatSurf, ground }).carry;
+    v = simulate({ club: CLUBS[club], speed: sf, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, wind], surfaceAt: flatSurf, ground, lie: launch !== 1 ? { launch } : undefined }).carry;
     condCache.set(key, v);
   }
   return v;
