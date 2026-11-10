@@ -8,10 +8,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // a test that passes only on a retry fails the run: the retries say which tests flake, they don't hide them
+  failOnFlakyTests: !!process.env.CI,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   timeout: 30_000,
-  expect: { timeout: 5_000 },
+  // CI draws WebGL in software: the watch's 3D tile alone can hold up /interests for 10 s, and every page in
+  // the browser with it. A wait ends the moment its condition holds, so the longer ceiling costs a passing test nothing.
+  expect: { timeout: process.env.CI ? 15_000 : 5_000 },
 
   use: {
     baseURL: BASE_URL,

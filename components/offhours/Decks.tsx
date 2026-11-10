@@ -436,10 +436,12 @@ export default function Decks({ mode, paused }: PieceProps) {
     {
       interactive: play,
       paused,
-      onDown: async (p) => {
+      onDown: (p) => {
         const { cx, cy, r } = box.current;
         if (Math.hypot(p.x - cx, p.y - cy) > r) return;
-        await boot();
+        // the hand is on the record at once; the sound joins when it has started (waiting for it
+        // first lost a quick grab, and a let-go before it had started left the record held)
+        void boot();
         const s = S.current;
         s.grab = true;
         s.grabAngle = Math.atan2(p.y - cy, p.x - cx);
