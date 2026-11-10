@@ -284,7 +284,9 @@ test.describe("no phone linked: the music board is exactly as it was", () => {
     const box = (await canvas.boundingBox())!;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    await page.mouse.move(cx + 80, cy);
+    // the stage opens by unclipping from the tile, and a press outside the clip lands on the page under it:
+    // hover waits until the point is the record's (on CI's software WebGL the opening can take seconds)
+    await canvas.hover({ position: { x: box.width / 2 + 80, y: box.height / 2 }, ...SLOW });
     await page.mouse.down();
     for (let i = 1; i <= 20; i++) await page.mouse.move(cx + Math.cos(i * 0.25) * 80, cy + Math.sin(i * 0.25) * 80);
     await expect(canvas).toHaveAttribute("data-grab", "1");
