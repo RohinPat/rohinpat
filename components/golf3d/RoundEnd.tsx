@@ -28,11 +28,12 @@ export default function RoundEnd({ game, setup, onAgain, onMenu }: { game: Cours
     const sc = game.scores[i];
     const tone = !sc ? "" : sc.strokes < d.par ? "text-[#edbb00] ring-1 ring-[#edbb00] rounded-full" : sc.strokes > d.par ? "text-[#ff9a8f] ring-1 ring-[#ff9a8f]/70" : "text-[#f2ead7]";
     return (
-      <div key={d.n} className="flex flex-col items-center gap-1.5 font-mono text-[11px]">
-        <span className="text-[#b5b6ab]">{d.n}</span>
-        <span className="text-[#b5b6ab]/70">{d.par}</span>
-        <span className={`w-7 h-7 inline-flex items-center justify-center text-[13px] ${tone}`}>{sc?.strokes ?? ""}</span>
-      </div>
+      <li key={d.n} className="flex flex-col items-center gap-1.5 font-mono text-[11px]">
+        <span className="sr-only">{`Hole ${d.n}, par ${d.par}${sc ? `: ${sc.strokes}` : ""}`}</span>
+        <span aria-hidden="true" className="text-[#b5b6ab]">{d.n}</span>
+        <span aria-hidden="true" className="text-[#b5b6ab]/70">{d.par}</span>
+        <span aria-hidden="true" className={`w-7 h-7 inline-flex items-center justify-center text-[13px] ${tone}`}>{sc?.strokes ?? ""}</span>
+      </li>
     );
   };
   const stat = (k: string, v: string) => (
@@ -49,7 +50,7 @@ export default function RoundEnd({ game, setup, onAgain, onMenu }: { game: Cours
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#8ad9a8]">{modeName(setup)}</p>
         <p className="mt-2 text-[64px] leading-none font-extrabold text-[#f2ead7]">{r.total}</p>
         <p className={`mt-1 font-mono text-[12px] uppercase tracking-[0.14em] ${r.total <= r.par ? "text-[#edbb00]" : "text-[#b5b6ab]"}`}>{overUnder(r.total, r.par)}</p>
-        <div className="mt-5 flex justify-center gap-3">{setup.defs.map(cell)}</div>
+        <ol aria-label="Card" className="mt-5 flex justify-center gap-3">{setup.defs.map(cell)}</ol>
         <dl className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-left border-t border-white/10 pt-4">
           {stat("Fairways", s.fairways)}
           {stat("Greens", s.greens)}
