@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRemote } from "@/lib/link/remote";
 import PairChip from "@/components/link/PairChip";
@@ -35,12 +35,27 @@ import RoundEnd from "./RoundEnd";
 type Mods = { play: typeof import("@/components/offhours/golf/play"); paint: typeof Paint };
 type Loaded = { mods: Mods; gl: CourseRenderer | null; attract: CourseGame; game: CourseGame | null };
 
-/** the page's own layer, over the site's navigation and footer (they sit in a stacking context of their own) */
+/**
+ * the page's own layer, over the site's navigation and footer (they sit in a stacking context of their own). They are
+ * hidden under it, so they are out of reach of Tab and a screen reader while it is up.
+ */
 export default function Golf3D() {
   const [host, setHost] = useState<HTMLElement | null>(null);
-  useEffect(() => setHost(document.body), []);
+  useEffect(() => {
+    const under = Array.from(document.body.children).filter((c) => c.tagName !== "SCRIPT" && !c.hasAttribute("inert"));
+    for (const c of under) c.setAttribute("inert", "");
+    const el = document.createElement("div");
+    document.body.append(el);
+    setHost(el);
+    return () => {
+      for (const c of under) c.removeAttribute("inert");
+      el.remove();
+    };
+  }, []);
   return host ? createPortal(<Course />, host) : null;
 }
+
+const KEYS = "Space three times swings: start, power, strike. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt, R reads the green. Escape pauses.";
 
 const MODES: { mode: Mode; label: string; sub: (d: string) => string }[] = [
   { mode: "full", label: "Nine holes", sub: () => "Par 36" },
@@ -57,7 +72,9 @@ function Course() {
   const [phase, setPhase] = useState<Phase>("tee-card");
   const [mapOpen, setMapOpen] = useState(false);
   const [reading, setReading] = useState(false);
-  const [status, setStatus] = useState("");
+  // what the game says, read out in turn: a log, so two lines in one frame are both read, and a line said twice is
+  const [said, setSaid] = useState<{ id: number; text: string }[]>([]);
+  const say = useCallback((text: string) => setSaid((l) => [...l.slice(-2), { id: (l[l.length - 1]?.id ?? 0) + 1, text }]), []);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const muted = useSyncExternalStore(onMuteChange, isMuted, () => false);
@@ -103,7 +120,7 @@ function Course() {
         if (expose.current) (window as unknown as { __golf3d?: CourseRenderer | null }).__golf3d = gl;
       })
       .catch(() => {
-        if (!gone) setStatus("The course did not load.");
+        if (!gone) say("The course did not load.");
       });
     return () => {
       gone = true;
@@ -111,7 +128,7 @@ function Course() {
       loaded.current?.gl?.dispose();
       loaded.current = null;
     };
-  }, []);
+  }, [say]);
 
   /** a new round: a new game on the same renderer, and the URL that replays it */
   const start = (s: Setup) => {
@@ -125,7 +142,7 @@ function Course() {
       replays: !!L.gl && !reduce.current,
       reduce: reduce.current,
       teeCardS: (d) => (reduce.current || !L.gl ? 2 : flyoverS(d.yards)),
-      say: setStatus,
+      say,
       onClub: setClub,
       onPhase: setPhase,
       onMap: setMapOpen,
@@ -268,6 +285,23 @@ function Course() {
     return !!G && live.current.screen === "play" && !live.current.paused && G.phase !== "round-card";
   }
 
+  // the keys: on the course while it is played; in the menu back on the title; the dialogs keep them while they are up
+  const bar = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const modal = screen === "play" && (paused || phase === "round-card");
+  useEffect(() => {
+    for (const el of [bar.current, glRef.current]) el?.toggleAttribute("inert", modal);
+    // on the title the course is only a picture
+    overlay.current?.toggleAttribute("inert", modal || screen === "title");
+  }, [modal, screen, overlay]);
+  const wasPlaying = useRef(false);
+  useEffect(() => {
+    if (screen === "title" && wasPlaying.current) menu.current?.querySelector("button")?.focus({ preventScroll: true });
+    else if (screen === "play" && !modal) overlay.current?.focus({ preventScroll: true });
+    wasPlaying.current = screen === "play";
+  }, [screen, modal, overlay]);
+  const keep = (e: MouseEvent) => e.preventDefault();
+
   const sub = (on: boolean) =>
     `h-8 px-2.5 sm:px-3 rounded-full font-mono text-[11px] uppercase tracking-[0.12em] ${on ? "bg-[#1d5e3f] text-[#f2ead7]" : "text-[#b5b6ab] hover:text-[#f2ead7]"}`;
   const G = loaded.current?.game;
@@ -290,18 +324,19 @@ function Course() {
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-[#0d100e] select-none">
-      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-[#0d100e]">
+      <div ref={bar} className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-[#0d100e]">
         {screen === "play" && phase !== "round-card" && (
           <div className="flex flex-wrap items-center gap-1">
             {phase === "putt" ? (
               <button
                 type="button"
                 aria-pressed={reading}
+                onMouseDown={keep}
                 onClick={() => {
                   if (!G) return;
                   puttRead(G.putt, !G.putt.reading);
                   setReading(G.putt.reading);
-                  setStatus(G.putt.reading ? "Reading the green: tap or drag to pour water where you want to see the break." : "Back to putting.");
+                  say(G.putt.reading ? "Reading the green: tap or drag to pour water where you want to see the break." : "Back to putting.");
                 }}
                 className={sub(reading)}
               >
@@ -310,18 +345,18 @@ function Course() {
             ) : (
               <>
                 {CLUBS.map((c, i) => (
-                  <button key={c.id} type="button" aria-pressed={club === i} aria-label={c.name} onClick={() => G?.setClub(i)} className={sub(club === i)}>
+                  <button key={c.id} type="button" aria-pressed={club === i} aria-label={c.name} onMouseDown={keep} onClick={() => G?.setClub(i)} className={sub(club === i)}>
                     {c.short}
                   </button>
                 ))}
                 <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true" />
-                <button type="button" aria-label="Aim left" onClick={() => G?.aim(-0.03)} className={`${sub(false)} w-8 !px-0`}>
+                <button type="button" aria-label="Aim left" onMouseDown={keep} onClick={() => G?.aim(-0.03)} className={`${sub(false)} w-8 !px-0`}>
                   ◀
                 </button>
-                <button type="button" aria-label="Aim right" onClick={() => G?.aim(0.03)} className={`${sub(false)} w-8 !px-0`}>
+                <button type="button" aria-label="Aim right" onMouseDown={keep} onClick={() => G?.aim(0.03)} className={`${sub(false)} w-8 !px-0`}>
                   ▶
                 </button>
-                <button type="button" aria-pressed={mapOpen} onClick={() => G?.toggleMap()} className={sub(mapOpen)}>
+                <button type="button" aria-pressed={mapOpen} onMouseDown={keep} onClick={() => G?.toggleMap()} className={sub(mapOpen)}>
                   Map
                 </button>
               </>
@@ -345,16 +380,20 @@ function Course() {
         <canvas
           ref={overlay}
           data-autofocus
-          role="img"
-          aria-label="Golf. Drag down and swing up, or press Space three times; the arrows aim and change club; M opens the map, and a tap or drag on it sets the aim; on the green you putt. Escape pauses."
+          role="application"
+          aria-label="Golf course"
+          aria-describedby="golf-keys"
           className="absolute inset-0 w-full h-full outline-none touch-none"
         />
+        <p id="golf-keys" className="sr-only">
+          {KEYS}
+        </p>
 
         {screen === "title" && (
           <div className="absolute inset-0 flex items-end sm:items-center justify-center sm:justify-start p-4 sm:p-10 bg-gradient-to-t from-[#0d100e]/70 via-[#0d100e]/10 to-transparent sm:bg-gradient-to-r">
             <div className="w-full max-w-sm">
               <h1 className="text-[56px] sm:text-[72px] leading-none font-extrabold tracking-tight text-[#f2ead7] drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)]">Golf</h1>
-              <div className="mt-6 flex flex-col gap-2">
+              <div ref={menu} className="mt-6 flex flex-col gap-2">
                 {shared && (
                   <button type="button" disabled={!ready} onClick={() => start(shared)} className={`${menuBtn} border-[#8ad9a8]/70`}>
                     <span className="text-lg font-bold">Play this round</span>
@@ -368,13 +407,21 @@ function Course() {
                   </button>
                 ))}
               </div>
-              {!ready && <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]/80">Loading</p>}
+              {!ready && <p role="status" className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]/80">Loading</p>}
             </div>
           </div>
         )}
 
         {screen === "play" && paused && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#0d100e]/55 backdrop-blur-[2px] p-4" role="dialog" aria-modal="true" aria-label="Paused">
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0d100e]/55 backdrop-blur-[2px] p-4" role="dialog"
+            aria-modal="true"
+            aria-label="Paused"
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.stopPropagation();
+              setPaused(false);
+            }}
+          >
             <div className="w-full max-w-xs flex flex-col gap-2">
               <p className="mb-2 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-[#8ad9a8]">{setup ? modeName(setup) : ""}</p>
               <button type="button" autoFocus onClick={() => setPaused(false)} className={menuBtn}>
@@ -406,9 +453,11 @@ function Course() {
           </p>
         )}
       </div>
-      <p aria-live="polite" className="sr-only">
-        {status}
-      </p>
+      <div role="log" aria-live="polite" className="sr-only">
+        {said.map((m) => (
+          <p key={m.id}>{m.text}</p>
+        ))}
+      </div>
     </div>
   );
 }

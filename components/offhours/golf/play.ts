@@ -127,6 +127,8 @@ export type Card = { club: Club; shot: Shot; label: string; t: number; /** a met
 type V3 = [number, number, number];
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** how long the aim has to rest before it is said, s */
+const AIM_SAY_S = 0.6;
 const feet = (n: number) => `${n} ${n === 1 ? "foot" : "feet"}`;
 const yards = (n: number) => `${n} ${n === 1 ? "yard" : "yards"}`;
 const smooth = (u: number) => u * u * (3 - 2 * u);
@@ -154,6 +156,8 @@ export class CourseGame {
   club = 3;
   /** the club the page or the player chose for this shot (the suggestion is not applied over it) */
   clubChosen = false;
+  /** when to say the aim (a game time, s), or -1 */
+  private aimSayT = -1;
   yaw = 0;
   yawT = 0;
   wind: [number, number] = [0, 0];
@@ -269,7 +273,7 @@ export class CourseGame {
     this.prepareShot(true);
     const d = this.hole.def;
     const sp = Math.hypot(this.wind[0], this.wind[1]);
-    this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)}`);
+    this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
   }
 
   /** the aim, the club and the wind for the next shot from the ball */
@@ -423,10 +427,17 @@ export class CourseGame {
     if (c === this.club) return;
     this.club = c;
     this.opts.onClub?.(c);
+    if (byPlayer) this.say(`${CLUBS[c].name}, ${Math.round(fullCarry(c) * this.carryK(c))} yards.`);
   }
-  /** nudge the aim, radians */
+  /** nudge the aim, radians; where it points is said once the nudging stops */
   aim(d: number) {
     this.yawT = clamp(this.yawT + d, this.baseYaw() - AIM_RANGE, this.baseYaw() + AIM_RANGE);
+    this.aimSayT = this.t + AIM_SAY_S;
+  }
+  /** the aim in words: how far left or right of the target it points, at the target's distance */
+  aimWords() {
+    const off = Math.round(Math.tan(this.yawT - this.baseYaw()) * this.yardsToTarget());
+    return off === 0 ? "Aim straight." : `Aim ${yards(Math.abs(off))} ${off < 0 ? "left" : "right"}.`;
   }
   /** aim at a point of the hole (a tap or a drag on the map), metres */
   aimAt(x: number, z: number) {
@@ -700,6 +711,10 @@ export class CourseGame {
     this.t += dt;
     this.phaseT += dt;
     this.yaw += (this.yawT - this.yaw) * (1 - Math.exp(-7 * dt));
+    if (this.aimSayT >= 0 && this.t >= this.aimSayT) {
+      this.aimSayT = -1;
+      if (this.phase === "ready") this.say(this.aimWords());
+    }
     const club = CLUBS[this.club];
     const s = this.sw;
     if (this.card) this.card.t += dt;
@@ -743,7 +758,8 @@ export class CourseGame {
         const ps = this.puttState();
         if (this.puttRolling && !ps.rolling && this.putt.strokes > this.strokes) {
           this.strokes = this.putt.strokes;
-          this.say(`${feet(Math.round(ps.dist * 3.281))} to the pin.`);
+          const ft = Math.round(ps.dist * 3.281);
+          this.say(ft < 1 ? "Inches from the cup." : `${feet(ft)} to the pin.`);
         }
         this.puttRolling = ps.rolling;
         break;
@@ -892,6 +908,7 @@ export class CourseGame {
     }
     this.prepareShot(false);
     this.setPhase("ready");
+    this.say(`${CLUBS[this.club].name}.`);
   }
 
   private holeDone(played: number, pickedUp: boolean) {

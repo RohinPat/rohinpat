@@ -46,7 +46,7 @@ describe("a hole, from the tee card", () => {
     const g = new CourseGame({ seed: 5, say: (m) => said.push(m) });
     expect(g.phase).toBe("tee-card");
     expect(said).toHaveLength(1);
-    expect(said[0]).toMatch(/^Hole 1, 340 yards, par 4\. (Wind \d+ mph from (the left|the right|behind|ahead)\.|No wind\.)$/);
+    expect(said[0]).toMatch(/^Hole 1, 340 yards, par 4\. (Wind \d+ mph from (the left|the right|behind|ahead)\.|No wind\.) (Driver|3 Wood)\.$/);
   });
   it("the card goes by itself after two seconds, or on any press (which is not a swing)", () => {
     const g = new CourseGame({ seed: 5 });
@@ -668,4 +668,33 @@ describe("a linked phone", () => {
     expect(hints(true)).toEqual([]);
   });
 it("the first shot shows a moving dot, still under reduced motion, and it goes with the first strike", () => {    const arcs = (opts: { reduce?: boolean }, taken: number) => {      const rec = recordingCtx();      const g = onTee(opts);      run(g, () => g.phase === "ready");      g.taken = taken;      g.w = 1440;      g.h = 900;      paint(rec.ctx, g, 1440, 900, 1 / 60, { x: 0, y: 0, inside: false });      return rec.arcs.length;    };    expect(arcs({}, 0)).toBe(arcs({}, 1) + 1);    expect(arcs({ reduce: true }, 0)).toBe(arcs({ reduce: true }, 1));  });
+});
+
+describe("what the game says for a player who cannot see it", () => {
+  const ready = () => {
+    const said: string[] = [];
+    const g = new CourseGame({ seed: 5, say: (m) => said.push(m) });
+    g.key({ key: " " }, true);
+    expect(g.phase).toBe("ready");
+    return { g, said };
+  };
+  it("a club picked by the player, with how far it carries", () => {
+    const { g, said } = ready();
+    g.key({ key: "ArrowDown" }, true);
+    const m = said[said.length - 1];
+    expect(m.startsWith(`${CLUBS[g.club].name}, `)).toBe(true);
+    expect(m).toMatch(/, \d+ yards\.$/);
+  });
+  it("the aim once it stops moving, left or right of the target in yards, and straight back at it", () => {
+    const { g, said } = ready();
+    for (let i = 0; i < 4; i++) g.key({ key: "ArrowLeft" }, true);
+    const n = said.length;
+    g.step(0.3);
+    expect(said).toHaveLength(n);
+    g.step(0.5);
+    expect(said[said.length - 1]).toMatch(/^Aim \d+ yards left\.$/);
+    for (let i = 0; i < 4; i++) g.key({ key: "ArrowRight" }, true);
+    for (let i = 0; i < 60; i++) g.step(1 / 60);
+    expect(said[said.length - 1]).toBe("Aim straight.");
+  });
 });

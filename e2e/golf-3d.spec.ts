@@ -144,6 +144,32 @@ test("Escape pauses the round, and the pause menu goes back to the modes", async
   await expect(page).toHaveURL(/\/golf$/);
 });
 
+test("by the keyboard alone: the site under the course is out of reach, a club click keeps the keys on the course, Escape closes the pause menu, and the game says the club", async ({ page }) => {
+  await page.goto("/golf?linkmock");
+  await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
+  // the site's navigation is under the course: Tab goes to the course's own controls
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: /^Sound/ })).toBeFocused();
+  await page.getByRole("button", { name: /Nine holes/ }).press("Enter");
+  const course = page.getByRole("application", { name: "Golf course" });
+  await expect(course).toBeFocused(SLOW);
+  await page.waitForFunction(() => !!(window as unknown as Win).__golf, null, SLOW);
+  await page.evaluate(() => {
+    const g = (window as unknown as Win).__golf;
+    while (g.phase !== "ready") g.step(1 / 60);
+  });
+  await page.getByRole("button", { name: "7 Iron" }).click();
+  await expect(course).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("[role=log] p").last()).toHaveText(/^Pitching wedge, \d+ yards\.$/);
+  await page.keyboard.press("Escape");
+  const menu = page.getByRole("dialog", { name: "Paused" });
+  await expect(menu.getByRole("button", { name: /Resume/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(course).toBeFocused();
+});
+
 test("the 3D course's controls pass axe", async ({ page }) => {
   await page.goto("/golf");
   await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
