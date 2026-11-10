@@ -1,7 +1,7 @@
 import { seeded } from "@/components/offhours/useCanvas";
 import { NINE_DEFS, type HoleDef } from "@/components/offhours/golf/course";
 import type { HoleScore } from "@/components/offhours/golf/score";
-import type { CourseGame } from "@/components/offhours/golf/play";
+import type { CourseGame, HoleStat } from "@/components/offhours/golf/play";
 
 // The ways to play the course, all from the URL (nothing is stored):
 // - full: the nine holes, a fresh wind each time;
@@ -76,6 +76,27 @@ export function shareText(s: Setup, scores: HoleScore[], origin: string) {
     .map((d, i) => `${d.n}:${scores[i].strokes}`)
     .join(" ");
   return `Golf, ${modeName(s)}: ${total} (${tp})\n${holes}\n${origin}/golf${queryFor(s)}`;
+}
+
+/** a hole worth paper over its card whatever the score: holed from off the green, or a putt from 25 ft or more */
+export const celebrated = (s: HoleStat | undefined) => !!s?.holed && (s.holed.by === "shot" || s.holed.ft >= 25);
+
+/** the round's best moments, a few words each: "Chip-in on 4", "31 ft putt on 7" (the longest putt first, at most three) */
+export function highlights(game: CourseGame): string[] {
+  const out: { s: string; rank: number }[] = [];
+  game.stats.forEach((s, i) => {
+    const n = game.defs[i]?.n ?? i + 1;
+    const hd = s.holed;
+    if (!hd) return;
+    if (hd.by === "shot") {
+      const ace = game.scores[i]?.strokes === 1;
+      out.push({ s: ace ? `Hole in one on ${n}` : hd.yd <= 40 ? `Chip-in on ${n}` : `Holed from ${hd.yd} yd on ${n}`, rank: 1000 + hd.yd });
+    } else if (hd.ft >= 25) out.push({ s: `${hd.ft} ft putt on ${n}`, rank: hd.ft });
+  });
+  return out
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, 3)
+    .map((o) => o.s);
 }
 
 /** how the round was played: fairways and greens hit, putts, the longest drive, penalty strokes */

@@ -65,6 +65,10 @@ export type HoleStat = {
   /** a par 4 or 5: the tee shot's total, yd, unless it was dropped */
   drive: number | null;
   penalties: number;
+  /** each full shot: the club, how far it went (yd, total), and the penalty strokes it cost */
+  shots: { club: string; yd: number; pen: number }[];
+  /** how it went in: from off the green (yd), or a putt (ft); null when picked up */
+  holed: { by: "shot"; yd: number } | { by: "putt"; ft: number } | null;
 };
 
 /** a ball this close to the green (m), on rough or fairway, is putted */
@@ -824,6 +828,8 @@ export class CourseGame {
       this.stat.drive = drop ? null : Math.round(sh.total);
     }
     if (drop) this.stat.penalties += drop.penalty;
+    this.stat.shots.push({ club: club.name, yd: Math.round(drop ? sh.carry : sh.total), pen: drop?.penalty ?? 0 });
+    if (sh.holed && !drop) this.stat.holed = { by: "shot", yd: Math.round(fromYd) };
     if (drop) {
       this.ball = [drop.x, drop.z];
       this.strokes += drop.penalty;
@@ -893,6 +899,8 @@ export class CourseGame {
     const hs = holeScore(played, def.par, pickedUp);
     this.scores.push(hs);
     this.stat.putts = this.puttFrom >= 0 ? Math.max(0, played - this.puttFrom) : 0;
+    if (pickedUp) this.stat.holed = null;
+    else if (this.stat.putts > 0) this.stat.holed = { by: "putt", ft: Math.max(1, Math.round(this.putt.from / 0.3048)) };
     this.stats.push(this.stat);
     this.strokes = hs.strokes;
     this.setPhase("hole-card");
@@ -931,7 +939,7 @@ export class CourseGame {
 }
 
 function newStat(): HoleStat {
-  return { fairway: null, gir: false, putts: 0, drive: null, penalties: 0 };
+  return { fairway: null, gir: false, putts: 0, drive: null, penalties: 0, shots: [], holed: null };
 }
 
 /** "Wind 4 mph from the left." relative to the aim */

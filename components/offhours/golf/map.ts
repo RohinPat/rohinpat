@@ -153,6 +153,53 @@ function drawGround(ctx: CanvasRenderingContext2D, hole: BuiltHole, r: Rect) {
   else ground(ctx, hole, r);
 }
 
+/** the hole as it was played, for the hole card: the ground, each shot, and the putts as a dotted line to the cup */
+export function mapPlayed(ctx: CanvasRenderingContext2D, g: CourseGame, r: Rect, putted: boolean) {
+  const hole = g.hole;
+  const f = fit(hole, r);
+  drawGround(ctx, hole, r);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 5);
+  ctx.clip();
+  ctx.lineCap = "round";
+  const [pxm, pzm] = hole.pin;
+  const last = g.legs[g.legs.length - 1];
+  if (putted && last) {
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([1, 3]);
+    ctx.beginPath();
+    ctx.moveTo(f.px(last[2]), f.py(last[3]));
+    ctx.lineTo(f.px(pxm), f.py(pzm));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.strokeStyle = PAPER;
+  ctx.lineWidth = 1.6;
+  for (const [x0, z0, x1, z1] of g.legs) {
+    ctx.beginPath();
+    ctx.moveTo(f.px(x0), f.py(z0));
+    ctx.lineTo(f.px(x1), f.py(z1));
+    ctx.stroke();
+  }
+  ctx.fillStyle = PAPER;
+  ctx.strokeStyle = "rgba(13,16,14,0.9)";
+  ctx.lineWidth = 1;
+  for (const [, , x1, z1] of g.legs) {
+    ctx.beginPath();
+    ctx.arc(f.px(x1), f.py(z1), 2.4, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+  }
+  // the cup
+  ctx.fillStyle = "#e5484d";
+  ctx.beginPath();
+  ctx.arc(f.px(pxm), f.py(pzm), 2.6, 0, 7);
+  ctx.fill();
+  ctx.restore();
+}
+
 /** should the map be drawn now */
 export const mapShown = (g: CourseGame, w: number) => g.mapOpen && (g.phase === "ready" || g.phase === "swing" || g.phase === "fly" || g.phase === "rest" || (g.phase === "tee-card" && w >= MAP_WIDE));
 

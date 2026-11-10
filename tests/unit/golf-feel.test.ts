@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { CLUBS, simulate, type ShotIn } from "@/components/offhours/golf/flight";
 import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { CourseGame, REST_HOLD, STEP } from "@/components/offhours/golf/play";
-import { paint } from "@/components/offhours/golf/playDraw";
+import { holedLine, paint, shotLine } from "@/components/offhours/golf/playDraw";
 import { YD } from "@/components/offhours/golf/scene";
 import { replayBall, replayView } from "@/components/golf3d/replay";
-import { fakeCtx } from "./golf-headless";
+import { celebrated, highlights } from "@/components/golf3d/modes";
+import { BOTS, playRound } from "./golf-bots";
+import { fakeCtx, recordingCtx } from "./golf-headless";
 
 // Game feel (phase 6): a ball that rolls into the cup from off the green is
 // holed, and a great shot (holed, stiff, or a big drive) is played again from a
@@ -151,5 +153,73 @@ describe("replays", () => {
       expect(v.y).toBeGreaterThan(g.terrain.y(v.x, v.z) + 1);
     }
     expect(g.phase).toBe("ready");
+  });
+});
+
+describe("the hole card says how the hole was played", () => {
+  it("every shot and putt of a round is in its hole's log, and a holed putt says how long it was", () => {
+    const r = playRound(BOTS.skilled, 11, { game: { hills: true } });
+    expect(r.finished).toBe(true);
+    const g = r.game;
+    g.stats.forEach((st, i) => {
+      const sc = g.scores[i];
+      if (sc.pickedUp) return;
+      expect(st.shots.length + st.putts + st.penalties, `hole ${i + 1}`).toBe(sc.strokes);
+      expect(st.shots[0].club).toBeTruthy();
+      if (st.putts > 0) {
+        expect(st.holed?.by).toBe("putt");
+        if (st.holed?.by === "putt") expect(st.holed.ft).toBeGreaterThanOrEqual(1);
+      }
+    });
+  });
+
+  it("a chip in: the card lists the shot and says where it went in from, with paper over it", () => {
+    const p = holingPower(20)!;
+    const g = chipFrom(20);
+    g.remoteSwing({ power: p, face: 0, curve: 0, contact: 1 });
+    run(g, () => g.phase === "hole-card");
+    const st = g.stats[0];
+    expect(st.holed).toEqual({ by: "shot", yd: 20 });
+    expect(st.shots).toEqual([{ club: CLUBS[CLUBS.length - 1].name, yd: expect.any(Number), pen: 0 }]);
+    expect(st.putts).toBe(0);
+    expect(celebrated(st)).toBe(true);
+    const rec = recordingCtx();
+    g.phaseT = 1;
+    paint(rec.ctx, g, 1280, 800, STEP, ptr, { world: false });
+    expect(rec.texts).toContain("CHIPPED IN FROM 20 YD");
+    expect(rec.texts.some((t) => /^SAND WEDGE \d+$/.test(t))).toBe(true);
+    // a narrow phone: no map, the shots still fit
+    rec.clear();
+    paint(rec.ctx, g, 340, 640, STEP, ptr, { world: false });
+    expect(rec.texts).toContain("CHIPPED IN FROM 20 YD");
+  });
+
+  it("the shot line shortens to fit, and only a hole-out or a long putt gets a line of its own", () => {
+    const st = { fairway: true, gir: true, putts: 2, drive: 262, penalties: 1, shots: [{ club: "Driver", yd: 262, pen: 0 }, { club: "7 Iron", yd: 151, pen: 1 }], holed: { by: "putt" as const, ft: 9 } };
+    expect(shotLine(st)).toEqual(["DRIVER 262 · 7 IRON 151 +1 · 2 PUTTS", "DR 262 · 7i 151 +1 · 2 PUTTS", "262 · 151 +1 · 2 PUTTS", "2 SHOTS · 2 PUTTS"]);
+    expect(holedLine(st, 5)).toBe("");
+    expect(holedLine({ ...st, holed: { by: "putt", ft: 24 } }, 4)).toBe("HOLED FROM 24 FT");
+    expect(holedLine({ ...st, holed: { by: "shot", yd: 142 } }, 2)).toBe("HOLED OUT FROM 142 YD");
+    expect(holedLine({ ...st, holed: { by: "shot", yd: 180 } }, 1)).toBe("");
+    expect(celebrated({ ...st, holed: { by: "putt", ft: 24 } })).toBe(false);
+    expect(celebrated({ ...st, holed: { by: "putt", ft: 31 } })).toBe(true);
+  });
+
+  it("the round's best moments: hole-outs first, then putts from 25 ft, three at most", () => {
+    const base = { fairway: null, gir: false, putts: 0, drive: null, penalties: 0, shots: [] };
+    const stats = [
+      { ...base, putts: 1, holed: { by: "putt" as const, ft: 31 } },
+      { ...base, holed: { by: "shot" as const, yd: 18 } },
+      { ...base, putts: 2, holed: { by: "putt" as const, ft: 3 } },
+      { ...base, holed: { by: "shot" as const, yd: 165 } },
+      { ...base, putts: 1, holed: { by: "putt" as const, ft: 40 } },
+      { ...base, holed: null },
+    ];
+    const defs = stats.map((_, i) => ({ n: i + 1 }));
+    const scores = stats.map(() => ({ strokes: 4 }));
+    const game = { stats, defs, scores } as unknown as CourseGame;
+    expect(highlights(game)).toEqual(["Holed from 165 yd on 4", "Chip-in on 2", "40 ft putt on 5"]);
+    scores[3].strokes = 1;
+    expect(highlights(game)[0]).toBe("Hole in one on 4");
   });
 });
