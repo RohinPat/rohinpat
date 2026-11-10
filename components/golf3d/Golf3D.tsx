@@ -19,6 +19,7 @@ import { flyoverS, flyoverView, mixView, titleView, type View } from "./flyover"
 import { replayView } from "./replay";
 import { celebrated } from "./modes";
 import { PuttCam } from "./puttcam";
+import { startLevel } from "./quality";
 import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
 
@@ -91,7 +92,9 @@ function Course() {
         const attract = new play.CourseGame({ seed: 1, hills: true });
         let gl: CourseRenderer | null = null;
         try {
-          if (glRef.current) gl = r3.createCourseRenderer(glRef.current, { lowPower: touch.current, maxPixels: touch.current ? 1.6e6 : 2.4e6, reduce: reduce.current });
+          const nav = navigator as Navigator & { deviceMemory?: number };
+          const level = startLevel({ touch: touch.current, cores: nav.hardwareConcurrency, memoryGB: nav.deviceMemory });
+          if (glRef.current) gl = r3.createCourseRenderer(glRef.current, { level, maxPixels: 2.4e6, reduce: reduce.current });
         } catch {
           setFailed(true);
         }

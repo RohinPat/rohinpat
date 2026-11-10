@@ -5,7 +5,7 @@ import Golf3D from "@/components/golf3d/Golf3D";
 // nav or the sitemap, and not indexable, until it does more than the dialog's.
 export const metadata: Metadata = {
   title: "Golf",
-  description: "Six holes, in 3D.",
+  description: "Nine holes, in 3D.",
   robots: { index: false, follow: false },
 };
 

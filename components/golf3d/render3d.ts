@@ -7,6 +7,7 @@ import { createFx3D } from "./fx3d";
 import type { View } from "./flyover";
 import { createPutt3D } from "./putt3d";
 import { replayBall } from "./replay";
+import { Governor, LEVELS } from "./quality";
 import type { PuttProj } from "@/components/offhours/golf/green";
 
 // The course in WebGL. The game (play.ts) and its camera rig (playDraw.ts) are
@@ -37,15 +38,20 @@ export type CourseRenderer = {
   puttProj: (g: CourseGame) => PuttProj;
   dispose: () => void;
   /** draw calls, triangles and device pixels of the last frame (for the perf test) */
-  info: () => { calls: number; triangles: number; pixels: number; soft: boolean; fx: number };
+  info: () => { calls: number; triangles: number; pixels: number; soft: boolean; fx: number; level: number };
 };
 
-export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixels?: number; lowPower?: boolean; reduce?: boolean } = {}): CourseRenderer {
+/**
+ * `level` is where the quality starts (quality.ts: 0 the best); when frames run slow it is turned down. `maxPixels`
+ * caps the pixels at every level.
+ */
+export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixels?: number; level?: number; reduce?: boolean } = {}): CourseRenderer {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", alpha: false });
-  // a software renderer (no usable GPU, or a test runner): the cheapest picture that still reads
+  // a software renderer (no usable GPU, or a test runner): the cheapest picture that still reads, and no governor
   const soft = isSoftware(renderer.getContext());
-  const lowPower = !!opts.lowPower || soft;
-  const maxPixels = soft ? 3.5e5 : (opts.maxPixels ?? 2.4e6);
+  const gov = soft ? null : new Governor(opts.level ?? 0);
+  const pixelCap = () => (soft ? 3.5e5 : Math.min(opts.maxPixels ?? 2.4e6, LEVELS[gov!.level].pixels));
+  let maxPixels = pixelCap();
   renderer.shadowMap.enabled = !soft;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -101,13 +107,33 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   const hemi = new THREE.HemisphereLight("#d8ecff", "#55703f", 1.25);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight("#fff3dc", 3.1);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(lowPower ? 1024 : 2048, lowPower ? 1024 : 2048);
+  sun.castShadow = !soft;
   const sc = sun.shadow.camera;
   sc.left = -45; sc.right = 45; sc.top = 45; sc.bottom = -45; sc.near = 1; sc.far = 260;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.04;
   root.add(sun, sun.target);
+  /** the level's shadows: the materials are rebuilt for a change of kind, the map for a change of size */
+  const applyShadows = (first: boolean) => {
+    if (soft) return;
+    const lv = LEVELS[gov!.level];
+    const type = lv.shadows === "soft" ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    const on = lv.shadows !== "off";
+    const kind = type !== renderer.shadowMap.type || on !== sun.castShadow;
+    renderer.shadowMap.type = type;
+    sun.castShadow = on;
+    if (sun.shadow.mapSize.x !== lv.shadowMap) {
+      sun.shadow.mapSize.set(lv.shadowMap, lv.shadowMap);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
+    if (kind && !first)
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) x.needsUpdate = true;
+      });
+  };
+  applyShadows(true);
 
   // ---------------------------------------------------------------- the ball, its shadow, the golfer
   const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 14, 10), new THREE.MeshLambertMaterial({ color: "#ffffff", emissive: "#3a3a36" }));
@@ -152,7 +178,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       root.remove(hole.group);
       hole.dispose();
     }
-    hole = buildHole3D(g.hole, { tier: soft ? "soft" : lowPower ? "low" : "high" });
+    hole = buildHole3D(g.hole, { tier: soft ? "soft" : LEVELS[gov!.level].tier });
+    // building it stalls a frame or two: not the frame rate
+    gov?.hold();
     holeOf = g.hole;
     root.add(hole.group);
     hidden.clear();
@@ -195,8 +223,14 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   const render = (g: CourseGame, w: number, h: number, view?: View) => {
     if (w < 2 || h < 2) return;
     const now = performance.now();
-    const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+    const raw = last ? now - last : 0;
+    const dt = Math.min(0.1, raw / 1000);
     last = now;
+    // frames running slow: a level down (fewer pixels, cheaper shadows; the next hole is built lighter)
+    if (gov?.frame(raw)) {
+      maxPixels = pixelCap();
+      applyShadows(false);
+    }
     // the pixel budget: never more than maxPixels device pixels, never more than 2x
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pr = Math.min(dpr, Math.sqrt(maxPixels / (w * h)));
@@ -364,7 +398,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   return {
     render,
     puttProj,
-    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixels: Math.round(size.w * size.h * size.pr * size.pr), soft, fx: dust.count() }),
+    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixels: Math.round(size.w * size.h * size.pr * size.pr), soft, fx: dust.count(), level: gov?.level ?? -1 }),
     dispose: () => {
       hole?.dispose();
       golfer.dispose();
