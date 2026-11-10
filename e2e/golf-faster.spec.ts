@@ -18,8 +18,8 @@ const axe = (p: Page) => new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2a
 
 test("putt: Alt+arrow is taken for the fine aim step, axe is clean", async ({ page }) => {
   await openGolf(page);
-  // Play opens first; Putt is practice
-  await expect(page.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-pressed", "true");
+  // the range opens first; Play is a link to the course
+  await expect(page.getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Putt", exact: true }).click();
   await expect(page.getByRole("button", { name: "Putt", exact: true })).toHaveAttribute("aria-pressed", "true");
   const canvas = page.locator("canvas[data-autofocus]");
@@ -92,4 +92,16 @@ test("reduced motion: putt and range still play", async ({ browser, baseURL }) =
   await page.waitForTimeout(500);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test("the window is practice: it opens on the range, and Play goes to the course", async ({ page }) => {
+  await openGolf(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Range and green" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog.getByRole("button", { name: "Putt", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await dialog.getByRole("link", { name: "Play", exact: true }).click();
+  await page.waitForURL("**/golf", SLOW);
+  await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
+  await expect(page.getByRole("button", { name: /Nine holes/ })).toBeVisible();
 });

@@ -33,18 +33,26 @@ async function openCourse(p: Page, mode = /Nine holes/) {
   await p.waitForFunction(() => !!(window as unknown as Win).__golf, null, SLOW);
 }
 
-test("the 3D course covers the page and is not indexed", async ({ page }) => {
+test("the 3D course covers the page, loads without errors, and is indexed and in the sitemap", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   await page.goto("/golf");
   await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
+  // the site's own navigation and footer are not shown under it
+  await expect(page.locator("body > nav")).toBeHidden();
+  await expect(page.locator("body > footer")).toBeHidden();
   await expect(page.getByRole("heading", { name: "Golf" })).toBeVisible();
   await page.getByRole("button", { name: /Nine holes/ }).click();
   await expect(page).toHaveURL(/\/golf\?seed=\d+/);
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(page.locator('meta[name="robots"]')).not.toHaveAttribute("content", /noindex/);
+  expect(await (await page.request.get("/sitemap.xml")).text()).toMatch(/\/golf</);
   // the site's navigation is underneath: what is at the top of the screen is the game's toolbar
   const top = await page.evaluate(() => document.elementFromPoint(window.innerWidth / 2, 4)?.closest("nav") === null);
   expect(top).toBe(true);
   await expect(page.getByRole("link", { name: "Leave the course" })).toHaveAttribute("href", "/interests");
   await expect(page.getByRole("button", { name: "Driver" })).toHaveAttribute("aria-pressed", "true");
+  expect(errors).toEqual([]);
 });
 
 test("a tee shot on the 3D course flies and comes to rest", async ({ page }) => {

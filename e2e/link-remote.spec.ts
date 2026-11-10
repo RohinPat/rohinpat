@@ -74,7 +74,7 @@ test.describe("phone controllers: opening games", () => {
 
     await list.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
-    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toBeVisible();
+    await expect(stage(host).getByRole("heading", { name: "Range and green" })).toBeVisible();
     // it grew out of the tile: the stage opens with a clip-path animation
     await expect(phone.getByTestId("golf-controller")).toBeVisible();
 
@@ -90,11 +90,11 @@ test.describe("phone controllers: opening games", () => {
   test("Back then straight into another game opens it, and it stays open", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toBeVisible(SLOW);
+    await expect(stage(host).getByRole("heading", { name: "Range and green" })).toBeVisible(SLOW);
     // the phone is back on its list at once, while the laptop is still animating golf away
     await phone.getByTestId("phone-back").click();
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host).getByRole("heading", { name: "Six holes" })).toHaveCount(0, SLOW);
+    await expect(stage(host).getByRole("heading", { name: "Range and green" })).toHaveCount(0, SLOW);
     await expect(stage(host)).toBeVisible(SLOW);
     await host.waitForTimeout(1500);
     await expect(stage(host)).toBeVisible();
@@ -168,16 +168,22 @@ test.describe("phone controllers: golf's driving range", () => {
     await context.close();
   });
 
-  test("in Play a golf-swing from the phone hits the tee shot, and the phone can swing until the ball is on the green", async ({ browser, baseURL }) => {
-    test.setTimeout(60_000);
+  test("the phone's Play takes the laptop to the course and starts a round, a golf-swing hits the tee shot, and Back comes home to Off hours", async ({ browser, baseURL }) => {
+    test.setTimeout(75_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
-    await stage(host).getByRole("button", { name: "Play", exact: true }).click();
-    // the course opens on its tee card, then the ball is waiting; the phone is told it can swing
-    await expect(host.locator('[data-golf-phase="ready"]')).toBeVisible({ timeout: 20_000 });
-    await expect(host.getByTestId("golf-phone-hint")).toHaveText(/swing your phone/i);
-    await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible();
+    await phone.getByRole("group", { name: "Game" }).getByRole("button", { name: "Play" }).click();
+    await host.waitForURL(/\/golf\?/, SLOW);
+    // a round of nine starts by itself; its tee card goes on a press, then the ball is waiting and the phone can swing
+    await expect(host.locator("[data-golf-phase]")).toBeVisible({ timeout: 30_000 });
+    await host.waitForFunction(() => !!(window as unknown as { __golf?: unknown }).__golf, null, SLOW);
+    await host.evaluate(() => {
+      const g = (window as unknown as { __golf: { phase: string; step: (dt: number) => void } }).__golf;
+      for (let i = 0; i < 6000 && g.phase !== "ready"; i++) g.step(1 / 60);
+    });
+    await expect(host.locator('[data-golf-phase="ready"]')).toBeVisible(SLOW);
+    await expect(phone.getByRole("heading", { name: /hold it like a club/i })).toBeVisible(SLOW);
     await expect(phone.getByRole("group", { name: "Game" }).getByRole("button", { name: "Play" })).toHaveAttribute("aria-pressed", "true");
     // its aim buttons turn the laptop's aim
     const aim = () => host.evaluate(() => (window as unknown as { __golf: { yawT: number } }).__golf.yawT);
@@ -185,7 +191,11 @@ test.describe("phone controllers: golf's driving range", () => {
     await phone.locator('[data-golf-aim="right"]').click();
     await expect.poll(aim).toBeGreaterThan(before);
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-swing", data: { speedMph: 92, tempo: 3, faceDeg: 0 } }));
-    await expect(status(host)).toContainText(/Driver: \d+ yards carry/, { timeout: 25_000 });
+    await expect(host.locator('[role="log"]')).toContainText(/Driver: \d+ yards carry/, { timeout: 25_000 });
+    // Back: the laptop goes back to Off hours, the phone to its list
+    await phone.getByTestId("phone-back").click();
+    await host.waitForURL("**/interests", SLOW);
+    await expect(phone.getByTestId("phone-piece-list")).toBeVisible(SLOW);
     await context.close();
   });
 
@@ -224,7 +234,7 @@ test.describe("phone controllers: golf's driving range", () => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
-    // the laptop opens on Play, where the phone swings; on Putt it does not
+    // the laptop opens on the range, where the phone swings; on Putt it does not
     await expect(host.getByTestId("golf-phone-hint")).toBeVisible(SLOW);
     await stage(host).getByRole("button", { name: "Putt", exact: true }).click();
     await expect(host.getByTestId("golf-phone-hint")).toHaveCount(0);
@@ -240,7 +250,7 @@ test.describe("phone controllers: golf's driving range", () => {
     await phone.locator('[data-piece="golf"]').click();
     await expect(stage(host)).toBeVisible(SLOW);
     const game = phone.getByRole("group", { name: "Game" });
-    // the laptop opens on Play: the phone shows its swing, and its Putt switch takes the laptop to putting
+    // the laptop opens on the range: the phone shows its swing, and its Putt switch takes the laptop to putting
     await game.getByRole("button", { name: "Putt" }).click();
     await expect(stage(host).getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
     await expect(game.getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
@@ -254,9 +264,9 @@ test.describe("phone controllers: golf's driving range", () => {
     // and the laptop's own switch still reaches the phone
     await stage(host).getByRole("button", { name: "Driving range" }).click();
     await expect(game.getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
-    // the phone can come back to the course, and a page that only knows range still works
-    await game.getByRole("button", { name: "Play" }).click();
-    await expect(stage(host).getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-pressed", "true");
+    // a page that only knows range still works
+    await game.getByRole("button", { name: "Putt" }).click();
+    await expect(stage(host).getByRole("button", { name: "Putt" })).toHaveAttribute("aria-pressed", "true");
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-pick", data: { range: true } }));
     await expect(stage(host).getByRole("button", { name: "Driving range" })).toHaveAttribute("aria-pressed", "true");
     await context.close();
