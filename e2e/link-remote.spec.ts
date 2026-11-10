@@ -191,7 +191,13 @@ test.describe("phone controllers: golf's driving range", () => {
     await phone.locator('[data-golf-aim="right"]').click();
     await expect.poll(aim).toBeGreaterThan(before);
     await phone.evaluate(() => (window as unknown as PhoneWindow).__linkPhone!.send({ type: "gesture", name: "golf-swing", data: { speedMph: 92, tempo: 3, faceDeg: 0 } }));
-    await expect(host.locator('[role="log"]')).toContainText(/Driver: \d+ yards carry/, { timeout: 25_000 });
+    await expect(host.locator("[data-golf-phase]")).toHaveAttribute("data-golf-phase", /swing|fly/, SLOW);
+    // the flight is stepped on: a software renderer in CI draws few frames a second
+    await host.evaluate(() => {
+      const g = (window as unknown as { __golf: { phase: string; step: (dt: number) => void } }).__golf;
+      for (let i = 0; i < 4000 && (g.phase === "swing" || g.phase === "fly"); i++) g.step(1 / 60);
+    });
+    await expect(host.locator('[role="log"]')).toContainText(/Driver: \d+ yards carry/, SLOW);
     // Back: the laptop goes back to Off hours, the phone to its list
     await phone.getByTestId("phone-back").click();
     await host.waitForURL("**/interests", SLOW);

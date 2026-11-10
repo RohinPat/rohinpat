@@ -13,6 +13,16 @@ const said = (p: Page) => p.locator('[role="log"] p').allTextContents();
 const phase = (p: Page) => p.locator("[data-golf-phase]").getAttribute("data-golf-phase");
 const axe = (p: Page) => new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
 
+/** past the tee card with a press. Done in the page, so the press cannot land after the card has gone by itself
+ *  (CI's software renderer draws a few frames a second, and a press on the tee is a swing) */
+async function pastTeeCard(p: Page) {
+  await p.evaluate(() => {
+    const g = (window as unknown as Win).__golf as unknown as { phase: string; key(e: { key: string }, d: boolean): void };
+    if (g.phase === "tee-card") g.key({ key: " " }, true);
+  });
+  await expect.poll(() => phase(p), SLOW).toBe("ready");
+}
+
 async function openPlay(p: Page) {
   await p.goto("/golf?linkmock");
   await p.getByRole("button", { name: /Nine holes/ }).click();
@@ -117,8 +127,7 @@ test("reduced motion: the course still plays a tee shot", async ({ browser, base
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await openPlay(page);
-  await page.keyboard.press("Space"); // the tee card
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await swing(page, 250);
   await expect.poll(() => phase(page), SLOW).toBe("fly");
   await page.keyboard.press("Space");
@@ -154,8 +163,7 @@ test("a phone on its side: the clubs and the page's buttons keep to one row, and
   const box = (await canvas.boundingBox())!;
   expect(box.height).toBeGreaterThan(280);
   // a drag down and back up off the tee is a swing
-  await page.evaluate(() => { const g = (window as unknown as Win).__golf; if (g.phase === "tee-card") (g as unknown as { key(e: { key: string }, d: boolean): void }).key({ key: " " }, true); });
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   const x = box.x + box.width / 2, y0 = box.y + box.height * 0.35;
   await page.mouse.move(x, y0);
   await page.mouse.down();
@@ -179,8 +187,7 @@ test("the map: open on a wide screen, M and the chip toggle it, a tap on it sets
   await page.keyboard.press("m");
   await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect(live(page)).toHaveText("Map open.");
-  await page.keyboard.press("Space"); // the tee card
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await expect.poll(async () => (await state(page)).view !== null, SLOW).toBe(true);
   const before = await state(page);
   const box = (await page.locator("canvas[data-autofocus]").boundingBox())!;
@@ -199,8 +206,7 @@ test("phone size: the Map chip opens the map across the screen, and a tap on it 
   await openPlay(page);
   const chip = page.getByRole("button", { name: "Map", exact: true });
   await expect(chip).toHaveAttribute("aria-pressed", "false");
-  await page.keyboard.press("Space");
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await chip.click();
   await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await state(page)).view !== null, SLOW).toBe(true);
