@@ -6,6 +6,7 @@ import { buildGolfer3D } from "./golfer3d";
 import { createFx3D } from "./fx3d";
 import type { View } from "./flyover";
 import { createPutt3D } from "./putt3d";
+import { replayBall } from "./replay";
 import type { PuttProj } from "@/components/offhours/golf/green";
 
 // The course in WebGL. The game (play.ts) and its camera rig (playDraw.ts) are
@@ -123,10 +124,21 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   root.add(dust.group);
   const putt = createPutt3D();
   root.add(putt.group);
+  // a replay's flight line, drawn in the world so the replay's camera sees it
+  const TRACE_MAX = 900;
+  const tracePos = new Float32Array(TRACE_MAX * 3);
+  const traceGeo = new THREE.BufferGeometry();
+  traceGeo.setAttribute("position", new THREE.BufferAttribute(tracePos, 3));
+  const traceMat = new THREE.LineBasicMaterial({ color: "#ff6a52", transparent: true, opacity: 0.9, depthWrite: false });
+  const trace = new THREE.Line(traceGeo, traceMat);
+  trace.frustumCulled = false;
+  trace.visible = false;
+  root.add(trace);
   const flagMats: THREE.Material[] = [];
   // the shot whose landings have been shown, and how many of them
   let fxShot: CourseGame["shot"] = null;
   let fxBounce = 0;
+  let fxReplay: CourseGame["replay"] = null;
   let last = 0;
   const eye = new THREE.Vector3();
 
@@ -223,11 +235,32 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       bz = sh.oz + p[2];
     }
     if (g.splash && (g.phase === "fly" || g.phase === "rest") && g.t - g.splash.t > 0) showBall = g.phase === "rest" && g.dropped && g.restT > 0.9;
+    // a replay: the shot again, on its own clock
+    let near = false;
+    const rp = g.replay;
+    trace.visible = !!rp;
+    if (rp) {
+      // the line from the start of the shot to where the ball is in the replay
+      const sp = rp.shot.pts;
+      let k = 0;
+      for (let i = 0; i < rp.shot.n && k < TRACE_MAX && sp[i * 4] <= rp.t; i++, k++) {
+        tracePos[k * 3] = rp.shot.ox + sp[i * 4 + 1];
+        tracePos[k * 3 + 1] = rp.shot.oy + sp[i * 4 + 2] + BALL_R;
+        tracePos[k * 3 + 2] = rp.shot.oz + sp[i * 4 + 3];
+      }
+      traceGeo.setDrawRange(0, k);
+      traceGeo.attributes.position.needsUpdate = true;
+      const p = replayBall(rp);
+      [bx, bz] = [p[0], p[2]];
+      air = p[1] + BALL_R;
+      showBall = true;
+      // the flag ghosts as the ball reaches the cup, so it can be seen to drop
+      near = Math.hypot(bx - g.hole.pin[0], bz - g.hole.pin[1]) < 2.5;
+    }
     // on the green the ball is the putt's, and the golfer steps away: the putter addresses it
     const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
     let ground = hole ? hole.surfaceY(bx, bz) : 0;
     let by = air ?? ground + BALL_R;
-    let near = false;
     if (putting) {
       const pb = g.putt.ball;
       [bx, bz] = g.hole.fromGreen(pb.x, pb.y);
@@ -242,7 +275,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
     ball.position.set(bx, by, bz);
-    ball.scale.setScalar(Math.max(1, (BALL_MIN_PX * dBall) / (c.F * BALL_R)));
+    ball.scale.setScalar(Math.max(1, ((rp ? BALL_MIN_PX * 1.8 : BALL_MIN_PX) * dBall) / (c.F * BALL_R)));
     blob.visible = showBall;
     blob.position.set(bx, ground + 0.005, bz);
     const lift = Math.max(0, by - ground - BALL_R);
@@ -253,7 +286,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     const gx = sh && (g.phase === "fly" || g.phase === "rest") ? sh.ox : g.ball[0];
     const gz = sh && (g.phase === "fly" || g.phase === "rest") ? sh.oz : g.ball[1];
     golfer.update([gx, hole ? hole.surfaceY(gx, gz) : 0, gz], g.yaw, club, g.pose);
-    golfer.group.visible = !putting && Math.hypot(gx - c.x, gz - c.z) < 90;
+    golfer.group.visible = !putting && !rp && Math.hypot(gx - c.x, gz - c.z) < 90;
 
     // the flag: waves in the wind, and grows far off so it can always be found
     if (hole) {
@@ -269,7 +302,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
         pa.setZ(i, Math.sin(g.t * 6 + x * 9) * 0.03 * x);
       }
       pa.needsUpdate = true;
-      if (!putting) clearView(c.x, c.z, gx, gz);
+      if (!putting) clearView(c.x, c.z, rp ? bx : gx, rp ? bz : gz);
     }
 
     // dust, sand and spray where the ball meets the ground
@@ -278,8 +311,13 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       fxBounce = 0;
       if (sh && g.phase === "fly") dust.strike(sh.ox, sh.oz, g.lie, g.yaw, hole ? hole.surfaceY(sh.ox, sh.oz) : 0);
     }
+    if (rp !== fxReplay) {
+      // a replay kicks up its landings again
+      fxReplay = rp;
+      if (rp) fxBounce = rp.shot.bounces.filter((b) => b.t <= rp.t).length;
+    }
     if (sh && (g.phase === "fly" || g.phase === "rest")) {
-      const upTo = g.phase === "fly" ? g.shotT : sh.restT;
+      const upTo = g.phase === "fly" ? g.shotT : rp ? rp.t : sh.restT;
       while (fxBounce < sh.bounces.length && sh.bounces[fxBounce].t <= upTo) {
         const b = sh.bounces[fxBounce++];
         const lx = sh.ox + b.x, lz = sh.oz + b.z;
@@ -332,6 +370,8 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       golfer.dispose();
       dust.dispose();
       putt.dispose();
+      traceGeo.dispose();
+      traceMat.dispose();
       skyMat.dispose();
       sky.geometry.dispose();
       ridge.geometry.dispose();

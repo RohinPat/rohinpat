@@ -42,6 +42,8 @@ const MASS = 0.04593;
 const DT = 1 / 240;
 /** a ball rolling down a slope is pulled on by this much of g per unit of slope */
 const ROLL_G = (5 / 7) * G;
+/** a rolling ball whose middle passes this close to the middle of the cup (m), no faster than HOLE_V (m/s), drops in */
+const HOLE_R = 0.06, HOLE_V = 1.5;
 
 const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; keep: number }> = {
   green: { e: 0.22, et: 0.55, mu: 0.8, roll: 0.9, keep: 0.45 },
@@ -98,6 +100,8 @@ export type ShotIn = {
   trees?: { x: number; z: number; r: number; h: number }[];
   /** the ground's height (m) and slope in world coordinates (terrain.ts); flat at 0 without it */
   ground?: { y: (x: number, z: number) => number; slope: (x: number, z: number) => [number, number] };
+  /** the cup, in world coordinates: a ball that rolls over it slowly enough drops in */
+  cup?: [number, number];
 };
 
 export type Shot = {
@@ -125,6 +129,8 @@ export type Shot = {
   drop: { x: number; z: number } | null;
   /** where it hit a tree in the air (relative to the origin), if it did */
   tree: { x: number; z: number } | null;
+  /** it rolled into the cup */
+  holed: boolean;
 };
 
 const YD = 0.9144;
@@ -166,6 +172,7 @@ export function simulate(inp: ShotIn): Shot {
   let t = 0;
   let apex = 0, apexT = 0, landT = 0, carry = 0, curveY = 0;
   let rolling = false;
+  let holed = false;
   let tree: Shot["tree"] = null;
   let steps = 0;
   const x0 = Math.sin(az), z0 = Math.cos(az);
@@ -311,6 +318,17 @@ export function simulate(inp: ShotIn): Shot {
       x += vx * DT;
       z += vz * DT;
       y = gy(x, z);
+      if (inp.cup && Math.hypot(x + ox - inp.cup[0], z + oz - inp.cup[1]) < HOLE_R && Math.hypot(vx, vz) < HOLE_V) {
+        // in the hole
+        holed = true;
+        x = inp.cup[0] - ox;
+        z = inp.cup[1] - oz;
+        vx = 0;
+        vz = 0;
+        t += DT;
+        steps++;
+        break;
+      }
       // it stops when it is slow and the slope cannot start it again
       if (vh - d < 0.04 && Math.hypot(ax, az) < dec) {
         vx = 0;
@@ -325,7 +343,7 @@ export function simulate(inp: ShotIn): Shot {
     steps++;
     if (steps % 4 === 0) pts.push(t, x, gr ? Math.max(gy(x, z), y) : Math.max(0, y), z);
   }
-  pts.push(t, x, gy(x, z), z);
+  pts.push(t, x, gy(x, z) - (holed ? 0.06 : 0), z);
   const n = pts.length / 4;
   const total = Math.hypot(x, z) / YD;
   const rx = Math.cos(az), rz = -Math.sin(az);
@@ -367,6 +385,7 @@ export function simulate(inp: ShotIn): Shot {
     oz,
     drop,
     tree,
+    holed,
   };
 }
 

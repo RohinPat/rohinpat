@@ -237,10 +237,10 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
     drawWorld(ctx, cam, w, h, g.t, { x: g.wind[0], z: g.wind[1] }, { world: g.hole.world, extra, still: reduce, clearNear: near });
   }
   if (g.phase === "ready" || g.phase === "swing") aimGuide(ctx, g, cam, w, G);
-  if (g.phase === "ready" || g.phase === "swing" || g.phase === "rest") ballMarker(ctx, g, cam, w, h, G);
+  if (g.phase === "ready" || g.phase === "swing" || (g.phase === "rest" && !g.replay)) ballMarker(ctx, g, cam, w, h, G);
 
-  // ---- the flight
-  if (sh && (g.phase === "fly" || g.phase === "rest")) {
+  // ---- the flight (a replay is another camera's: its line would not sit on the picture)
+  if (sh && (g.phase === "fly" || g.phase === "rest") && !g.replay) {
     const upTo = g.phase === "fly" ? g.shotT : sh.restT;
     const fadeA = g.phase === "rest" ? clamp(1 - (g.restT - 0.7) / 0.8, 0, 1) : 1;
     ctx.globalAlpha = fadeA;
@@ -545,6 +545,11 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   if (slope) {
     mono(ctx, 10);
     pill(ctx, slope, w / 2, slot0 - 28, GOLD);
+  }
+  // a great shot, again
+  if (g.replay) {
+    mono(ctx, 10);
+    pill(ctx, "REPLAY", w / 2, pad + 4, GOLD);
   }
   // what the last shot did
   if (g.phase === "rest" && g.result) {

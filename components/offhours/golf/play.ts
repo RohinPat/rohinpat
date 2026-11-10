@@ -44,7 +44,16 @@ export type CourseOpts = {
   teeCardS?: number | ((def: HoleDef) => number);
   /** the ground has its hills (terrain.ts); without, every hole is flat */
   hills?: boolean;
+  /** a great shot is played again before the next one (the 3D page, which has a camera for it) */
+  replays?: boolean;
 };
+
+/** a shot played again: the flight from `t` to `end` (its own clock, s), and why it earned it */
+export type Replay = { shot: Shot; t: number; end: number; why: "holed" | "close" | "long" };
+/** a tee shot this long (yd, total) is replayed; so is an approach from 30 yd or more that finishes within CLOSE_YD of the pin */
+const LONG_YD = 275, CLOSE_YD = 2, CLOSE_FROM_YD = 30;
+/** the longest a replay runs, s */
+export const REPLAY_MAX_S = 4.5;
 
 /** how a hole was played, for the end of the round: the tee shot, the green, the putts */
 export type HoleStat = {
@@ -158,6 +167,11 @@ export class CourseGame {
   splash: { x: number; z: number; t: number } | null = null;
   /** the one-line result of the last shot, for the HUD */
   result = "";
+  /** the replay being played, and the one waiting for the shot's rest to end */
+  replay: Replay | null = null;
+  private replayNext: Replay | null = null;
+  /** the last shot went in */
+  holedOut = false;
   /** the last shot ended in water or the trees: the ball is where it was dropped, not where it stopped */
   dropped = false;
   timing: number | null = null;
@@ -514,7 +528,8 @@ export class CourseGame {
         this.fast = true;
         return;
       case "rest":
-        this.restT = Math.max(this.restT, REST_HOLD);
+        if (this.replay) this.replay.t = this.replay.end;
+        else this.restT = Math.max(this.restT, REST_HOLD);
         return;
       case "hole-card":
         if (this.phaseT > CARD_GUARD_S) this.nextHole();
@@ -647,6 +662,7 @@ export class CourseGame {
       ground: this.opts.hills ? this.terrain : undefined,
       rng: this.rng,
       trees: this.hole.blockers.length ? this.hole.blockers : undefined,
+      cup: this.hole.pin,
     });
     this.shot = shot;
     this.shotT = 0;
@@ -698,10 +714,24 @@ export class CourseGame {
         this.stepFly(dt, club);
         break;
       case "rest":
+        if (this.replay) {
+          this.replay.t += dt;
+          if (this.replay.t >= this.replay.end) {
+            this.replay = null;
+            this.afterRest();
+          }
+          break;
+        }
         this.restT += dt;
         if (this.restT > 1.1) this.pose = blend(this.pose, poseFor({ kind: "back", u: 0 }, club), 1 - Math.exp(-3.5 * dt));
         if (this.trail.length) this.trail.shift();
-        if (this.restT >= REST_HOLD) this.afterRest();
+        if (this.restT >= REST_HOLD) {
+          if (this.replayNext) {
+            this.replay = this.replayNext;
+            this.replayNext = null;
+            this.say("Replay.");
+          } else this.afterRest();
+        }
         break;
       case "putt": {
         puttStep(this.putt, dt, this.t, this.penv);
@@ -772,7 +802,7 @@ export class CourseGame {
     while (this.bounceIdx < sh.bounces.length && this.shotT >= sh.bounces[this.bounceIdx].t) {
       const b = sh.bounces[this.bounceIdx++];
       if (b.surface === "water") this.splash = { x: sh.ox + b.x, z: sh.oz + b.z, t: this.t };
-      if (this.opts.sound) sfx(b.surface === "bunker" || b.surface === "water" ? "land" : "thud", 1);
+      if (this.opts.sound) sfx(b.surface === "water" ? "splash" : b.surface === "bunker" ? "sand" : b.surface === "green" || b.surface === "fringe" ? "land" : "thud", Math.min(1, b.vy / 12 + 0.3));
     }
     if (this.shotT >= sh.restT) this.finishShot();
   }
@@ -784,6 +814,7 @@ export class CourseGame {
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
     const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt);
     const def = this.hole.def;
+    const fromYd = this.hole.toPin(sh.ox, sh.oz) / YD;
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);
     let msg = `${club.name}: ${Math.round(sh.carry)} yards carry, ${Math.round(sh.total)} total`;
     this.dropped = !!drop;
@@ -799,6 +830,16 @@ export class CourseGame {
       this.lie = this.hole.surfaceAt(drop.x, drop.z);
       this.result = drop.why === "water" ? "WATER · +1" : "TREES · +1";
       msg = `${club.name}: ${Math.round(sh.carry)} yards carry. ${drop.say}`;
+    } else if (sh.holed) {
+      this.ball = [...this.hole.pin];
+      this.lie = "green";
+      this.holedOut = true;
+      this.result = "IN THE HOLE";
+      msg += ". In the hole.";
+      if (this.opts.sound) {
+        sfx("cup");
+        sfx("applause", 1);
+      }
     } else {
       this.ball = end;
       this.lie = sh.surface;
@@ -808,6 +849,16 @@ export class CourseGame {
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? feet(ft) : yards(Math.round(toPin))} to the pin.`;
     }
     this.say(sh.tree ? `${msg} Hit a tree.` : msg);
+    // a great one is played again
+    this.replay = this.replayNext = null;
+    if (this.opts.replays && !drop) {
+      const why: Replay["why"] | null = sh.holed ? "holed" : this.yardsToPin() <= CLOSE_YD && fromYd >= CLOSE_FROM_YD ? "close" : tee && sh.total >= LONG_YD ? "long" : null;
+      if (why) {
+        const end = sh.restT + (why === "holed" ? 1.2 : 0.7);
+        // the end of the flight and what it did on the ground, never more than REPLAY_MAX_S
+        this.replayNext = { shot: sh, t: Math.max(why === "long" ? sh.apexT * 0.5 : sh.landT - 1.5, end - REPLAY_MAX_S, 0), end, why };
+      }
+    }
     this.setPhase("rest");
     this.restT = 0;
     this.fast = false;
@@ -819,6 +870,10 @@ export class CourseGame {
 
   private afterRest() {
     const def = this.hole.def;
+    if (this.holedOut) {
+      this.holedOut = false;
+      return this.holeDone(this.strokes, false);
+    }
     if (shouldPickUp(this.strokes, def.par)) return this.holeDone(this.strokes, true);
     if (this.lie === "green" || this.lie === "fringe" || this.nearGreen()) {
       const [gx, gy] = this.hole.toGreen(this.ball[0], this.ball[1]);

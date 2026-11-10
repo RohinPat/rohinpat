@@ -10,12 +10,13 @@ import { isMuted, onMuteChange, setMuted } from "@/components/offhours/audio";
 import { CLUBS } from "@/components/offhours/golf/flight";
 import { puttRead } from "@/components/offhours/golf/green";
 import { parseSwing, shotFromSwing } from "@/components/offhours/golf/remoteSwing";
-import { sfx } from "@/components/offhours/golf/sound";
+import { sfx, windBed } from "@/components/offhours/golf/sound";
 import type { CourseGame, Phase } from "@/components/offhours/golf/play";
 import type { paint as Paint } from "@/components/offhours/golf/playDraw";
 import type { CourseRenderer } from "./render3d";
 import { createConfetti } from "./confetti";
 import { flyoverS, flyoverView, mixView, titleView, type View } from "./flyover";
+import { replayView } from "./replay";
 import { PuttCam } from "./puttcam";
 import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
@@ -102,6 +103,7 @@ function Course() {
       });
     return () => {
       gone = true;
+      windBed(0);
       loaded.current?.gl?.dispose();
       loaded.current = null;
     };
@@ -116,6 +118,7 @@ function Course() {
       holes: s.defs,
       sound: true,
       hills: true,
+      replays: !!L.gl && !reduce.current,
       reduce: reduce.current,
       teeCardS: (d) => (reduce.current || !L.gl ? 2 : flyoverS(d.yards)),
       say: setStatus,
@@ -180,6 +183,8 @@ function Course() {
       if (!L) return;
       const F = fx.current;
       const g = L.game;
+      // the wind in the trees while a round is played
+      windBed(g && live.current.screen === "play" && !live.current.paused && g.phase !== "round-card" ? Math.hypot(g.wind[0], g.wind[1]) : 0);
       if (!g || live.current.screen === "title") {
         // the title: the first hole from the air, turning slowly
         F.title += reduce.current ? 0 : dt;
@@ -228,6 +233,7 @@ function Course() {
         if (m >= 1) F.leave = null;
       }
       F.last = g.phase === "tee-card" ? (view ?? null) : null;
+      if (g.replay) view = replayView(g.hole, g.replay, w, h);
       L.gl.render(g, w, h, view);
     },
     {
