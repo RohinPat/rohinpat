@@ -17,6 +17,7 @@ import type { CourseRenderer } from "./render3d";
 import { createConfetti } from "./confetti";
 import { flyoverS, flyoverView, mixView, titleView, type View } from "./flyover";
 import { replayView } from "./replay";
+import { celebrated } from "./modes";
 import { PuttCam } from "./puttcam";
 import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
@@ -211,9 +212,10 @@ function Course() {
         F.cheered = g.scores.length;
         const hs = g.scores[g.scores.length - 1];
         const par = g.hole.def.par;
-        if (hs && !hs.pickedUp && hs.strokes < par) {
-          if (!reduce.current) F.confetti.pop(w, h, hs.strokes <= par - 2 || hs.strokes === 1);
-          sfx("fanfare", hs.strokes <= par - 2 || hs.strokes === 1 ? 2 : 1);
+        if (hs && !hs.pickedUp && (hs.strokes < par || celebrated(g.stats[g.stats.length - 1]))) {
+          const big = hs.strokes <= par - 2 || hs.strokes === 1 || (hs.strokes < par && celebrated(g.stats[g.stats.length - 1]));
+          if (!reduce.current) F.confetti.pop(w, h, big);
+          sfx("fanfare", big ? 2 : 1);
         }
       }
       F.confetti.draw(ctx, stop ? 0 : dt);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CourseGame } from "@/components/offhours/golf/play";
 import { overUnder } from "@/components/offhours/golf/score";
-import { modeName, roundStats, shareText, type Setup } from "./modes";
+import { highlights, modeName, roundStats, shareText, type Setup } from "./modes";
 
 // The end of a round: the score, the card, how it was played, and a way to send
 // it to someone (text with a link that replays the round).
@@ -11,6 +11,7 @@ import { modeName, roundStats, shareText, type Setup } from "./modes";
 export default function RoundEnd({ game, setup, onAgain, onMenu }: { game: CourseGame; setup: Setup; onAgain: () => void; onMenu: () => void }) {
   const r = game.round!;
   const s = roundStats(game);
+  const best = highlights(game);
   const [copied, setCopied] = useState<"" | "yes" | "no">("");
   const again = useRef<HTMLButtonElement>(null);
   const text = shareText(setup, game.scores, typeof location === "undefined" ? "" : location.origin);
@@ -55,6 +56,7 @@ export default function RoundEnd({ game, setup, onAgain, onMenu }: { game: Cours
           {stat("Putts", String(s.putts))}
           {stat("Longest", s.drive === null ? "–" : `${s.drive} yd`)}
         </dl>
+        {best.length > 0 && <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]">{best.join(" · ")}</p>}
         {r.isBest && r.previous !== null && <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#edbb00]">Best this visit</p>}
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button ref={again} type="button" onClick={onAgain} className={`${btn} bg-[#1d5e3f] text-[#f2ead7] hover:bg-[#237049]`}>

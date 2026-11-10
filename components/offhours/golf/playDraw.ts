@@ -2,9 +2,9 @@ import { display, mono } from "../font";
 import { CLUBS, at, type Shot } from "./flight";
 import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
-import { CourseGame, swingLen } from "./play";
+import { CourseGame, swingLen, type HoleStat } from "./play";
 import { YD, drawWorld, prepare, project, type Cam, type Drawable, type P2 } from "./scene";
-import { MAP_WIDE, mapDraw } from "./map";
+import { MAP_WIDE, mapDraw, mapPlayed } from "./map";
 import { carryAtChip, carryAtPower, chipCarry, fullCarry } from "./swing";
 import { bestRound, overUnder, toPar } from "./score";
 import { trace } from "./tracer";
@@ -691,32 +691,74 @@ function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: num
   ctx.textAlign = "left";
 }
 
+/** the shots of a hole in a line, longest form that fits first: "DRIVER 262 · 7 IRON 151 · 2 PUTTS" */
+export function shotLine(st: HoleStat): string[] {
+  const putts = st.putts > 0 ? `${st.putts} ${st.putts === 1 ? "PUTT" : "PUTTS"}` : "";
+  const pen = (s: HoleStat["shots"][number]) => (s.pen ? ` +${s.pen}` : "");
+  const short = (name: string) => CLUBS.find((c) => c.name === name)?.short ?? name;
+  const join = (parts: string[]) => [...parts, putts].filter(Boolean).join(" · ");
+  const n = st.shots.length;
+  return [
+    join(st.shots.map((s) => `${s.club.toUpperCase()} ${s.yd}${pen(s)}`)),
+    join(st.shots.map((s) => `${short(s.club)} ${s.yd}${pen(s)}`)),
+    join(st.shots.map((s) => `${s.yd}${pen(s)}`)),
+    join([`${n} ${n === 1 ? "SHOT" : "SHOTS"}`]),
+  ];
+}
+
+/** what went in, when it is worth saying: "CHIPPED IN FROM 18 YD", "HOLED FROM 24 FT" (a hole in one says itself) */
+export function holedLine(st: HoleStat, strokes: number): string {
+  const hd = st.holed;
+  if (!hd || strokes === 1) return "";
+  if (hd.by === "shot") return hd.yd <= 40 ? `CHIPPED IN FROM ${hd.yd} YD` : `HOLED OUT FROM ${hd.yd} YD`;
+  return hd.ft >= 15 ? `HOLED FROM ${hd.ft} FT` : "";
+}
+
 function holeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number) {
   const hs = g.scores[g.scores.length - 1];
   if (!hs) return;
   const d = g.hole.def;
+  const st = g.stats[g.stats.length - 1];
+  const holed = st ? holedLine(st, hs.strokes) : "";
   backdrop(ctx, w, h, 0.35);
-  const bw = Math.min(380, w - 24), bh = 196;
+  // room enough: the hole as it was played, down the left
+  const mw = w >= 480 && h >= 300 && st ? 104 : 0;
+  const bw = Math.min(380 + mw, w - 24), bh = (st ? 222 : 196) + (holed ? 20 : 0);
   // a short canvas (a phone on its side): the card is centred so it all fits
   const x = w / 2 - bw / 2, y = Math.min(Math.max(h * 0.2, 70), Math.max(8, (h - bh) / 2));
   panel(ctx, x, y, bw, bh);
+  if (mw) mapPlayed(ctx, g, { x: x + 10, y: y + 10, w: mw - 10, h: bh - 20 }, st.putts > 0);
+  const cx = x + mw + (bw - mw) / 2, tw = bw - mw - 28;
   ctx.textAlign = "center";
   mono(ctx, 10);
   ctx.fillStyle = MINT;
-  ctx.fillText(`HOLE ${d.n} · ${d.name.toUpperCase()}`, w / 2, y + 28);
-  display(ctx, Math.min(46, Math.floor((bw - 30) / (hs.call.length * 0.62))), 800);
+  ctx.fillText(fit(ctx, [`HOLE ${d.n} · ${d.name.toUpperCase()}`, `HOLE ${d.n}`], tw), cx, y + 28);
+  display(ctx, Math.min(46, Math.floor(tw / (hs.call.length * 0.62))), 800);
   ctx.fillStyle = hs.strokes < d.par ? GOLD : hs.strokes === d.par ? PAPER : "#ff9a8f";
-  ctx.fillText(hs.call, w / 2, y + 86);
+  ctx.fillText(hs.call, cx, y + 86);
   mono(ctx, 11);
   ctx.fillStyle = DIM;
-  ctx.fillText(`${hs.strokes} ${hs.strokes === 1 ? "STROKE" : "STROKES"} · PAR ${d.par}`, w / 2, y + 114);
+  ctx.fillText(`${hs.strokes} ${hs.strokes === 1 ? "STROKE" : "STROKES"} · PAR ${d.par}`, cx, y + 114);
+  let yy = y + 114;
+  if (st) {
+    mono(ctx, 10);
+    ctx.fillStyle = PAPER;
+    ctx.fillText(fit(ctx, shotLine(st), tw), cx, (yy += 26));
+  }
+  if (holed) {
+    mono(ctx, 10);
+    ctx.fillStyle = GOLD;
+    ctx.fillText(holed, cx, (yy += 20));
+  }
+  mono(ctx, 11);
+  ctx.fillStyle = DIM;
   const total = g.scores.reduce((a, b) => a + b.strokes, 0);
   const par = g.defs.slice(0, g.scores.length).reduce((a, b) => a + b.par, 0);
-  ctx.fillText(`ROUND ${total} · ${toPar(total, par)}`, w / 2, y + 134);
+  ctx.fillText(`ROUND ${total} · ${toPar(total, par)}`, cx, (yy += st ? 24 : 20));
   ctx.fillStyle = PAPER;
   const last = g.idx + 1 >= g.defs.length;
   const go = g.touch || w < 560 ? "TAP" : "ANY KEY";
-  ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${g.defs[g.idx + 1].n}`, w / 2, y + 170);
+  ctx.fillText(g.phaseT < 0.5 ? "" : last ? `${go} FOR THE SCORECARD` : `${go} FOR HOLE ${g.defs[g.idx + 1].n}`, cx, yy + 36);
   ctx.textAlign = "left";
 }
 

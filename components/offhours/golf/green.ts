@@ -18,6 +18,8 @@ export const TAP_IN = 0.45;
 /** a tap-in: the putter steps up, taps the ball at TAP_HIT s (the stroke counts then), and it is in the cup at TAP_BEAT s */
 export const TAP_HIT = 0.75;
 export const TAP_BEAT = 1.1;
+/** a putt holed from this far (m, 15 ft) gets a hand from the crowd, on the course */
+export const LONG_PUTT = 15 * 0.3048;
 /** the arrow keys' aim steps, radians: Alt for fine, none for normal, Shift for big */
 export const AIM_STEP = { fine: 0.005, normal: 0.03, big: 0.1 };
 export const MU = 0.065 * 9.81;
@@ -263,6 +265,8 @@ export type Putt = {
   held: number;
   /** a ball at rest by the cup, on its way in as a tap-in */
   tap: { t: number; x: number; y: number } | null;
+  /** how far from the cup the last stroke was struck, m */
+  from: number;
   /** playing a hole of the course: when it is holed (or picked up) `onDone` is told the strokes, and there is no round card */
   course: PuttCourse | null;
   pickedUp: boolean;
@@ -313,6 +317,7 @@ export function newPutt(): Putt {
     arrows: null,
     held: 0,
     tap: null,
+    from: 0,
     course: null,
     pickedUp: false,
     proj: null,
@@ -614,6 +619,7 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
       p.ball.vy = pt.dy * pt.speed;
       p.ball.moving = true;
       p.strokes++;
+      p.from = Math.hypot(H.cup[0] - p.ball.x, H.cup[1] - p.ball.y);
       p.trail = [[p.ball.x, p.ball.y]];
       p.trailAge = 0;
       if (env.play) sfx("putt", pt.pull);
@@ -632,7 +638,10 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     if (ev === "sunk") {
       p.sunkT = t;
       p.dropT = 0;
-      if (env.play) sfx("cup");
+      if (env.play) {
+        sfx("cup");
+        if (p.course && p.from >= LONG_PUTT) sfx("applause", Math.min(1.6, p.from / (LONG_PUTT * 2) + 0.5));
+      }
       finishHole(p, t, env);
     } else if (ev === "lip" && t - p.lipT > 0.6) {
       p.lipT = t;
@@ -659,6 +668,7 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     tp.t += dt;
     if (was < TAP_HIT && tp.t >= TAP_HIT) {
       p.strokes++;
+      p.from = Math.hypot(H.cup[0] - tp.x, H.cup[1] - tp.y);
       if (env.play) sfx("putt", 0.1);
     }
     const u = Math.min(1, Math.max(0, (tp.t - TAP_HIT) / (TAP_BEAT - TAP_HIT)));
