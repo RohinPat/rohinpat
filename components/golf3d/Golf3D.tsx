@@ -22,6 +22,7 @@ import { PuttCam } from "./puttcam";
 import { startLevel } from "./quality";
 import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
+import Backdrop from "./Backdrop";
 
 // The course on its own page, full screen, in 3D. The game is the 2D course's
 // (play.ts): the same holes, swing, physics and putting. The world is drawn by
@@ -31,6 +32,16 @@ import RoundEnd from "./RoundEnd";
 // are this page's. Its code (three.js among it) loads with this page.
 //
 // Modes come from the URL (modes.ts): a round's link replays it. Nothing is stored.
+
+/**
+ * The game's code (three.js among it), asked for as soon as this module runs in the browser rather than once the page has
+ * rendered: on a slow phone that is the difference between the course and a wait.
+ */
+let parts: [Promise<typeof import("@/components/offhours/golf/play")>, Promise<typeof import("@/components/offhours/golf/playDraw")>, Promise<typeof import("./render3d")>] | null = null;
+const loadParts = () => (parts ??= [import("@/components/offhours/golf/play"), import("@/components/offhours/golf/playDraw"), import("./render3d")]);
+if (typeof window !== "undefined") loadParts();
+/** the steps of the load the bar counts: the three parts, the renderer, the first frame of the course */
+const STEPS = 5;
 
 type Mods = { play: typeof import("@/components/offhours/golf/play"); paint: typeof Paint };
 type Loaded = { mods: Mods; gl: CourseRenderer | null; attract: CourseGame; game: CourseGame | null };
@@ -77,6 +88,11 @@ function Course() {
   const say = useCallback((text: string) => setSaid((l) => [...l.slice(-2), { id: (l[l.length - 1]?.id ?? 0) + 1, text }]), []);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
+  const [loadedSteps, setLoadedSteps] = useState(0);
+  /** the course has drawn its first frame: it fades in over the backdrop */
+  const [shown, setShown] = useState(false);
+  /** a mode picked before the course had loaded: it starts when it has */
+  const [waiting, setWaiting] = useState<Setup | null>(null);
   const muted = useSyncExternalStore(onMuteChange, isMuted, () => false);
   const glRef = useRef<HTMLCanvasElement>(null);
   const loaded = useRef<Loaded | null>(null);
@@ -86,7 +102,7 @@ function Course() {
   const expose = useRef(false);
   const live = useRef({ screen, paused });
   live.current = { screen, paused };
-  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0, putt: new PuttCam() });
+  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0, putt: new PuttCam(), shown: false });
 
   // the page is the game: no scrolling under it
   useEffect(() => {
@@ -103,7 +119,9 @@ function Course() {
     expose.current = process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock");
     setShared(setupFromQuery(new URLSearchParams(location.search)));
     let gone = false;
-    Promise.all([import("@/components/offhours/golf/play"), import("@/components/offhours/golf/playDraw"), import("./render3d")])
+    const ps = loadParts();
+    for (const p of ps) p.then(() => !gone && setLoadedSteps((n) => n + 1)).catch(() => {});
+    Promise.all(ps)
       .then(([play, draw, r3]) => {
         if (gone) return;
         const attract = new play.CourseGame({ seed: 1, hills: true });
@@ -116,6 +134,7 @@ function Course() {
           setFailed(true);
         }
         loaded.current = { mods: { play, paint: draw.paint }, gl, attract, game: null };
+        setLoadedSteps((n) => n + 1);
         setReady(true);
         if (expose.current) (window as unknown as { __golf3d?: CourseRenderer | null }).__golf3d = gl;
       })
@@ -130,6 +149,8 @@ function Course() {
     };
   }, [say]);
 
+  const startRef = useRef((s: Setup) => start(s));
+  startRef.current = (s: Setup) => start(s);
   /** a new round: a new game on the same renderer, and the URL that replays it */
   const start = (s: Setup) => {
     const L = loaded.current;
@@ -161,6 +182,16 @@ function Course() {
     if (expose.current) (window as unknown as { __golf?: CourseGame }).__golf = game;
     requestAnimationFrame(() => overlay.current?.focus({ preventScroll: true }));
   };
+  /** a mode from the menu: now, or as soon as the course has loaded */
+  const pick = (s: Setup) => {
+    if (loaded.current) start(s);
+    else setWaiting(s);
+  };
+  useEffect(() => {
+    if (!ready || !waiting) return;
+    setWaiting(null);
+    startRef.current(waiting);
+  }, [ready, waiting]);
   const toTitle = () => {
     setPaused(false);
     setScreen("title");
@@ -204,6 +235,11 @@ function Course() {
       if (!L) return;
       const F = fx.current;
       const g = L.game;
+      // the first frame of the course (the title's, or a round picked while it loaded) is drawn below: it fades in at the next
+      if (!F.shown) {
+        F.shown = true;
+        requestAnimationFrame(() => setShown(true));
+      }
       // the wind in the trees while a round is played
       windBed(g && live.current.screen === "play" && !live.current.paused && g.phase !== "round-card" ? Math.hypot(g.wind[0], g.wind[1]) : 0);
       if (!g || live.current.screen === "title") {
@@ -317,7 +353,7 @@ function Course() {
     </button>
   );
   const leave = (
-    <Link href="/interests" aria-label="Leave the course" className={`${sub(false)} w-8 !px-0 inline-flex items-center justify-center`}>
+    <Link href="/interests" prefetch={false} aria-label="Leave the course" className={`${sub(false)} w-8 !px-0 inline-flex items-center justify-center`}>
       ✕
     </Link>
   );
@@ -375,8 +411,13 @@ function Course() {
           {leave}
         </div>
       </div>
-      <div className="relative flex-1 min-h-0 bg-[#d4e6e6]" data-golf-phase={ready && screen === "play" ? phase : undefined} data-golf-screen={ready ? screen : undefined}>
-        <canvas ref={glRef} aria-hidden="true" className="absolute inset-0 w-full h-full" />
+      <div className="relative flex-1 min-h-0" data-golf-phase={ready && screen === "play" ? phase : undefined} data-golf-screen={ready ? screen : undefined}>
+        <Backdrop />
+        <canvas
+          ref={glRef}
+          aria-hidden="true"
+          className={`absolute inset-0 w-full h-full motion-safe:transition-opacity motion-safe:duration-700 ${shown && !failed ? "opacity-100" : "opacity-0"}`}
+        />
         <canvas
           ref={overlay}
           data-autofocus
@@ -395,19 +436,36 @@ function Course() {
               <h1 className="text-[56px] sm:text-[72px] leading-none font-extrabold tracking-tight text-[#f2ead7] drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)]">Golf</h1>
               <div ref={menu} className="mt-6 flex flex-col gap-2">
                 {shared && (
-                  <button type="button" disabled={!ready} onClick={() => start(shared)} className={`${menuBtn} border-[#8ad9a8]/70`}>
+                  <button type="button" aria-busy={waiting === shared} onClick={() => pick(shared)} className={`${menuBtn} border-[#8ad9a8]/70`}>
                     <span className="text-lg font-bold">Play this round</span>
                     <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8ad9a8]">{modeName(shared)}</span>
                   </button>
                 )}
                 {MODES.map((m) => (
-                  <button key={m.mode} type="button" disabled={!ready} onClick={() => start(setupFor(m.mode))} className={menuBtn}>
+                  <button
+                    key={m.mode}
+                    type="button"
+                    aria-busy={waiting?.mode === m.mode && waiting !== shared}
+                    onClick={() => pick(setupFor(m.mode))}
+                    className={`${menuBtn} ${waiting?.mode === m.mode && waiting !== shared ? "border-[#8ad9a8]/70" : ""}`}
+                  >
                     <span className="text-lg font-bold">{m.label}</span>
                     <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#b5b6ab] group-hover:text-[#8ad9a8]">{m.sub(day)}</span>
                   </button>
                 ))}
               </div>
-              {!ready && <p role="status" className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]/80">Loading</p>}
+              {/* how much of the course has loaded: under the menu, out of its flow, gone when the course is up */}
+              <div
+                role="progressbar"
+                aria-label="Loading the course"
+                aria-valuemin={0}
+                aria-valuemax={STEPS}
+                aria-valuenow={shown ? STEPS : loadedSteps}
+                aria-hidden={shown}
+                className={`relative mt-3 h-0.5 rounded-full bg-white/10 overflow-hidden transition-opacity duration-500 ${shown ? "opacity-0" : "opacity-100"}`}
+              >
+                <div className="absolute inset-y-0 left-0 bg-[#8ad9a8] transition-[width] duration-500" style={{ width: `${((shown ? STEPS : loadedSteps) / STEPS) * 100}%` }} />
+              </div>
             </div>
           </div>
         )}

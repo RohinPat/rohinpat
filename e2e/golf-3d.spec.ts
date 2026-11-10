@@ -170,6 +170,27 @@ test("by the keyboard alone: the site under the course is out of reach, a club c
   await expect(course).toBeFocused();
 });
 
+test("a mode picked while the course is still loading starts as soon as it has", async ({ page }) => {
+  // the game's own code (asked for once the page runs, so not in the page's HTML) is held back until the pick
+  const html = await (await page.request.get("/golf?linkmock")).text();
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route(/\/_next\/static\/chunks\/.*\.js/, async (route) => {
+    const file = new URL(route.request().url()).pathname.split("/").pop()!;
+    if (!html.includes(file)) await held;
+    await route.continue();
+  });
+  await page.goto("/golf?linkmock", { waitUntil: "domcontentloaded" });
+  const quick = page.getByRole("button", { name: /Quick 3/ });
+  await quick.click();
+  await expect(quick).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("progressbar", { name: "Loading the course" })).toBeVisible();
+  expect(await page.locator("[data-golf-screen]").count()).toBe(0);
+  release();
+  await expect(page.locator("[data-golf-screen=play]")).toBeVisible(SLOW);
+  await expect(page).toHaveURL(/\/golf\?quick=\d+/);
+});
+
 test("the 3D course's controls pass axe", async ({ page }) => {
   await page.goto("/golf");
   await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
