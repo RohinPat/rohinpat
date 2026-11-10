@@ -1,24 +1,33 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-// Golf: the course (Play). One hole is played start to finish with the keyboard in the real page; the numbers behind
-// it (the bots, the lies, the scoring) are in tests/unit/golf-*.test.ts. Kept short: a bounded loop, the ball sped
-// up with a press while it flies.
+// Golf: the course, on its own page (/golf). One hole is played start to finish with the keyboard in the real page;
+// the numbers behind it (the bots, the lies, the scoring) are in tests/unit/golf-*.test.ts. Kept short: a bounded
+// loop, the ball sped up with a press while it flies.
 
 const SLOW = { timeout: 15_000 };
-const live = (p: Page) => p.locator('[role="dialog"] p[aria-live="polite"]');
+/** the last thing the game said (the page reads them out as a log) */
+const live = (p: Page) => p.locator('[role="log"] p').last();
+/** everything it said lately, oldest first */
+const said = (p: Page) => p.locator('[role="log"] p').allTextContents();
 const phase = (p: Page) => p.locator("[data-golf-phase]").getAttribute("data-golf-phase");
 const axe = (p: Page) => new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
 
+/** past the tee card with a press. Done in the page, so the press cannot land after the card has gone by itself
+ *  (CI's software renderer draws a few frames a second, and a press on the tee is a swing) */
+async function pastTeeCard(p: Page) {
+  await p.evaluate(() => {
+    const g = (window as unknown as Win).__golf as unknown as { phase: string; key(e: { key: string }, d: boolean): void };
+    if (g.phase === "tee-card") g.key({ key: " " }, true);
+  });
+  await expect.poll(() => phase(p), SLOW).toBe("ready");
+}
+
 async function openPlay(p: Page) {
-  await p.goto("/interests?linkmock");
-  await p.locator('[data-piece="golf"]').click();
-  await expect(p.getByRole("dialog")).toBeVisible(SLOW);
-  await expect(p.locator("canvas[data-autofocus]")).toBeVisible();
-  // Play opens first, then Putt and the driving range (practice)
-  await expect(p.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(p.getByRole("dialog").getByRole("button", { name: /^(Play|Putt|Driving range)$/ })).toHaveText(["Play", "Putt", "Driving range"]);
+  await p.goto("/golf?linkmock");
+  await p.getByRole("button", { name: /Nine holes/ }).click();
   await expect(p.locator("[data-golf-phase]")).toBeVisible(SLOW);
+  await p.waitForFunction(() => !!(window as unknown as { __golf?: unknown }).__golf, null, SLOW);
   await p.locator("canvas[data-autofocus]").focus();
 }
 
@@ -72,14 +81,17 @@ test("play hole 1 with the keyboard, and the page stays clean on the tee card, i
   let done = false;
   for (const start = Date.now(); Date.now() - start < 70_000 && !done; ) {
     const ph = await phase(page);
-    const said = (await live(page).textContent()) ?? "";
-    if (/^Hole 1: \d+ strokes?, /.test(said)) {
+    const lines = await said(page);
+    const last = lines[lines.length - 1] ?? "";
+    /** the latest line that says it */
+    const latest = (re: RegExp) => lines.map((l) => l.match(re)).filter(Boolean).pop();
+    if (/^Hole 1: \d+ strokes?, /.test(last)) {
       done = true;
       break;
     }
     if (ph === "tee-card") await page.keyboard.press("Space");
     else if (ph === "ready") {
-      const m = said.match(/(\d+) yards to the pin/);
+      const m = latest(/(\d+) yards to the pin/);
       await swing(page, m ? Number(m[1]) : 250);
     } else if (ph === "swing") await page.waitForTimeout(150);
     else if (ph === "fly") {
@@ -91,10 +103,10 @@ test("play hole 1 with the keyboard, and the page stays clean on the tee card, i
       await expect.poll(() => phase(page), { timeout: 12_000, intervals: [100] }).not.toBe("fly");
     } else if (ph === "rest") await page.keyboard.press("Space");
     else if (ph === "putt") {
-      const f = said.match(/(\d+) feet to the pin/);
+      const f = latest(/(\d+) feet to the pin/);
       await putt(page, f ? Number(f[1]) : 12);
       // until it stops (it says how far is left) or goes in
-      await expect.poll(async () => (await phase(page)) !== "putt" || ((await live(page).textContent()) ?? "") !== said, { timeout: 12_000, intervals: [100] }).toBe(true);
+      await expect.poll(async () => (await phase(page)) !== "putt" || ((await live(page).textContent()) ?? "") !== last, { timeout: 12_000, intervals: [100] }).toBe(true);
     } else await page.waitForTimeout(150);
   }
   // the live region reports the hole done; the card is up
@@ -115,8 +127,7 @@ test("reduced motion: the course still plays a tee shot", async ({ browser, base
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await openPlay(page);
-  await page.keyboard.press("Space"); // the tee card
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await swing(page, 250);
   await expect.poll(() => phase(page), SLOW).toBe("fly");
   await page.keyboard.press("Space");
@@ -138,28 +149,21 @@ test("phone size: no sideways scroll, and the chips fit", async ({ browser, base
   await context.close();
 });
 
-test("a phone on its side: the heading shrinks, the chips and clubs keep to one row, and a drag swings", async ({ browser, baseURL }) => {
+test("a phone on its side: the clubs and the page's buttons keep to one row, and a drag swings", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, viewport: { width: 844, height: 390 }, hasTouch: true });
   const page = await context.newPage();
-  await page.goto("/interests?linkmock");
-  await page.locator('[data-piece="golf"]').click();
+  await openPlay(page);
   const canvas = page.locator("canvas[data-autofocus]");
-  await expect(canvas).toBeVisible(SLOW);
-  await expect(page.locator("[data-golf-phase]")).toBeVisible(SLOW);
-  // the hints under the heading go, and "Driving range" is "Range"
-  await expect(page.getByRole("dialog").getByText("Putt: pull back and let go")).toBeHidden();
-  await expect(page.getByRole("button", { name: "range", exact: true })).toBeVisible();
   const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
   expect(m.sw).toBeLessThanOrEqual(m.cw);
-  const play = (await page.getByRole("button", { name: "Play", exact: true }).boundingBox())!;
-  const sw = (await page.getByRole("button", { name: "Sand wedge" }).boundingBox())!;
-  expect(Math.abs(play.y - sw.y)).toBeLessThan(6);
-  // the course keeps most of the height (it was 161 px of 390)
+  const driver = (await page.getByRole("button", { name: "Driver" }).boundingBox())!;
+  const leave = (await page.getByRole("link", { name: "Leave the course" }).boundingBox())!;
+  expect(Math.abs(driver.y - leave.y)).toBeLessThan(6);
+  // the course keeps most of the height
   const box = (await canvas.boundingBox())!;
   expect(box.height).toBeGreaterThan(280);
   // a drag down and back up off the tee is a swing
-  await page.evaluate(() => { const g = (window as unknown as Win).__golf; if (g.phase === "tee-card") (g as unknown as { key(e: { key: string }, d: boolean): void }).key({ key: " " }, true); });
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   const x = box.x + box.width / 2, y0 = box.y + box.height * 0.35;
   await page.mouse.move(x, y0);
   await page.mouse.down();
@@ -183,8 +187,7 @@ test("the map: open on a wide screen, M and the chip toggle it, a tap on it sets
   await page.keyboard.press("m");
   await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect(live(page)).toHaveText("Map open.");
-  await page.keyboard.press("Space"); // the tee card
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await expect.poll(async () => (await state(page)).view !== null, SLOW).toBe(true);
   const before = await state(page);
   const box = (await page.locator("canvas[data-autofocus]").boundingBox())!;
@@ -203,8 +206,7 @@ test("phone size: the Map chip opens the map across the screen, and a tap on it 
   await openPlay(page);
   const chip = page.getByRole("button", { name: "Map", exact: true });
   await expect(chip).toHaveAttribute("aria-pressed", "false");
-  await page.keyboard.press("Space");
-  await expect.poll(() => phase(page), SLOW).toBe("ready");
+  await pastTeeCard(page);
   await chip.click();
   await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await state(page)).view !== null, SLOW).toBe(true);
@@ -223,23 +225,24 @@ test("phone size: the Map chip opens the map across the screen, and a tap on it 
 
 test("the round card: total, over or under par, the holes, play again; axe is clean", async ({ page }) => {
   await openPlay(page);
-  // the mock-link build exposes the game: play the six holes out in one go (the holes themselves are covered above and in the unit tests)
-  await page.evaluate(() => {
-    const g = (window as unknown as { __golf: Record<string, (...a: unknown[]) => void> }).__golf;
-    const strokes = [4, 3, 5, 6, 3, 5];
-    strokes.forEach((s, i) => {
+  // the mock-link build exposes the game: play the nine holes out in one go (the holes themselves are covered above and in the unit tests)
+  const par = await page.evaluate(() => {
+    const g = (window as unknown as { __golf: Record<string, (...a: unknown[]) => void> & { defs: { par: number }[] } }).__golf;
+    g.defs.forEach((d, i) => {
       g.startHole(i);
-      g.holeDone(s, false);
-      if (i < 5) g.nextHole();
+      g.holeDone(d.par + (i === 0 ? 1 : 0), false);
+      if (i < g.defs.length - 1) g.nextHole();
     });
     g.nextHole();
+    return g.defs.reduce((a, d) => a + d.par, 0);
   });
   await expect.poll(() => phase(page), SLOW).toBe("round-card");
-  await expect(live(page)).toHaveText("Round: 26 strokes, 3 over par.");
+  await expect(live(page)).toHaveText(`Round: ${par + 1} strokes, 1 over par.`);
+  const card = page.getByRole("dialog", { name: "Round over" });
+  await expect(card.getByRole("button", { name: "Play again" })).toBeFocused();
   expect((await axe(page)).violations.map((x) => x.id)).toEqual([]);
-  // a press after the guard time plays again, from the first tee
-  await page.waitForTimeout(1300);
-  await page.keyboard.press("Space");
+  // play again, from the first tee
+  await page.keyboard.press("Enter");
   await expect(live(page)).toHaveText(/^Hole 1, 340 yards, par 4\. /, SLOW);
   expect(await phase(page)).toBe("tee-card");
 });

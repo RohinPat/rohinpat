@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { useRemote } from "@/lib/link/remote";
+import { useRouter } from "next/navigation";
+import { useRemote, useRemoteList } from "@/lib/link/remote";
 import PairChip from "@/components/link/PairChip";
 import { useCanvas } from "@/components/offhours/useCanvas";
 import { isMuted, onMuteChange, setMuted } from "@/components/offhours/audio";
@@ -117,7 +118,10 @@ function Course() {
     touch.current = window.matchMedia("(pointer: coarse)").matches;
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     expose.current = process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock");
-    setShared(setupFromQuery(new URLSearchParams(location.search)));
+    const q = new URLSearchParams(location.search);
+    setShared(setupFromQuery(q));
+    // from a phone's Play (Off hours' golf): a round of nine starts as soon as the course has loaded
+    if (q.has("start")) setWaiting(setupFromQuery(q) ?? setupFor("full"));
     let gone = false;
     const ps = loadParts();
     for (const p of ps) p.then(() => !gone && setLoadedSteps((n) => n + 1)).catch(() => {});
@@ -215,6 +219,9 @@ function Course() {
       else if (name === "golf-sync" || name === "golf-pick") syncRef.current();
     },
   });
+  // the phone's Back (or another game picked on it) goes back to Off hours, where its list is
+  const router = useRouter();
+  useRemoteList({ onOpen: (id) => id !== "golf" && router.push("/interests"), open: "golf" });
   const syncRef = useRef(() => {});
   syncRef.current = () => {
     const G = loaded.current?.game;
