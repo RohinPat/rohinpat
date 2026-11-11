@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CourseGame, REST_HOLD, STEP, type Phase } from "@/components/offhours/golf/play";
+import { CourseGame, REST_HOLD, STEP, meterWords, type Phase } from "@/components/offhours/golf/play";
 import { CLUBS } from "@/components/offhours/golf/flight";
 import { buildHole, HOLE_DEFS, type Blob } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
@@ -141,6 +141,33 @@ describe("a hole, from the tee card", () => {
     run(g, () => g.phase === "rest");
     expect(g.said[g.said.length - 1]).toMatch(/^Driver: \d+ yards carry, \d+ total, in the fairway\. \d+ yards to the pin\.$/);
     expect(g.result).toMatch(/^FAIRWAY · \d+ YD TO GO$/);
+  });
+  it("a keyboard swing ticks once as it passes the meter's mark, and says its power, timing and strike after the ball", () => {
+    const g = onTee();
+    expect(g.club).toBe(g.meterSuggest().club);
+    g.key({ key: " " }, true);
+    expect(g.sw.mark).toBeCloseTo(g.meterSuggest().power, 5);
+    expect(g.sw.marked).toBe(false);
+    run(g, () => g.sw.b >= g.sw.mark);
+    g.step(STEP);
+    expect(g.sw.marked).toBe(true);
+    g.key({ key: " " }, true); // the top, right at the mark
+    run(g, () => g.sw.t >= g.sw.dur - STEP / 2);
+    g.key({ key: " " }, true); // the strike
+    run(g, () => g.phase === "rest");
+    expect(g.said[g.said.length - 1]).toMatch(/^Driver: \d+ yards carry, .* to the pin\. Power \d+, (on time|late|early), (pure|solid|thin|fat)\.$/);
+  });
+  it("a club that is not the one the meter marks gets no tick", () => {
+    const g = onTee();
+    g.key({ key: "ArrowDown" }, true);
+    g.key({ key: " " }, true);
+    expect(g.sw.mark).toBe(0);
+  });
+  it("puts the meter's words together", () => {
+    expect(meterWords(0.92, false, 0.004, "SOLID")).toBe(" Power 92, on time, solid.");
+    expect(meterWords(0.8, false, 0.06, "THIN")).toBe(" Power 80, late, thin.");
+    expect(meterWords(0.8, false, -0.06, "PURE")).toBe(" Power 80, early, pure.");
+    expect(meterWords(1.3, true, null, "FAT")).toBe(" Power 115, over the top, fat.");
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AIM_STEP, CUP_R, HOLES, MU, TAP_IN, makeHole, newPutt, puttDraw, puttKey, stepBall, type Putt, type PuttEnv } from "@/components/offhours/golf/green";
+import { AIM_STEP, CUP_R, HOLES, MU, TAP_IN, makeHole, newPutt, puttDraw, puttKey, puttPowerFor, stepBall, type Putt, type PuttEnv } from "@/components/offhours/golf/green";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
 // Putting, with the ball model the game itself runs.
@@ -114,6 +114,27 @@ describe("tap-in", () => {
     expect(p.tap).toBeNull();
     expect(p.scores[0]).toBe(7);
     expect(p.call).toBe("PICK UP");
+  });
+});
+
+describe("the keyboard putt's tick", () => {
+  it("ticks once as held Space passes the pace to the cup", () => {
+    const p = newPutt();
+    const e = env();
+    puttKey(p, key(" "), true, 1, e);
+    expect(p.kCharging).toBe(true);
+    const d = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
+    expect(p.kMark).toBeCloseTo(puttPowerFor(d), 6);
+    expect(p.kMark).toBeGreaterThan(0.05);
+    expect(p.kMark).toBeLessThan(1);
+    let t = 1;
+    while (p.kPower < p.kMark - 0.02) {
+      puttDraw(fakeCtx(), p, 1200, 800, 1 / 60, t, e, ptr);
+      t += 1 / 60;
+      expect(p.kMarked).toBe(false);
+    }
+    run(p, e, 0.1, t);
+    expect(p.kMarked).toBe(true);
   });
 });
 

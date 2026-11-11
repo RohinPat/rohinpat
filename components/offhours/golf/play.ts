@@ -9,7 +9,7 @@ import type { RemoteShot } from "./remoteSwing";
 import { YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { CHIP_YD, carryIn, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, METER_SQUARE, carryIn, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -119,14 +119,22 @@ type Swing = {
   lastL: number;
   /** a chip meter (set when the swing began) */
   chip: boolean;
+  /** the meter's mark, the power that carries the distance (0: this club has none); it ticks once on the way up */
+  mark: number;
+  marked: boolean;
 };
-const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0, chip: false });
+const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0, chip: false, mark: 0, marked: false });
 
 export type Card = { club: Club; shot: Shot; label: string; t: number; /** a meter swing: seconds off the line, + late */ timing: number | null };
 
 type V3 = [number, number, number];
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** a keyboard swing, said: the power, the timing and the strike (" Power 92, late, thin.") */
+export function meterWords(peak: number, over: boolean, timing: number | null, label: string) {
+  const when = over ? "over the top" : timing === null ? "" : Math.abs(timing) <= METER_SQUARE ? "on time" : timing > 0 ? "late" : "early";
+  return ` Power ${Math.round(Math.min(1.15, peak) * 100)}${when ? `, ${when}` : ""}, ${label.toLowerCase()}.`;
+}
 /** how long the aim has to rest before it is said, s */
 const AIM_SAY_S = 0.6;
 const feet = (n: number) => `${n} ${n === 1 ? "foot" : "feet"}`;
@@ -183,6 +191,8 @@ export class CourseGame {
   /** the last shot ended in water or the trees: the ball is where it was dropped, not where it stopped */
   dropped = false;
   timing: number | null = null;
+  /** what a meter swing was, said after where the ball went (the card shows it) */
+  private strikeSay = "";
   /** the shots struck this visit (hints go after a few) */
   taken = 0;
   /** a phone is paired, so the swing hints for a mouse or the keys stay away */
@@ -634,6 +644,11 @@ export class CourseGame {
     this.trail = [];
     this.fast = false;
     this.sw = { ...emptySwing(), src, sub: "back", chip: this.yardsToPin() <= CHIP_YD, tStart: this.t, x0: x, y0: y, peakY: y, xNow: x, yNow: y, xTop: x, lastL: swingLen(this.h) };
+    if (src === "meter") {
+      // the same mark the meter draws: only when the club in hand is the one that carries it
+      const sg = this.meterSuggest();
+      if (sg.club === this.club) this.sw.mark = sg.power;
+    }
     this.phase = "swing";
     this.phaseT = 0;
     this.opts.onPhase?.("swing");
@@ -688,6 +703,7 @@ export class CourseGame {
     this.taken++;
     this.splash = null;
     this.card = { club, shot, label: k.label, t: 0, timing: this.timing };
+    this.strikeSay = s.src === "meter" ? meterWords(s.peak, s.over, this.timing, k.label) : "";
     this.phase = "fly";
     this.phaseT = 0;
     this.opts.onPhase?.("fly");
@@ -773,6 +789,11 @@ export class CourseGame {
     if (s.src !== "gesture") {
       if (s.sub === "back") {
         s.b += dt / (s.src === "remote" ? 0.42 : SWING_BACK_S);
+        // the meter's mark, to the ear: a tick as the backswing passes the power the shot needs
+        if (s.mark && !s.marked && s.b >= s.mark) {
+          s.marked = true;
+          if (this.opts.sound) sfx("tick");
+        }
         if (s.src === "remote" && s.b >= s.autoPeak) {
           s.peak = s.autoPeak;
           s.dur = 0.3;
@@ -870,7 +891,7 @@ export class CourseGame {
       this.result = `${LIE_CAPS[sh.surface] ?? ""} · ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} FT` : `${Math.round(toPin)} YD`} TO GO`;
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? feet(ft) : yards(Math.round(toPin))} to the pin.`;
     }
-    this.say(sh.tree ? `${msg} Hit a tree.` : msg);
+    this.say(`${sh.tree ? `${msg} Hit a tree.` : msg}${this.strikeSay}`);
     // a great one is played again
     this.replay = this.replayNext = null;
     if (this.opts.replays && !drop) {
