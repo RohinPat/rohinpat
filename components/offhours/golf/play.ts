@@ -2,14 +2,14 @@ import { seeded } from "../useCanvas";
 import { CLUBS, at, simulate, type Club, type Shot, type Surface } from "./flight";
 import { HOLE_DEFS, buildHole, type BuiltHole, type HoleDef } from "./course";
 import { blend, poseFor, type Pose } from "./golfer";
-import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, type Putt, type PuttEnv } from "./green";
+import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, zone, type Putt, type PuttEnv } from "./green";
 import { bothLies, dropFor, lieFor, slopeLie, slopeWords } from "./lie";
 import { FLAT, terrainOf, type Terrain } from "./terrain";
 import type { RemoteShot } from "./remoteSwing";
-import { YD, newCam, type Cam } from "./scene";
+import { TARGETS, YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
 import { sfx } from "./sound";
-import { CHIP_YD, carryIn, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
+import { CHIP_YD, METER_SQUARE, carryIn, chipPowerFor, fullCarry, greenRoll, lieCarry, meterFace, sfOf, sfOfChip, strikeNumbers, suggestCourse, type SwingSrc } from "./swing";
 
 // The course as a game, with no screen: a hole at a time, a shot at a time.
 // Phases: tee-card, ready, swing (back, then down), fly, rest, putt (the
@@ -46,7 +46,15 @@ export type CourseOpts = {
   hills?: boolean;
   /** a great shot is played again before the next one (the 3D page, which has a camera for it) */
   replays?: boolean;
+  /**
+   * practice, not a round: "range" hits balls from the tee of RANGE_DEF at its target flags (the club picks the flag),
+   * "green" putts balls from around the cups of the holes' greens. No cards, no score.
+   */
+  practice?: "range" | "green";
 };
+
+/** a practice green gives this many balls before it moves on to the next hole's */
+export const GREEN_BALLS = 3;
 
 /** a shot played again: the flight from `t` to `end` (its own clock, s), and why it earned it */
 export type Replay = { shot: Shot; t: number; end: number; why: "holed" | "close" | "long" };
@@ -119,14 +127,22 @@ type Swing = {
   lastL: number;
   /** a chip meter (set when the swing began) */
   chip: boolean;
+  /** the meter's mark, the power that carries the distance (0: this club has none); it ticks once on the way up */
+  mark: number;
+  marked: boolean;
 };
-const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0, chip: false });
+const emptySwing = (): Swing => ({ src: "meter", sub: "back", b: 0, peak: 0, t: 0, tStart: 0, x0: 0, y0: 0, peakY: 0, xTop: 0, xNow: 0, yNow: 0, moved: 0, pts: [], revPose: null, dur: 0.4, autoPeak: 1, autoFace: 0, remote: null, over: false, tRev: 0, lastL: 0, chip: false, mark: 0, marked: false });
 
 export type Card = { club: Club; shot: Shot; label: string; t: number; /** a meter swing: seconds off the line, + late */ timing: number | null };
 
 type V3 = [number, number, number];
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** a keyboard swing, said: the power, the timing and the strike (" Power 92, late, thin.") */
+export function meterWords(peak: number, over: boolean, timing: number | null, label: string) {
+  const when = over ? "over the top" : timing === null ? "" : Math.abs(timing) <= METER_SQUARE ? "on time" : timing > 0 ? "late" : "early";
+  return ` Power ${Math.round(Math.min(1.15, peak) * 100)}${when ? `, ${when}` : ""}, ${label.toLowerCase()}.`;
+}
 /** how long the aim has to rest before it is said, s */
 const AIM_SAY_S = 0.6;
 const feet = (n: number) => `${n} ${n === 1 ? "foot" : "feet"}`;
@@ -183,6 +199,8 @@ export class CourseGame {
   /** the last shot ended in water or the trees: the ball is where it was dropped, not where it stopped */
   dropped = false;
   timing: number | null = null;
+  /** what a meter swing was, said after where the ball went (the card shows it) */
+  private strikeSay = "";
   /** the shots struck this visit (hints go after a few) */
   taken = 0;
   /** a phone is paired, so the swing hints for a mouse or the keys stay away */
@@ -208,6 +226,10 @@ export class CourseGame {
   /** the end of the round */
   round: { total: number; par: number; isBest: boolean; previous: number | null; best: number } | null = null;
   said: string[] = [];
+  /** the range: the target flag aimed at (scene.ts TARGETS) */
+  rangeTarget = 2;
+  /** practice: balls hit on the range, or putted out on the green */
+  balls = 0;
   /** the canvas, for the swing's pixel scale */
   w = 1440;
   h = 900;
@@ -269,11 +291,98 @@ export class CourseGame {
     this.putt.course = null;
     this.stat = newStat();
     this.puttFrom = -1;
-    this.setPhase("tee-card");
+    if (this.opts.practice === "green") return this.practicePutt();
+    this.setPhase(this.opts.practice ? "ready" : "tee-card");
     this.prepareShot(true);
     const d = this.hole.def;
     const sp = Math.hypot(this.wind[0], this.wind[1]);
-    this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
+    if (this.opts.practice === "range") this.say(`Range. ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
+    else this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
+  }
+
+  // ------------------------------------------------------------ practice
+  /** "7 Iron, the 140 yard flag." */
+  private flagWords() {
+    return `${CLUBS[this.club].name}, the ${TARGETS[this.rangeTarget].yd} yard flag.`;
+  }
+  /** the range: the flag the club in hand carries nearest to */
+  private flagFor(club: number) {
+    const carry = fullCarry(club) * this.carryK(club);
+    let best = 0;
+    TARGETS.forEach((t, i) => {
+      if (Math.abs(t.yd - carry) < Math.abs(TARGETS[best].yd - carry)) best = i;
+    });
+    return best;
+  }
+  /** the range: aim at a target flag */
+  setTarget(i: number) {
+    this.rangeTarget = clamp(Math.round(i), 0, TARGETS.length - 1);
+    this.yawT = this.baseYaw();
+  }
+  /** the range: the next ball, back on the tee, the club and the flag as they were */
+  private nextBall() {
+    this.ball = [0, 0];
+    this.lie = "fairway";
+    this.strokes = 0;
+    this.shot = null;
+    this.trail = [];
+    this.legs = [];
+    this.holedOut = false;
+    this.dropped = false;
+    this.camReady = false;
+    const drift = 1 + (this.rng() * 2 - 1) * 0.2;
+    this.wind = [this.hole.wind[0] * drift, this.hole.wind[1] * drift];
+    this.yawT = this.yaw = this.baseYaw();
+    this.pose = poseFor({ kind: "back", u: 0 }, CLUBS[this.club]);
+    this.sw = emptySwing();
+    this.setPhase("ready");
+    this.say(this.flagWords());
+  }
+  /**
+   * the practice green: a ball somewhere on this hole's green, 4 to 30 ft from the cup; after GREEN_BALLS are holed,
+   * the next hole's green
+   */
+  private practicePutt() {
+    if (this.balls > 0 && this.balls % GREEN_BALLS === 0) {
+      this.idx = (this.idx + 1) % this.defs.length;
+      this.hole = buildHole(this.defs[this.idx]);
+      this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
+      this.camReady = false;
+    }
+    const H = this.hole.green;
+    let spot: [number, number] = [H.cup[0], H.cup[1] + 2];
+    for (let k = 0; k < 60; k++) {
+      const r = 1.2 + this.rng() * 7.8, a = this.rng() * Math.PI * 2;
+      const gx = H.cup[0] + Math.cos(a) * r, gy = H.cup[1] + Math.sin(a) * r;
+      if (zone(H, gx, gy) === 0) {
+        spot = [gx, gy];
+        break;
+      }
+    }
+    this.ball = this.hole.fromGreen(spot[0], spot[1]);
+    this.lie = "green";
+    this.strokes = 0;
+    this.puttRolling = false;
+    puttBegin(
+      this.putt,
+      H,
+      spot,
+      0,
+      {
+        pickUp: 99,
+        practice: true,
+        onDone: (s) => {
+          this.balls++;
+          this.say(`In, ${s === 1 ? "one putt" : `${s} putts`}.`);
+          this.practicePutt();
+        },
+      },
+      this.t,
+      this.opts.reduce,
+    );
+    this.setPhase("putt");
+    const ft = Math.round(Math.hypot(H.cup[0] - spot[0], H.cup[1] - spot[1]) * 3.281);
+    this.say(`Green ${this.hole.def.n}. ${feet(ft)} to the cup.`);
   }
 
   /** the aim, the club and the wind for the next shot from the ball */
@@ -291,6 +400,10 @@ export class CourseGame {
 
   /** where the aim points: the landing zone for a tee shot on a par 4 or 5, else the pin (metres) */
   target(): [number, number] {
+    if (this.opts.practice === "range") {
+      const t = TARGETS[this.rangeTarget];
+      return [t.gx, t.gz];
+    }
     const def = this.hole.def;
     if (this.strokes === 0 && def.par > 3) return this.hole.landing;
     return this.downTheFairway() ?? this.hole.pin;
@@ -427,6 +540,11 @@ export class CourseGame {
     if (c === this.club) return;
     this.club = c;
     this.opts.onClub?.(c);
+    if (this.opts.practice === "range" && byPlayer && this.phase !== "swing" && this.phase !== "fly") {
+      this.setTarget(this.flagFor(c));
+      this.say(`${CLUBS[c].name}, ${Math.round(fullCarry(c) * this.carryK(c))} yards. The ${TARGETS[this.rangeTarget].yd} yard flag.`);
+      return;
+    }
     if (byPlayer) this.say(`${CLUBS[c].name}, ${Math.round(fullCarry(c) * this.carryK(c))} yards.`);
   }
   /** nudge the aim, radians; where it points is said once the nudging stops */
@@ -634,6 +752,11 @@ export class CourseGame {
     this.trail = [];
     this.fast = false;
     this.sw = { ...emptySwing(), src, sub: "back", chip: this.yardsToPin() <= CHIP_YD, tStart: this.t, x0: x, y0: y, peakY: y, xNow: x, yNow: y, xTop: x, lastL: swingLen(this.h) };
+    if (src === "meter") {
+      // the same mark the meter draws: only when the club in hand is the one that carries it
+      const sg = this.meterSuggest();
+      if (sg.club === this.club) this.sw.mark = sg.power;
+    }
     this.phase = "swing";
     this.phaseT = 0;
     this.opts.onPhase?.("swing");
@@ -688,6 +811,7 @@ export class CourseGame {
     this.taken++;
     this.splash = null;
     this.card = { club, shot, label: k.label, t: 0, timing: this.timing };
+    this.strikeSay = s.src === "meter" ? meterWords(s.peak, s.over, this.timing, k.label) : "";
     this.phase = "fly";
     this.phaseT = 0;
     this.opts.onPhase?.("fly");
@@ -773,6 +897,11 @@ export class CourseGame {
     if (s.src !== "gesture") {
       if (s.sub === "back") {
         s.b += dt / (s.src === "remote" ? 0.42 : SWING_BACK_S);
+        // the meter's mark, to the ear: a tick as the backswing passes the power the shot needs
+        if (s.mark && !s.marked && s.b >= s.mark) {
+          s.marked = true;
+          if (this.opts.sound) sfx("tick");
+        }
         if (s.src === "remote" && s.b >= s.autoPeak) {
           s.peak = s.autoPeak;
           s.dur = 0.3;
@@ -862,6 +991,15 @@ export class CourseGame {
         sfx("cup");
         sfx("applause", 1);
       }
+    } else if (this.opts.practice === "range") {
+      this.ball = end;
+      this.lie = sh.surface;
+      const near = nearestTarget(end);
+      const t = TARGETS[near.i];
+      const on = sh.surface === "green" || sh.surface === "fringe";
+      const ft = Math.round((near.d / YD) * 3);
+      this.result = on ? `${t.yd} GREEN · ${ft} FT` : `${Math.round(near.d / YD)} YD FROM THE ${t.yd}`;
+      msg += on ? `, on the ${t.yd} yard green, ${feet(ft)} from the flag.` : `. ${yards(Math.round(near.d / YD))} from the ${t.yd} yard flag.`;
     } else {
       this.ball = end;
       this.lie = sh.surface;
@@ -870,10 +1008,10 @@ export class CourseGame {
       this.result = `${LIE_CAPS[sh.surface] ?? ""} · ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} FT` : `${Math.round(toPin)} YD`} TO GO`;
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? feet(ft) : yards(Math.round(toPin))} to the pin.`;
     }
-    this.say(sh.tree ? `${msg} Hit a tree.` : msg);
+    this.say(`${sh.tree ? `${msg} Hit a tree.` : msg}${this.strikeSay}`);
     // a great one is played again
     this.replay = this.replayNext = null;
-    if (this.opts.replays && !drop) {
+    if (this.opts.replays && !this.opts.practice && !drop) {
       const why: Replay["why"] | null = sh.holed ? "holed" : this.yardsToPin() <= CLOSE_YD && fromYd >= CLOSE_FROM_YD ? "close" : tee && sh.total >= LONG_YD ? "long" : null;
       if (why) {
         const end = sh.restT + (why === "holed" ? 1.2 : 0.7);
@@ -891,6 +1029,10 @@ export class CourseGame {
   }
 
   private afterRest() {
+    if (this.opts.practice === "range") {
+      this.balls++;
+      return this.nextBall();
+    }
     const def = this.hole.def;
     if (this.holedOut) {
       this.holedOut = false;
@@ -957,6 +1099,16 @@ export class CourseGame {
 
 function newStat(): HoleStat {
   return { fairway: null, gir: false, putts: 0, drive: null, penalties: 0, shots: [], holed: null };
+}
+
+/** the range's target nearest a point (metres): its index and how far, m */
+function nearestTarget([x, z]: [number, number]) {
+  let i = 0, d = Infinity;
+  TARGETS.forEach((t, k) => {
+    const e = Math.hypot(t.gx - x, t.gz - z);
+    if (e < d) [i, d] = [k, e];
+  });
+  return { i, d };
 }
 
 /** "Wind 4 mph from the left." relative to the aim */

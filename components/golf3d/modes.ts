@@ -1,15 +1,18 @@
 import { seeded } from "@/components/offhours/useCanvas";
-import { NINE_DEFS, type HoleDef } from "@/components/offhours/golf/course";
+import { NINE_DEFS, RANGE_DEF, type HoleDef } from "@/components/offhours/golf/course";
 import type { HoleScore } from "@/components/offhours/golf/score";
 import type { CourseGame, HoleStat } from "@/components/offhours/golf/play";
 
 // The ways to play the course, all from the URL (nothing is stored):
 // - full: the nine holes, a fresh wind each time;
 // - quick: three of them, picked by the seed;
-// - daily: the nine with the day's winds, the same for everyone that day.
+// - daily: the nine with the day's winds, the same for everyone that day;
+// - range and green: practice, on the range's target flags or the nine's greens.
 // A round's link carries its mode and seed, so a friend can play the same one.
 
-export type Mode = "full" | "quick" | "daily";
+export type Mode = "full" | "quick" | "daily" | "range" | "green";
+/** practice, not a round: no cards, no score, nothing to share */
+export const isPractice = (m: Mode): m is "range" | "green" => m === "range" || m === "green";
 export type Setup = { mode: Mode; seed: number; defs: HoleDef[]; /** the date of a daily round, YYYY-MM-DD */ day: string | null };
 
 /** today's date where the player is, YYYY-MM-DD */
@@ -36,6 +39,7 @@ export function setupFor(mode: Mode, opts: { seed?: number; day?: string } = {})
     return { mode, seed, defs, day };
   }
   const seed = opts.seed && opts.seed > 0 ? Math.floor(opts.seed) : 1 + Math.floor(Math.random() * 1e6);
+  if (mode === "range") return { mode, seed, defs: [RANGE_DEF], day: null };
   if (mode === "quick") {
     const r = seeded(seed);
     const order = NINE_DEFS.map((d) => ({ d, k: r() })).sort((a, b) => a.k - b.k);
@@ -50,11 +54,14 @@ export function setupFromQuery(q: URLSearchParams): Setup | null {
   if (q.has("daily")) return setupFor("daily", { day: q.get("daily") || undefined });
   if (q.has("quick")) return setupFor("quick", { seed: Number(q.get("quick")) || undefined });
   if (q.has("seed")) return setupFor("full", { seed: Number(q.get("seed")) || undefined });
+  if (q.has("range")) return setupFor("range");
+  if (q.has("green")) return setupFor("green");
   return null;
 }
 
 /** the query that replays a round */
 export function queryFor(s: Setup) {
+  if (isPractice(s.mode)) return `?${s.mode}`;
   return s.mode === "daily" ? `?daily=${s.day}` : s.mode === "quick" ? `?quick=${s.seed}` : `?seed=${s.seed}`;
 }
 
@@ -63,6 +70,8 @@ export function modeName(s: Setup) {
     const [y, m, d] = (s.day ?? today()).split("-").map(Number);
     return `Daily · ${new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
   }
+  if (s.mode === "range") return "Range";
+  if (s.mode === "green") return "Putting green";
   return s.mode === "quick" ? "Quick 3" : "Nine holes";
 }
 

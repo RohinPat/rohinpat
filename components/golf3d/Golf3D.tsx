@@ -21,7 +21,7 @@ import { replayView } from "./replay";
 import { celebrated } from "./modes";
 import { PuttCam } from "./puttcam";
 import { startLevel } from "./quality";
-import { modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
+import { isPractice, modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import RoundEnd from "./RoundEnd";
 import Backdrop from "./Backdrop";
 
@@ -67,7 +67,12 @@ export default function Golf3D() {
   return host ? createPortal(<Course />, host) : null;
 }
 
-const KEYS = "Space three times swings: start, power, strike. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt, R reads the green. Escape pauses.";
+const KEYS = "Space three times swings: start, power, strike. With sound on, a tick marks the power the shot needs. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt; the tick is the pace to the hole. R reads the green. Escape pauses.";
+
+const PRACTICE: { mode: Mode; label: string; sub: (d: string) => string }[] = [
+  { mode: "range", label: "Range", sub: () => "Flags 60–250 yd" },
+  { mode: "green", label: "Putting green", sub: () => "The nine's greens" },
+];
 
 const MODES: { mode: Mode; label: string; sub: (d: string) => string }[] = [
   { mode: "full", label: "Nine holes", sub: () => "Par 36" },
@@ -165,6 +170,7 @@ function Course() {
       sound: true,
       hills: true,
       replays: !!L.gl && !reduce.current,
+      practice: s.mode === "range" ? "range" : s.mode === "green" ? "green" : undefined,
       reduce: reduce.current,
       teeCardS: (d) => (reduce.current || !L.gl ? 2 : flyoverS(d.yards)),
       say,
@@ -448,7 +454,7 @@ function Course() {
                     <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8ad9a8]">{modeName(shared)}</span>
                   </button>
                 )}
-                {MODES.map((m) => (
+                {[...MODES, ...PRACTICE].map((m) => (
                   <button
                     key={m.mode}
                     type="button"
