@@ -210,3 +210,27 @@ test("the 3D course's controls pass axe", async ({ page }) => {
   const r = await axe();
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
 });
+
+test("practice: the range tees up the next ball after each shot, and the putting green starts on a green", async ({ page }) => {
+  await openCourse(page, /^Range/);
+  await expect(page).toHaveURL(/\/golf\?range$/);
+  await expect(page.locator("[data-golf-phase]")).toHaveAttribute("data-golf-phase", "ready", SLOW);
+  // the club picks the flag
+  await page.getByRole("button", { name: "Driver" }).click();
+  await expect(page.locator('[role="log"]')).toContainText("The 250 yard flag.", SLOW);
+  // a shot, stepped by hand (CI draws in software, a few frames a second), then the next ball on the tee
+  const after = await page.evaluate(() => {
+    const g = (window as unknown as Win).__golf as Game & { balls: number };
+    g.remoteSwing({ power: 1, face: 0, curve: 0, contact: 1 });
+    for (let i = 0; i < 4000 && !(g.phase === "ready" && g.balls === 1); i++) g.step(1 / 60);
+    return { phase: g.phase, ball: g.ball, balls: g.balls };
+  });
+  expect(after).toEqual({ phase: "ready", ball: [0, 0], balls: 1 });
+  await expect(page.locator('[role="log"]')).toContainText(/yard flag\./, SLOW);
+  await page.goto("/golf?linkmock");
+  await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
+  await page.getByRole("button", { name: /^Putting green/ }).click();
+  await expect(page.locator("[data-golf-phase]")).toHaveAttribute("data-golf-phase", "putt", SLOW);
+  await expect(page.getByRole("button", { name: "Read green" })).toBeVisible();
+  await expect(page.locator('[role="log"]')).toContainText(/Green 1\. \d+ feet to the cup\./, SLOW);
+});

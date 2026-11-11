@@ -281,6 +281,8 @@ export type PuttCourse = {
   /** pick the ball up when this many strokes have been played */
   pickUp: number;
   onDone: (strokes: number, pickedUp: boolean) => void;
+  /** a practice ball: no par, no score, the HUD says the green and the putts */
+  practice?: boolean;
 };
 
 export function newPutt(): Putt {
@@ -578,7 +580,7 @@ function finishHole(p: Putt, t: number, env: PuttEnv, pickedUp = false) {
   p.pickedUp = pickedUp;
   if (p.course) {
     // the course keeps the card and says the result; the putt only shows the call, then hands the hole back
-    p.call = pickedUp ? "PICK UP" : callFor(p.strokes, H.par);
+    p.call = pickedUp ? "PICK UP" : p.course.practice ? (p.strokes === 1 ? "ONE PUTT" : `${p.strokes} PUTTS`) : callFor(p.strokes, H.par);
     p.callT = t;
     p.nextT = t + 1.5;
     return;
@@ -1111,12 +1113,12 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   panel(10, 10, cw, ch);
   ctx.fillStyle = "#f2ead7";
   display(ctx, play ? 20 : 14, 800);
-  ctx.fillText(`HOLE ${H.n} · PAR ${H.par}`, 20, play ? 34 : 28);
+  ctx.fillText(p.course?.practice ? `GREEN ${H.n}` : `HOLE ${H.n} · PAR ${H.par}`, 20, play ? 34 : 28);
   if (play) {
     mono(ctx, 10);
     ctx.fillStyle = "#b5b6ab";
     ctx.fillText(`${Math.round(dist * 3.281)} FT TO THE CUP`, 20, 52);
-    ctx.fillText(`STROKES ${p.strokes}`, 20, 66);
+    ctx.fillText(p.course?.practice ? `PUTTS ${p.strokes}` : `STROKES ${p.strokes}`, 20, 66);
   }
   if (!play) return;
 
