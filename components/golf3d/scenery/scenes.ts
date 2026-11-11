@@ -121,6 +121,7 @@ const HOLE9: SceneryRecord = {
     { kind: "side", side: "left", from: 0, to: 1, keep: 0.1 },
     { kind: "beyond", halfWidth: 110, depth: 260, keep: 0.12 },
   ],
+  props: { stacks: { count: 7, seed: 9, sd: [30, 150], height: [24, 46] }, lighthouse: { bearing: -48, distance: 450 } },
 };
 
 const PHASE2: Record<number, SceneryRecord | null> = { 5: HOLE5, 6: HOLE6, 7: HOLE7, 8: HOLE8 };
