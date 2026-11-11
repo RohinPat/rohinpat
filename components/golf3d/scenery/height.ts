@@ -1,6 +1,8 @@
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { lerp, signedDist, smooth } from "./geo";
+import { fallLift } from "./fall";
+import { ridgedLift } from "./ridged";
 import type { HillsSpec, SceneryRecord } from "./types";
 
 // The drawn ground beyond the trees. Where the ball can be (and 30 m past it) it is exactly the hole's own ground:
@@ -25,7 +27,9 @@ export function makeHeight(hole: BuiltHole, ground: (x: number, z: number) => nu
   const beyond = (x: number, z: number) => hole.margin(x, z) - rough;
   /** the height added to the ground at a point m past the rough */
   const liftAt = (m: number, x: number, z: number, groundY: number) => {
-    const hills = smooth(GATE, reach, m) * (H.base + H.amp * noise(x, z));
+    let hills = smooth(GATE, reach, m) * (H.base + H.amp * noise(x, z));
+    // phase 2 terms: each module returns a height; the gate is applied here as well, so play is untouched by construction
+    if (H.fall || H.ridged) hills += smooth(GATE, 60, m) * (fallLift(hole, H, x, z, m) + ridgedLift(hole, H, x, z, m));
     if (!coast) return hills;
     const sd = signedDist(coast, x, z);
     const gate = smooth(GATE, 60, m);

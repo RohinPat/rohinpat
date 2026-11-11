@@ -59,7 +59,15 @@ export type Palette = {
   ramp?: [number, number];
 };
 
-export type HillsSpec = { base: number; amp: number; reach?: number };
+export type HillsSpec = {
+  base: number;
+  amp: number;
+  reach?: number;
+  /** phase 2 (fall.ts): the land past the green falls away toward `bearing` (deg), `drop` m over [from, to] m past the rough */
+  fall?: { bearing: number; from: number; to: number; drop: number };
+  /** phase 2 (ridged.ts): dune ridges, `amp` m, `freq` per m; inside `window` (deg about a bearing) the ridges are scaled by `k` */
+  ridged?: { amp: number; freq?: number; seed?: number; window?: { bearing: number; half: number; k: number } };
+};
 
 export type CoastSpec = {
   /** the lip, in order, running past the hole at both ends */
@@ -78,6 +86,16 @@ export type CoastSpec = {
   glitter?: number;
   /** the steep ground at the lip is painted in these bands of rock, darker at the water */
   cliff?: { rock: string[]; foot: string };
+  /** phase 2 (ocean.ts): 0 to 1, sand bars showing through shallow water (tidal flats) */
+  sandBars?: number;
+};
+
+/** phase 2 (props.ts): things standing in the backdrop, always outside the gate */
+export type PropsSpec = {
+  /** sea stacks off a coast: how many, placed on the sea side between sd[0] and sd[1] m from the lip */
+  stacks?: { count: number; seed: number; sd?: [number, number]; height?: [number, number] };
+  /** one lighthouse: at a point (course m), or found on the coast near a bearing from the green */
+  lighthouse?: { at?: P; bearing?: number; distance?: number };
 };
 
 export type WallSpec = {
@@ -114,4 +132,5 @@ export type SceneryRecord = {
   rings?: RingLayer[];
   ringY0?: number;
   openings?: OpeningSpec[];
+  props?: PropsSpec;
 };
