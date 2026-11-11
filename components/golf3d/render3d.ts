@@ -328,6 +328,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       const dFlag = Math.hypot(px - c.x, pz - c.z);
       for (const m of flagMats) m.opacity = near ? 0.3 : 1;
       hole.flag.scale.setScalar(Math.max(1, (FLAG_MIN_PX * dFlag) / (c.F * 2.4)));
+      for (const f of hole.targetFlags) f.scale.setScalar(Math.max(1, (FLAG_MIN_PX * 0.8 * Math.hypot(f.position.x - c.x, f.position.z - c.z)) / (c.F * 2.4)));
       const wa = Math.atan2(g.wind[0], g.wind[1]);
       hole.cloth.rotation.y = -Math.PI / 2 + wa + Math.sin(g.t * 3.1) * 0.12;
       const pa = hole.cloth.geometry.attributes.position as THREE.BufferAttribute;

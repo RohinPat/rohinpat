@@ -50,6 +50,8 @@ export type Hole3D = {
   /** the flag's group, scaled from the outside so it can be found from far away */
   flag: THREE.Group;
   cloth: THREE.Mesh;
+  /** the range's target flags (none on a hole of the course), scaled the same way */
+  targetFlags: THREE.Group[];
   /** trees, so the renderer can hide the ones between the camera and the ball */
   trees: { mesh: THREE.InstancedMesh; pos: Float32Array; mats: THREE.Matrix4[] }[];
   dispose: () => void;
@@ -185,6 +187,18 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   c.fillStyle = COL.greenB;
   for (let x = gr.x - 40; x < gr.x + 40; x += 5) c.fillRect(tx(x), tz(gr.z - 40), 2.5 * s, 80 * s);
   c.restore();
+  // the range's targets: rounds of green in a fringe, mown in rings
+  for (const tg of hole.world.greens.slice(1)) {
+    const ring = (rad: number) => tg.ring(rad).map(([x, , z]) => [x, z] as P);
+    path(ring(tg.r + tg.fringe));
+    c.fillStyle = COL.fringe;
+    c.fill();
+    for (let k = 0; k < 4; k++) {
+      path(ring(tg.r * (1 - k * 0.25)));
+      c.fillStyle = k % 2 ? COL.greenB : COL.green;
+      c.fill();
+    }
+  }
   // grain: thousands of faint flecks so the grass is not flat colour up close
   {
     const r = seeded(def.n * 977 + 3);
@@ -370,6 +384,11 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   }
 
   // ---------------------------------------------------------------- the flag and the cup
+  const targetPole = new THREE.CylinderGeometry(0.02, 0.02, 2.4, 6);
+  const poleMat = new THREE.MeshLambertMaterial({ color: "#f7f3e8" });
+  const targetCloth = new THREE.PlaneGeometry(0.62, 0.4).translate(0.31, 0, 0);
+  const targetMat = new THREE.MeshLambertMaterial({ color: "#edbb00", side: THREE.DoubleSide });
+  disposables.push(targetPole, poleMat, targetCloth, targetMat);
   const flag = new THREE.Group();
   const cloth = new THREE.Mesh();
   {
@@ -394,8 +413,23 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
     disposables.push(pole.geometry, pole.material as THREE.Material, cg, cloth.material as THREE.Material, cup.geometry, cup.material as THREE.Material);
   }
 
+  // a flag on each target: gold, so they are not taken for the hole's
+  const targetFlags = hole.world.greens.slice(1).map((tg) => {
+    const f = new THREE.Group();
+    f.position.set(tg.x, ground.y(tg.x, tg.z), tg.z);
+    const pole = new THREE.Mesh(targetPole, poleMat);
+    pole.position.y = 1.2;
+    const cl = new THREE.Mesh(targetCloth, targetMat);
+    cl.position.y = 2.2;
+    cl.rotation.y = -Math.PI / 2;
+    f.add(pole, cl);
+    group.add(f);
+    return f;
+  });
+
   return {
     group,
+    targetFlags,
     heightAt,
     surfaceY: ground.y,
     waterY: ground.waterY,
