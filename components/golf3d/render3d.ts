@@ -8,6 +8,7 @@ import type { View } from "./flyover";
 import { createPutt3D } from "./putt3d";
 import { replayBall } from "./replay";
 import { Governor, LEVELS } from "./quality";
+import { applySkin } from "./scenery";
 import type { PuttProj } from "@/components/offhours/golf/green";
 
 // The course in WebGL. The game (play.ts) and its camera rig (playDraw.ts) are
@@ -71,11 +72,11 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
-    uniforms: { top: { value: SKY_TOP }, low: { value: SKY_LOW }, haze: { value: HAZE }, sun: { value: SUN.clone().multiply(new THREE.Vector3(-1, 1, 1)) } },
+    uniforms: { top: { value: SKY_TOP }, low: { value: SKY_LOW }, haze: { value: HAZE }, sun: { value: SUN.clone().multiply(new THREE.Vector3(-1, 1, 1)) }, glow: { value: new THREE.Color(1.0, 0.93, 0.78) } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `uniform vec3 top; uniform vec3 low; uniform vec3 haze; uniform vec3 sun; varying vec3 vDir;
+    fragmentShader: `uniform vec3 top; uniform vec3 low; uniform vec3 haze; uniform vec3 sun; uniform vec3 glow; varying vec3 vDir;
       void main(){ float y = vDir.y; vec3 c = mix(low, top, smoothstep(0.02, 0.55, y)); c = mix(haze, c, smoothstep(-0.02, 0.09, y));
-        float s = max(0.0, dot(normalize(vDir), normalize(sun))); c += vec3(1.0,0.93,0.78) * (pow(s, 24.0) * 0.35 + pow(s, 900.0) * 0.8);
+        float s = max(0.0, dot(normalize(vDir), normalize(sun))); c += glow * (pow(s, 24.0) * 0.35 + pow(s, 900.0) * 0.8);
         gl_FragColor = vec4(c, 1.0); }`,
   });
   const sky = new THREE.Mesh(new THREE.SphereGeometry(5000, 32, 16), skyMat);
@@ -178,7 +179,10 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       root.remove(hole.group);
       hole.dispose();
     }
-    hole = buildHole3D(g.hole, { tier: soft ? "soft" : LEVELS[gov!.level].tier });
+    hole = buildHole3D(g.hole, { tier: soft ? "soft" : LEVELS[gov!.level].tier, reduce: !!opts.reduce, sun: skyMat.uniforms.sun.value });
+    // this hole's sky (the default one for a hole without a scene), and its own far mountains instead of the ridge
+    applySkin({ scene, skyMat, sunDir: SUN }, hole.scenery.skin);
+    ridge.visible = !hole.scenery.rings;
     // building it stalls a frame or two: not the frame rate
     gov?.hold();
     holeOf = g.hole;
