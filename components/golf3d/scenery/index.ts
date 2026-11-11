@@ -9,6 +9,7 @@ import { DEFAULT_SKIN } from "./skin";
 import { makeTint } from "./tint";
 import type { P, SceneryRecord, Skin, Tier } from "./types";
 import { buildWalls } from "./wall";
+import { buildProps } from "./props";
 
 export { applySkin } from "./skin";
 export type { Skin, Tier } from "./types";
@@ -71,6 +72,13 @@ export function prepareScenery(hole: BuiltHole, ground: (x: number, z: number) =
       }
       const w = buildWalls(hole, rec.walls ?? [], heightAt, tier);
       if (w) add(w.mesh, w.tris);
+      const pr = buildProps(hole, rec, heightAt, tier);
+      if (pr) {
+        group.add(pr.group);
+        disposables.push({ dispose: pr.dispose });
+        stats.tris += pr.tris;
+        stats.calls += pr.calls;
+      }
       return { group, dispose: () => disposables.forEach((d) => d.dispose()) };
     },
   };

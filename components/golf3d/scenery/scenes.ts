@@ -1,12 +1,15 @@
 import type { SceneryRecord, WallSpec } from "./types";
+import { HOLE5 } from "./hole5";
+import { HOLE6 } from "./hole6";
+import { HOLE7 } from "./hole7";
+import { HOLE8 } from "./hole8";
 
 // One record per hole that has a backdrop. A hole without one is drawn exactly as it always was. The nine sit on one
 // stretch of coast (see the plan's map), so what lies beyond one hole is the same country seen from another.
 
 export const LEGACY: SceneryRecord = { id: "legacy" };
 
-const CANYON = ["#e8c9a0", "#dd8a52", "#c4673f", "#8a4a3a"];
-const COAST_ROCK = ["#c1b496", "#b7a98f", "#a89a82", "#9b8f78"];
+import { CANYON, COAST_ROCK } from "./rock";
 
 /** Open Door: out of the tee, a gap in the foothills with a lone snow peak in it; the title's 360 degrees */
 const HOLE1: SceneryRecord = {
@@ -118,9 +121,12 @@ const HOLE9: SceneryRecord = {
     { kind: "side", side: "left", from: 0, to: 1, keep: 0.1 },
     { kind: "beyond", halfWidth: 110, depth: 260, keep: 0.12 },
   ],
+  props: { stacks: { count: 7, seed: 9, sd: [30, 150], height: [24, 46] }, lighthouse: { bearing: -48, distance: 450 } },
 };
 
+const PHASE2: Record<number, SceneryRecord | null> = { 5: HOLE5, 6: HOLE6, 7: HOLE7, 8: HOLE8 };
 const SCENES: Record<number, SceneryRecord> = { 1: HOLE1, 3: HOLE3, 9: HOLE9 };
+for (const [n, r] of Object.entries(PHASE2)) if (r) SCENES[Number(n)] = r;
 
 export function sceneryFor(n: number): SceneryRecord {
   return SCENES[n] ?? LEGACY;
