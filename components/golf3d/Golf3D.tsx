@@ -67,7 +67,7 @@ export default function Golf3D() {
   return host ? createPortal(<Course />, host) : null;
 }
 
-const KEYS = "Space three times swings: start, power, strike. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt, R reads the green. Escape pauses.";
+const KEYS = "Space three times swings: start, power, strike. With sound on, a tick marks the power the shot needs. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt; the tick is the pace to the hole. R reads the green. Escape pauses.";
 
 const MODES: { mode: Mode; label: string; sub: (d: string) => string }[] = [
   { mode: "full", label: "Nine holes", sub: () => "Par 36" },

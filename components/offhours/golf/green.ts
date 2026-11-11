@@ -240,6 +240,9 @@ export type Putt = {
   aimPress: { x: number; y: number };
   kAngle: number;
   kPower: number;
+  /** the power that rolls a held-Space putt to the cup on a flat green; it ticks once as the charge passes it */
+  kMark: number;
+  kMarked: boolean;
   kCharging: boolean;
   kTouched: number;
   drops: Drop[];
@@ -293,6 +296,8 @@ export function newPutt(): Putt {
     aimPress: { x: 0, y: 0 },
     kAngle: 0,
     kPower: 0,
+    kMark: 0,
+    kMarked: false,
     kCharging: false,
     kTouched: -9,
     drops: [],
@@ -548,6 +553,8 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
     if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap) {
       p.kCharging = true;
       p.kPower = 0;
+      p.kMark = puttPowerFor(Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y));
+      p.kMarked = false;
       p.kTouched = t;
     } else if (!down && p.kCharging) {
       p.kCharging = false;
@@ -626,7 +633,14 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     }
     if (pt.t > 0.5) p.putter = null;
   }
-  if (p.kCharging) p.kPower = Math.min(1, p.kPower + dt * 0.62);
+  if (p.kCharging) {
+    p.kPower = Math.min(1, p.kPower + dt * 0.62);
+    // the pace to the cup, to the ear (the aim line shows it as the roll's length)
+    if (!p.kMarked && p.kPower >= p.kMark) {
+      p.kMarked = true;
+      sfx("tick");
+    }
+  }
   if (p.ball.moving && !p.ball.sunk) {
     let ev: "sunk" | "lip" | null = null;
     for (let i = 0; i < 4 && !ev && p.ball.moving; i++) ev = stepBall(H, p.ball, dt / 4);
