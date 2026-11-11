@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { clamp, signedDist } from "./geo";
+import { clamp, hash2, signedDist, smooth } from "./geo";
 import type { CoastSpec, P, Tier } from "./types";
 
 // The sea: a polygon on the water side of the coast line (so no water shows under land), a baked map of the distance to
@@ -49,7 +49,21 @@ export function seaPolygon(c: CoastSpec, reach = 6500): P[] {
   return poly;
 }
 
-/** the distance to the shore map: RGBA, R = sea-side distance / 240 m (0 on land), B = low noise for sand bars */
+/** smooth 2-D value noise, 0 to 1 (deterministic) */
+function vnoise(x: number, z: number, seed: number): number {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const h = (a: number, b: number) => hash2(a, b, seed);
+  const top = h(i, j) + (h(i + 1, j) - h(i, j)) * u, bot = h(i, j + 1) + (h(i + 1, j + 1) - h(i, j + 1)) * u;
+  return top + (bot - top) * v;
+}
+
+/** how bright the sea's glitter is under a sun at this elevation (the sine of its angle): none when it is high, full at the horizon */
+export function glitterFactor(sunY: number): number {
+  return 1 - smooth(0.05, 0.35, sunY);
+}
+
+/** the distance to the shore map: RGBA, R = sea-side distance / 240 m (0 on land), B = low noise for sand bars (only where `sandBars` is set and on the water side; 128 elsewhere) */
 export function bakeShore(c: CoastSpec, region: { x0: number; z0: number; w: number; l: number }, size: number): Uint8Array {
   const data = new Uint8Array(size * size * 4);
   for (let j = 0; j < size; j++)
@@ -59,7 +73,13 @@ export function bakeShore(c: CoastSpec, region: { x0: number; z0: number; w: num
       const q = (j * size + i) * 4;
       data[q] = Math.round(clamp(sd / 240, 0, 1) * 255);
       data[q + 1] = 0;
-      data[q + 2] = 128;
+      let bar = 128;
+      if (c.sandBars && sd > 0) {
+        // long low bars: two scales of noise, stretched along the lip's own distance so they follow the shore a little
+        const n = 0.65 * vnoise(x / 120, z / 70, 5) + 0.35 * vnoise(x / 45 + 9, z / 30, 6);
+        bar = Math.round(clamp((n - 0.5) * 2.2 + 0.5, 0, 1) * 255);
+      }
+      data[q + 2] = bar;
       data[q + 3] = 255;
     }
   return data;
@@ -76,15 +96,24 @@ void main(){
 }`;
 
 const FRAG = `uniform sampler2D shore; uniform vec4 region; uniform vec3 shallow; uniform vec3 mid; uniform vec3 deep; uniform vec3 foam; uniform vec3 sun;
-uniform float t; uniform float cap; uniform float glit;
+uniform float t; uniform float cap; uniform float glit; uniform float bars;
 varying vec3 vW;
 #include <fog_pars_fragment>
 void main(){
   vec2 c = vec2(-vW.x, vW.z);
   vec2 uv = (c - region.xy) * region.zw;
   float sd = (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) ? 240.0 : texture2D(shore, uv).r * 240.0;
-  vec3 col = mix(shallow, mid, smoothstep(2., 40., sd));
-  col = mix(col, deep, smoothstep(30., 200., sd));
+  vec3 sh = shallow;
+  float wide = 1.0;
+  if (bars > 0.0) {
+    // tidal flats: pale bars of sand show through the shallows (the shallow tone lifted toward sand), and the shallows run farther out
+    float bar = smoothstep(0.52, 0.6, texture2D(shore, uv).b);
+    float near = 1.0 - smoothstep(90., 300., sd);
+    sh = mix(shallow, shallow * vec3(1.9, 1.5, 0.95) + vec3(0.12, 0.07, 0.0), bars * bar * near);
+    wide = 1.0 + 2.2 * bars;
+  }
+  vec3 col = mix(sh, mid, smoothstep(2., 40. * wide, sd));
+  col = mix(col, deep, smoothstep(30. * wide, 200. * (1.0 + 0.6 * bars), sd));
   #ifndef LOW
     float n = sin(c.x * 0.05 + t * 0.6) * sin(c.y * 0.043 - t * 0.5);
     col *= 1.0 + 0.04 * n;
@@ -94,7 +123,7 @@ void main(){
   #ifndef LOW
     vec3 V = normalize(cameraPosition - vW);
     vec3 N = normalize(vec3(0.07 * cos(vW.x * 0.31 + t), 1.0, 0.07 * sin(vW.z * 0.27 - t * 1.3)));
-    col += vec3(1.0, 0.86, 0.62) * pow(max(dot(reflect(-V, N), normalize(sun)), 0.0), 220.0) * glit;
+    col += vec3(1.0, 0.86, 0.62) * pow(max(dot(reflect(-V, N), normalize(sun)), 0.0), 220.0) * glit * (1.0 - smoothstep(0.05, 0.35, normalize(sun).y));
   #endif
   float ff = min(smoothstep(fogNear, fogFar, vFogDepth), cap);
   gl_FragColor = vec4(mix(col, fogColor, ff), 1.0);
@@ -145,6 +174,7 @@ export function buildOcean(c: CoastSpec, tier: Tier, region: { x0: number; z0: n
         t: { value: 0 },
         cap: { value: 0.62 },
         glit: { value: c.glitter ?? 0 },
+        bars: { value: c.sandBars ?? 0 },
       },
     ]);
     const sm = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms, fog: true, side: THREE.DoubleSide, defines: tier === "low" ? { LOW: "" } : {} });
