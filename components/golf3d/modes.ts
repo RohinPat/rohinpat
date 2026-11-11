@@ -1,7 +1,7 @@
 import { seeded } from "@/components/offhours/useCanvas";
 import { NINE_DEFS, RANGE_DEF, type HoleDef } from "@/components/offhours/golf/course";
 import type { HoleScore } from "@/components/offhours/golf/score";
-import type { CourseGame, HoleStat } from "@/components/offhours/golf/play";
+import type { Challenge, CourseGame, HoleStat } from "@/components/offhours/golf/play";
 
 // The ways to play the course, all from the URL (nothing is stored):
 // - full: the nine holes, a fresh wind each time;
@@ -10,7 +10,11 @@ import type { CourseGame, HoleStat } from "@/components/offhours/golf/play";
 // - range and green: practice, on the range's target flags or the nine's greens.
 // A round's link carries its mode and seed, so a friend can play the same one.
 
-export type Mode = "full" | "quick" | "daily" | "range" | "green";
+export type Mode = "full" | "quick" | "daily" | "range" | "green" | "targets" | "closest";
+/** played on the range: practice, or one of its challenges */
+export const onRange = (m: Mode) => m === "range" || m === "targets" || m === "closest";
+/** a challenge on the range: scored, and its link plays the same flags */
+export const isChallenge = (m: Mode): m is "targets" | "closest" => m === "targets" || m === "closest";
 /** practice, not a round: no cards, no score, nothing to share */
 export const isPractice = (m: Mode): m is "range" | "green" => m === "range" || m === "green";
 export type Setup = { mode: Mode; seed: number; defs: HoleDef[]; /** the date of a daily round, YYYY-MM-DD */ day: string | null };
@@ -39,7 +43,7 @@ export function setupFor(mode: Mode, opts: { seed?: number; day?: string } = {})
     return { mode, seed, defs, day };
   }
   const seed = opts.seed && opts.seed > 0 ? Math.floor(opts.seed) : 1 + Math.floor(Math.random() * 1e6);
-  if (mode === "range") return { mode, seed, defs: [RANGE_DEF], day: null };
+  if (onRange(mode)) return { mode, seed, defs: [RANGE_DEF], day: null };
   if (mode === "quick") {
     const r = seeded(seed);
     const order = NINE_DEFS.map((d) => ({ d, k: r() })).sort((a, b) => a.k - b.k);
@@ -55,6 +59,8 @@ export function setupFromQuery(q: URLSearchParams): Setup | null {
   if (q.has("quick")) return setupFor("quick", { seed: Number(q.get("quick")) || undefined });
   if (q.has("seed")) return setupFor("full", { seed: Number(q.get("seed")) || undefined });
   if (q.has("range")) return setupFor("range");
+  if (q.has("targets")) return setupFor("targets", { seed: Number(q.get("targets")) || undefined });
+  if (q.has("closest")) return setupFor("closest", { seed: Number(q.get("closest")) || undefined });
   if (q.has("green")) return setupFor("green");
   return null;
 }
@@ -62,6 +68,7 @@ export function setupFromQuery(q: URLSearchParams): Setup | null {
 /** the query that replays a round */
 export function queryFor(s: Setup) {
   if (isPractice(s.mode)) return `?${s.mode}`;
+  if (isChallenge(s.mode)) return `?${s.mode}=${s.seed}`;
   return s.mode === "daily" ? `?daily=${s.day}` : s.mode === "quick" ? `?quick=${s.seed}` : `?seed=${s.seed}`;
 }
 
@@ -72,6 +79,8 @@ export function modeName(s: Setup) {
   }
   if (s.mode === "range") return "Range";
   if (s.mode === "green") return "Putting green";
+  if (s.mode === "targets") return "Targets";
+  if (s.mode === "closest") return "Closest to the pin";
   return s.mode === "quick" ? "Quick 3" : "Nine holes";
 }
 
@@ -85,6 +94,19 @@ export function shareText(s: Setup, scores: HoleScore[], origin: string) {
     .map((d, i) => `${d.n}:${scores[i].strokes}`)
     .join(" ");
   return `Golf, ${modeName(s)}: ${total} (${tp})\n${holes}\n${origin}/golf${queryFor(s)}`;
+}
+
+/** a challenge as text to paste somewhere: the score, each ball, and the link that plays the same flags */
+export function challengeText(s: Setup, ch: Challenge, origin: string) {
+  const head = ch.kind === "targets" ? `${ch.score} points` : `best ${ch.best} ft`;
+  const balls = ch.results.map((r) => (ch.kind === "targets" ? String(r.pts) : `${r.ft}ft`)).join(" ");
+  return `Golf, ${modeName(s)}: ${head}\n${balls}\n${origin}/golf${queryFor(s)}`;
+}
+
+/** how a targets score reads, of TARGET_SHOTS * 120 */
+export function targetsRating(score: number, shots: number) {
+  const f = score / (shots * 120);
+  return f > 0.8 ? "Tour level" : f > 0.6 ? "Low handicap" : f > 0.4 ? "Weekend golfer" : f > 0.2 ? "Keep practising" : "Find the fairway";
 }
 
 /** a hole worth paper over its card whatever the score: holed from off the green, or a putt from 25 ft or more */

@@ -7,6 +7,14 @@ const LAPTOP = { width: 1440, height: 900 };
 const SLOW = { timeout: 15_000 };
 const live = (p: Page) => p.locator('[role="dialog"] p[aria-live="polite"]');
 
+/** wait for `n` animation frames: a game's own clock moves with them (each step capped), not with the wall clock */
+const frames = (p: Page, n: number) =>
+  p.evaluate((k) => new Promise<void>((done) => {
+    let i = 0;
+    const f = () => (++i >= k ? done() : requestAnimationFrame(f));
+    requestAnimationFrame(f);
+  }), n);
+
 async function open(p: Page, id: string) {
   await p.goto("/interests?linkmock");
   await p.locator(`[data-piece="${id}"]`).click();
@@ -53,7 +61,9 @@ test("Penalty: five kicks from the keyboard alone, reduced motion, and a new sho
   }
   // the over screen (five goals from five is sudden death instead), then a press for a new shootout: the count starts again
   if (!/ 5 from 5\./.test(await live(page).innerText())) {
-    await page.waitForTimeout(1000);
+    // the over screen ignores a press for its first 0.8 s of game time, and the game's clock runs on frames: on CI's
+    // software renderer a second of wall time can be far less, so wait for frames, not for the wall clock
+    await frames(page, 60);
     await page.keyboard.press("Enter");
     await expect(live(page)).toHaveText("New shootout.", SLOW);
     await page.keyboard.down("Enter");

@@ -447,13 +447,19 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   const aiming = g.phase === "ready" || g.phase === "swing";
   if (g.opts.practice === "range") {
     // the range: the flag aimed at, how it plays, and the balls hit
-    ctx.fillText("RANGE", pad + 10, pad + 26);
+    const ch = g.challenge;
+    ctx.fillText(ch ? (ch.kind === "targets" ? "TARGETS" : "CLOSEST") : "RANGE", pad + 10, pad + 26);
     mono(ctx, 10);
     ctx.fillStyle = DIM;
     const yd = Math.round(g.yardsToTarget());
     const plays = aiming ? g.playsLike() : null;
     ctx.fillText(plays !== null ? `${yd} YD FLAG · PLAYS ${plays}` : `${yd} YD FLAG`, pad + 10, pad + 46);
-    ctx.fillText(`BALLS ${g.balls}`, pad + 10, pad + 62);
+    const n = ch ? Math.min(ch.shots, ch.results.length + (g.phase === "ready" || g.phase === "swing" ? 1 : 0)) : 0;
+    ctx.fillText(
+      !ch ? `BALLS ${g.balls}` : ch.kind === "targets" ? `BALL ${n} OF ${ch.shots} · ${ch.score} PTS` : `BALL ${n} OF ${ch.shots}${ch.best !== null ? ` · BEST ${ch.best} FT` : ""}`,
+      pad + 10,
+      pad + 62,
+    );
   } else {
     ctx.fillText(`HOLE ${def.n} · PAR ${def.par}`, pad + 10, pad + 26);
     mono(ctx, 10);

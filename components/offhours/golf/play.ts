@@ -51,6 +51,29 @@ export type CourseOpts = {
    * "green" putts balls from around the cups of the holes' greens. No cards, no score.
    */
   practice?: "range" | "green";
+  /**
+   * a challenge on the range: "targets" is ten balls, each at a flag picked by the seed, scored by how close (as the
+   * Off hours range scores it); "closest" is five balls at one flag, the best of them counts
+   */
+  challenge?: "targets" | "closest";
+};
+
+export const TARGET_SHOTS = 10;
+export const CLOSEST_BALLS = 5;
+/** a ball in the targets challenge: up to 100 for how close it finished (the miss allowed grows with the flag's distance), 20 more on the green */
+export function targetPoints(missM: number, flagM: number, onGreen: boolean) {
+  return Math.round(100 * Math.max(0, 1 - missM / (0.15 * flagM + 6))) + (onGreen ? 20 : 0);
+}
+export type Challenge = {
+  kind: "targets" | "closest";
+  /** balls in all */
+  shots: number;
+  /** each ball played: the flag, how far from it (ft), on its green, and its points (targets) */
+  results: { flag: number; ft: number; on: boolean; pts: number }[];
+  score: number;
+  /** closest: the nearest ball so far, ft */
+  best: number | null;
+  done: boolean;
 };
 
 /** a practice green gives this many balls before it moves on to the next hole's */
@@ -230,6 +253,9 @@ export class CourseGame {
   rangeTarget = 2;
   /** practice: balls hit on the range, or putted out on the green */
   balls = 0;
+  /** a challenge on the range, while one is on */
+  challenge: Challenge | null = null;
+  private chRng: () => number = Math.random;
   /** the canvas, for the swing's pixel scale */
   w = 1440;
   h = 900;
@@ -266,6 +292,8 @@ export class CourseGame {
 
   /** a new round from the first tee; the next seed so the wind is not the same */
   restart() {
+    this.challenge = null;
+    this.balls = 0;
     this.seed += 1;
     this.rng = seeded(this.seed);
     this.scores = [];
@@ -292,11 +320,14 @@ export class CourseGame {
     this.stat = newStat();
     this.puttFrom = -1;
     if (this.opts.practice === "green") return this.practicePutt();
+    if (this.opts.practice === "range" && this.opts.challenge) this.startChallenge(this.opts.challenge);
     this.setPhase(this.opts.practice ? "ready" : "tee-card");
     this.prepareShot(true);
     const d = this.hole.def;
     const sp = Math.hypot(this.wind[0], this.wind[1]);
-    if (this.opts.practice === "range") this.say(`Range. ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
+    const ch = this.challenge;
+    if (ch) this.say(`${ch.kind === "targets" ? `Targets: ${ch.shots} balls, a new flag for each.` : `Closest to the pin: ${ch.shots} balls at one flag.`} ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
+    else if (this.opts.practice === "range") this.say(`Range. ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
     else this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
   }
 
@@ -313,6 +344,17 @@ export class CourseGame {
       if (Math.abs(t.yd - carry) < Math.abs(TARGETS[best].yd - carry)) best = i;
     });
     return best;
+  }
+  private startChallenge(kind: "targets" | "closest") {
+    this.chRng = seeded(this.seed * 7 + 1);
+    this.challenge = { kind, shots: kind === "targets" ? TARGET_SHOTS : CLOSEST_BALLS, results: [], score: 0, best: null, done: false };
+    this.rangeTarget = this.pickFlag(-1);
+  }
+  /** a flag for the challenge, never the one just played */
+  private pickFlag(prev: number) {
+    let n = Math.floor(this.chRng() * TARGETS.length);
+    if (n === prev) n = (n + 1 + Math.floor(this.chRng() * (TARGETS.length - 1))) % TARGETS.length;
+    return n;
   }
   /** the range: aim at a target flag */
   setTarget(i: number) {
@@ -333,6 +375,11 @@ export class CourseGame {
     const drift = 1 + (this.rng() * 2 - 1) * 0.2;
     this.wind = [this.hole.wind[0] * drift, this.hole.wind[1] * drift];
     this.yawT = this.yaw = this.baseYaw();
+    // a new flag in the targets challenge: the club for it from the tee, as the first ball had
+    if (this.challenge?.kind === "targets") {
+      this.clubChosen = false;
+      this.setClub(this.suggested().club, false);
+    }
     this.pose = poseFor({ kind: "back", u: 0 }, CLUBS[this.club]);
     this.sw = emptySwing();
     this.setPhase("ready");
@@ -540,7 +587,7 @@ export class CourseGame {
     if (c === this.club) return;
     this.club = c;
     this.opts.onClub?.(c);
-    if (this.opts.practice === "range" && byPlayer && this.phase !== "swing" && this.phase !== "fly") {
+    if (this.opts.practice === "range" && !this.challenge && byPlayer && this.phase !== "swing" && this.phase !== "fly") {
       this.setTarget(this.flagFor(c));
       this.say(`${CLUBS[c].name}, ${Math.round(fullCarry(c) * this.carryK(c))} yards. The ${TARGETS[this.rangeTarget].yd} yard flag.`);
       return;
@@ -991,6 +1038,23 @@ export class CourseGame {
         sfx("cup");
         sfx("applause", 1);
       }
+    } else if (this.challenge && !this.challenge.done) {
+      // the challenge's flag, however near another one it finished
+      this.ball = end;
+      this.lie = sh.surface;
+      const ch = this.challenge;
+      const tg = TARGETS[this.rangeTarget];
+      const d = Math.hypot(end[0] - tg.gx, end[1] - tg.gz);
+      const on = d <= tg.gr && sh.surface === "green";
+      const ft = Math.round(d * 3.281);
+      const pts = ch.kind === "targets" ? targetPoints(d, Math.hypot(tg.gx, tg.gz), on) : 0;
+      ch.results.push({ flag: this.rangeTarget, ft, on, pts });
+      ch.score += pts;
+      ch.best = ch.best === null ? ft : Math.min(ch.best, ft);
+      const where = ft < 300 ? feet(ft) : yards(Math.round(d / YD));
+      this.result = ch.kind === "targets" ? `${on ? "ON THE GREEN · " : ""}${ft < 300 ? `${ft} FT` : `${Math.round(d / YD)} YD`} · +${pts}` : `${ft < 300 ? `${ft} FT` : `${Math.round(d / YD)} YD`} FROM THE PIN`;
+      msg += `${on ? ", on the green" : ""}. ${where} from the pin.`;
+      msg += ch.kind === "targets" ? ` Plus ${pts}. Score ${ch.score}.` : ft === ch.best && ch.results.length > 1 ? " Your closest yet." : "";
     } else if (this.opts.practice === "range") {
       this.ball = end;
       this.lie = sh.surface;
@@ -1031,6 +1095,14 @@ export class CourseGame {
   private afterRest() {
     if (this.opts.practice === "range") {
       this.balls++;
+      const ch = this.challenge;
+      if (ch && ch.results.length >= ch.shots) {
+        ch.done = true;
+        this.setPhase("round-card");
+        this.say(ch.kind === "targets" ? `Targets over: ${ch.score} points.` : `Closest to the pin over: your best was ${feet(ch.best ?? 0)}.`);
+        return;
+      }
+      if (ch?.kind === "targets") this.rangeTarget = this.pickFlag(this.rangeTarget);
       return this.nextBall();
     }
     const def = this.hole.def;

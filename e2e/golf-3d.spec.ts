@@ -234,3 +234,20 @@ test("practice: the range tees up the next ball after each shot, and the putting
   await expect(page.getByRole("button", { name: "Read green" })).toBeVisible();
   await expect(page.locator('[role="log"]')).toContainText(/Green 1\. \d+ feet to the cup\./, SLOW);
 });
+
+test("closest to the pin: five balls at one flag end on a card with the best, and its link plays the same flag", async ({ page }) => {
+  await openCourse(page, /^Closest to the pin/);
+  await expect(page).toHaveURL(/\/golf\?closest=\d+$/);
+  await page.evaluate(() => {
+    const g = (window as unknown as Win).__golf as Game & { balls: number };
+    for (let k = 0; k < 5; k++) {
+      g.remoteSwing({ power: g.suggested().power, face: 0, curve: 0, contact: 1 });
+      for (let i = 0; i < 4000 && !((g.phase === "ready" && g.balls === k + 1) || g.phase === "round-card"); i++) g.step(1 / 60);
+    }
+  });
+  const card = page.getByRole("dialog", { name: "Challenge over" });
+  await expect(card).toBeVisible(SLOW);
+  await expect(card).toContainText(/\d+ ft/);
+  await expect(card.getByRole("button", { name: "Play again" })).toBeFocused();
+  expect((await new AxeBuilder({ page }).include('[aria-label="Challenge over"]').analyze()).violations).toEqual([]);
+});
