@@ -6,6 +6,7 @@ import { YD } from "@/components/offhours/golf/scene";
 import { GH, GW, greenHeight } from "@/components/offhours/golf/green";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
+import { prepareScenery, type Skin } from "./scenery";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
@@ -52,6 +53,8 @@ export type Hole3D = {
   cloth: THREE.Mesh;
   /** trees, so the renderer can hide the ones between the camera and the ball */
   trees: { mesh: THREE.InstancedMesh; pos: Float32Array; mats: THREE.Matrix4[] }[];
+  /** the backdrop's sky, and whether it brings its own far mountains (scenery/) */
+  scenery: { skin?: Skin; rings: boolean };
   dispose: () => void;
 };
 
@@ -68,7 +71,7 @@ const TIERS = {
   soft: { tex: 1024, cell: 6, perTree: 700, gcell: 0.6, gtex: 14 },
 };
 
-export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D {
+export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boolean; sun?: THREE.Vector3 } = {}): Hole3D {
   const tier = TIERS[opts.tier ?? "high"];
   const group = new THREE.Group();
   const disposables: { dispose: () => void }[] = [];
@@ -82,14 +85,9 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   // ---------------------------------------------------------------- ground height
   // the hole's ground, and from 30 m past the rough (the trees stand there) hills rising out of it
   const ground = terrainOf(hole);
-  const noise = (x: number, z: number) =>
-    0.5 + 0.22 * Math.sin(x * 0.013 + 1.7) * Math.cos(z * 0.011 - 0.4) + 0.18 * Math.sin((x + z) * 0.021 + def.n) + 0.1 * Math.cos((x - z) * 0.047);
-  const heightAt = (x: number, z: number) => {
-    const m = hole.margin(x, z) - rough;
-    const y = ground.y(x, z);
-    if (m < 30) return y;
-    return y + smooth(30, 150, m) * (5 + 26 * noise(x, z));
-  };
+  // (scenery/ decides the hills and their colours; the same as ever for a hole without a scene)
+  const scn = prepareScenery(hole, ground.y, opts.tier ?? "high", { reduce: !!opts.reduce, sun: opts.sun });
+  const heightAt = scn.heightAt;
 
   // ---------------------------------------------------------------- the painted surfaces
   const maxTex = tier.tex;
@@ -221,15 +219,14 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   const tris = (nx - 1) * (nz - 1) * 2;
   const pos = new Float32Array(tris * 9), uv = new Float32Array(tris * 6), col = new Float32Array(tris * 9);
   let k = 0;
-  const hill = new THREE.Color();
+  const hill: [number, number, number] = [1, 1, 1];
   const put = (i: number, j: number) => {
     const x = xs[i], z = zs[j], y = H[j * nx + i];
     pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
     uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
     // the hills are tinted by their height over the hole's ground: brighter and yellower higher up
-    const u = Math.max(0, Math.min(1, (y - ground.y(x, z)) / 30));
-    hill.setRGB(1 + u * 0.55, 1 + u * 0.6, 1 + u * 0.25);
-    col[k * 3] = hill.r; col[k * 3 + 1] = hill.g; col[k * 3 + 2] = hill.b;
+    scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+    col[k * 3] = hill[0]; col[k * 3 + 1] = hill[1]; col[k * 3 + 2] = hill[2];
     k++;
   };
   for (let j = 0; j < nz - 1; j++)
@@ -334,8 +331,15 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
   }
 
   // ---------------------------------------------------------------- trees
-  const trees = buildTrees(hole, heightAt, X0, X1, Z0, Z1, disposables, tier.perTree);
+  const trees = buildTrees(hole, heightAt, X0, X1, Z0, Z1, disposables, tier.perTree, scn.treeKeep);
   for (const t of trees) group.add(t.mesh);
+
+  // ---------------------------------------------------------------- the backdrop: far mountains, sea, rock
+  {
+    const b = scn.build();
+    group.add(b.group);
+    disposables.push(b);
+  }
 
   // ---------------------------------------------------------------- yardage posts
   {
@@ -402,6 +406,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier } = {}): Hole3D
     flag,
     cloth,
     trees,
+    scenery: { skin: scn.skin, rings: scn.rings },
     dispose: () => disposables.forEach((d) => d.dispose()),
   };
 }
@@ -605,6 +610,8 @@ function buildTrees(
   disposables: { dispose: () => void }[],
   /** one try at a tree in the woods per this many square metres */
   perTree: number,
+  /** scenery's say over which of the decorative trees stay */
+  keep?: (x: number, z: number, h: number) => boolean,
 ) {
   const rough = hole.def.rough * YD;
   type T = { x: number; z: number; h: number; pine: boolean; w: number; rot: number; tint: number };
@@ -625,11 +632,12 @@ function buildTrees(
     list.push({ x, z, h: 13 + r() * 14, pine, w: pine ? 0.62 + r() * 0.15 : 0.8 + r() * 0.15, rot: r() * 6.28, tint: 0.82 + r() * 0.32 });
   }
   const { pine, broad } = treeGeometries();
+  const kept = keep ? list.filter((t) => keep(t.x, t.z, t.h)) : list;
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   disposables.push(pine, broad, mat);
   const out: { mesh: THREE.InstancedMesh; pos: Float32Array; mats: THREE.Matrix4[] }[] = [];
   for (const kind of [true, false]) {
-    const sel = list.filter((t) => t.pine === kind);
+    const sel = kept.filter((t) => t.pine === kind);
     const mesh = new THREE.InstancedMesh(kind ? pine : broad, mat, sel.length);
     const pos = new Float32Array(sel.length * 2);
     const mats: THREE.Matrix4[] = [];

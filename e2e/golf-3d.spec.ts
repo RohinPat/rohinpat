@@ -210,3 +210,16 @@ test("the 3D course's controls pass axe", async ({ page }) => {
   const r = await axe();
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
 });
+
+test("the title's backdrop (rings, sky, palette, openings) draws without errors and inside its triangle budget", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  await page.goto("/golf?linkmock");
+  await expect(page.locator("[data-golf-screen=title]")).toBeVisible(SLOW);
+  await page.waitForFunction(() => !!(window as unknown as { __golf3d?: { info: () => { triangles: number } } }).__golf3d?.info().triangles, null, SLOW);
+  const info = await page.evaluate(() => (window as unknown as { __golf3d: { info: () => { triangles: number; soft: boolean } } }).__golf3d.info());
+  // a software renderer (CI) draws the cheapest tier: the hole as it was (about 77.6k triangles) plus the backdrop's one ring layer
+  if (info.soft) expect(info.triangles).toBeLessThan(77_556 + 600);
+  expect(errors).toEqual([]);
+});
