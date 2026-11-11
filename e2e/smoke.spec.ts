@@ -218,7 +218,9 @@ test("watch: turning the crown winds the power reserve", async ({ page }) => {
 });
 
 test("Off hours: every piece opens full screen from the keyboard and Escape brings you back", async ({ page }) => {
-  test.setTimeout(240_000); // nine pieces, two of them 3D in a software renderer
+  test.setTimeout(360_000); // nine pieces, two of them 3D in a software renderer
+  // building a 3D piece in CI's software renderer holds the page up for 10 s and more (the watch's took over 15)
+  const SLOW_3D = { timeout: 45_000 };
   await page.goto("/interests");
   await page.waitForLoadState("networkidle");
   for (const name of ["Watches", "Gaming", "Basketball", "Barça", "Music", "Cars", "Keyboards", "Golf", "Skiing"]) {
@@ -226,13 +228,12 @@ test("Off hours: every piece opens full screen from the keyboard and Escape brin
     await tile.focus();
     await page.keyboard.press("Enter");
     const stage = page.getByRole("dialog");
-    await expect(stage).toBeVisible({ timeout: 15_000 });
+    await expect(stage).toBeVisible(SLOW_3D);
     // focus moves into the stage
-    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement)), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement)), SLOW_3D).toBe(true);
     await page.keyboard.press("Escape");
-    // unmounting a 3D piece is slow in CI's software renderer
-    await expect(stage).toHaveCount(0, { timeout: 15_000 });
-    await expect(tile).toBeFocused({ timeout: 10_000 });
+    await expect(stage).toHaveCount(0, SLOW_3D);
+    await expect(tile).toBeFocused(SLOW_3D);
   }
 });
 

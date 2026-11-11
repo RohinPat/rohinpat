@@ -31,8 +31,8 @@ test.describe("the strip with a mouse", () => {
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     const dash = await openStrip(page);
-    const box = (await dash.boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    // a click on the dash itself, which waits until the opening stage has unclipped over it
+    await dash.click();
     // let go of the button: the throttle stays on
     await expect.poll(async () => (await drag(page)).throttle, SLOW).toBe(true);
     await page.waitForTimeout(300);
@@ -42,7 +42,7 @@ test.describe("the strip with a mouse", () => {
     expect((await drag(page)).throttle).toBe(true);
     await expect(stage(page).getByRole("button", { name: /throttle/i })).toHaveAttribute("aria-pressed", "true");
     // the next click lifts it
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await dash.click();
     await expect.poll(async () => (await drag(page)).throttle).toBe(false);
     await context.close();
   });

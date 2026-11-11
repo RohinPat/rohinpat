@@ -358,7 +358,10 @@ test.describe("Night run: the phone as the wheel", () => {
     await expect(phone.locator('[data-piece="engine"]')).toContainText(/phone controls/i);
     await openNight(host, phone);
     await startRun(host);
-    await expect(phone.getByTestId("night-status")).toContainText(/hold gas to start/i, SLOW);
+    // the phone is ready to drive: "Hold Gas to start", or, as a test browser sends no motion, 2.5 s after the wheel
+    // opens it says so and offers its steer buttons. The axes below are sent straight, so either will do; that the
+    // phone hears the laptop is checked by the run itself (its speed and clock reach the phone).
+    await expect(phone.getByTestId("night-status")).toContainText(/hold gas to start|use the steer buttons/i, SLOW);
 
     // the gas pad starts the run and the car moves
     const gas = (await phone.getByTestId("night-gas").boundingBox())!;
