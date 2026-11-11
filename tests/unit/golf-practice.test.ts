@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CourseGame, GREEN_BALLS, STEP } from "@/components/offhours/golf/play";
+import { CLOSEST_BALLS, CourseGame, GREEN_BALLS, STEP, TARGET_SHOTS, targetPoints } from "@/components/offhours/golf/play";
 import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
 import { TARGETS, YD } from "@/components/offhours/golf/scene";
 import { fullCarry } from "@/components/offhours/golf/swing";
-import { isPractice, modeName, queryFor, setupFor, setupFromQuery } from "@/components/golf3d/modes";
+import { challengeText, isChallenge, isPractice, modeName, onRange, queryFor, setupFor, setupFromQuery, targetsRating } from "@/components/golf3d/modes";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { stubScratchCanvas } from "./golf-headless";
 
@@ -123,5 +123,87 @@ describe("the practice modes in the URL", () => {
     expect(modeName(setupFor("range"))).toBe("Range");
     expect(modeName(setupFor("green"))).toBe("Putting green");
     expect(isPractice("full")).toBe(false);
+  });
+});
+
+describe("the range's challenges", () => {
+  const challenge = (kind: "targets" | "closest", seed = 11) => new CourseGame({ seed, holes: [RANGE_DEF], practice: "range", hills: true, challenge: kind });
+  /** a pure swing of the suggested strength, stepped until the next ball is up or the challenge is over */
+  const play = (g: CourseGame) => {
+    const b = g.balls;
+    g.remoteSwing({ ...PURE, power: g.suggested().power });
+    expect(run(g, () => (g.phase === "ready" && g.balls === b + 1) || g.phase === "round-card")).toBe(true);
+  };
+  it("scores a ball by how close it finished, more for a far flag's miss, 20 more on the green", () => {
+    expect(targetPoints(0, 100, true)).toBe(120);
+    expect(targetPoints(0, 100, false)).toBe(100);
+    expect(targetPoints(10.5, 100, false)).toBe(50);
+    expect(targetPoints(10.5, 200, false)).toBeGreaterThan(50);
+    expect(targetPoints(99, 100, false)).toBe(0);
+  });
+  it("targets: ten balls, a new flag each time (never the same twice running) with the club for it, then the end", () => {
+    const g = challenge("targets");
+    expect(g.said[0]).toMatch(/^Targets: 10 balls, a new flag for each\./);
+    for (let i = 0; i < TARGET_SHOTS; i++) {
+      expect(g.phase).toBe("ready");
+      expect(g.ball).toEqual([0, 0]);
+      expect(g.club).toBe(g.suggested().club);
+      play(g);
+    }
+    const ch = g.challenge!;
+    expect(g.phase).toBe("round-card");
+    expect(ch.done).toBe(true);
+    expect(ch.results).toHaveLength(TARGET_SHOTS);
+    for (let i = 1; i < ch.results.length; i++) expect(ch.results[i].flag).not.toBe(ch.results[i - 1].flag);
+    expect(ch.score).toBe(ch.results.reduce((a, r) => a + r.pts, 0));
+    // pure swings of the suggested club score well
+    expect(ch.score).toBeGreaterThan(TARGET_SHOTS * 60);
+    expect(g.said[g.said.length - 1]).toBe(`Targets over: ${ch.score} points.`);
+  });
+  it("targets: the same seed plays the same flags; a club change does not move the flag", () => {
+    const flags = (seed: number) => {
+      const g = challenge("targets", seed);
+      const out: number[] = [];
+      for (let i = 0; i < 4; i++) {
+        out.push(g.rangeTarget);
+        play(g);
+      }
+      return out;
+    };
+    expect(flags(5)).toEqual(flags(5));
+    const g = challenge("targets");
+    const t = g.rangeTarget;
+    g.setClub(g.club === 0 ? 5 : 0);
+    expect(g.rangeTarget).toBe(t);
+  });
+  it("closest: five balls at one flag, the best counts", () => {
+    const g = challenge("closest");
+    const flag = g.rangeTarget;
+    for (let i = 0; i < CLOSEST_BALLS; i++) play(g);
+    const ch = g.challenge!;
+    expect(ch.done).toBe(true);
+    expect(ch.results.every((r) => r.flag === flag)).toBe(true);
+    expect(ch.best).toBe(Math.min(...ch.results.map((r) => r.ft)));
+    expect(g.said[g.said.length - 1]).toMatch(/^Closest to the pin over: your best was \d+ feet?\.$/);
+  });
+  it("Space on the end starts a new challenge", () => {
+    const g = challenge("closest");
+    for (let i = 0; i < CLOSEST_BALLS; i++) play(g);
+    g.step(1);
+    g.key({ key: " " }, true);
+    expect(g.phase).toBe("ready");
+    expect(g.challenge?.results).toEqual([]);
+  });
+  it("the modes: on the range, scored, their link plays the same flags, their text says the score", () => {
+    for (const m of ["targets", "closest"] as const) {
+      const s = setupFor(m, { seed: 42 });
+      expect(onRange(m) && isChallenge(m) && !isPractice(m)).toBe(true);
+      expect(queryFor(s)).toBe(`?${m}=42`);
+      expect(setupFromQuery(new URLSearchParams(`${m}=42`))).toEqual(s);
+    }
+    expect(modeName(setupFor("closest"))).toBe("Closest to the pin");
+    const ch = { kind: "targets" as const, shots: 2, results: [{ flag: 1, ft: 12, on: true, pts: 104 }, { flag: 3, ft: 60, on: false, pts: 40 }], score: 144, best: 12, done: true };
+    expect(challengeText(setupFor("targets", { seed: 9 }), ch, "https://x")).toBe("Golf, Targets: 144 points\n104 40\nhttps://x/golf?targets=9");
+    expect(targetsRating(1000, 10)).toBe("Tour level");
   });
 });

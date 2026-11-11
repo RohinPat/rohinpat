@@ -21,7 +21,8 @@ import { replayView } from "./replay";
 import { celebrated } from "./modes";
 import { PuttCam } from "./puttcam";
 import { startLevel } from "./quality";
-import { isPractice, modeName, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
+import { isChallenge, modeName, onRange, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
+import ChallengeEnd from "./ChallengeEnd";
 import RoundEnd from "./RoundEnd";
 import Backdrop from "./Backdrop";
 
@@ -69,9 +70,11 @@ export default function Golf3D() {
 
 const KEYS = "Space three times swings: start, power, strike. With sound on, a tick marks the power the shot needs. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt; the tick is the pace to the hole. R reads the green. Escape pauses.";
 
-const PRACTICE: { mode: Mode; label: string; sub: (d: string) => string }[] = [
-  { mode: "range", label: "Range", sub: () => "Flags 60–250 yd" },
-  { mode: "green", label: "Putting green", sub: () => "The nine's greens" },
+const PRACTICE: { mode: Mode; label: string; sub: string }[] = [
+  { mode: "range", label: "Range", sub: "60–250 yd" },
+  { mode: "green", label: "Putting green", sub: "Nine greens" },
+  { mode: "targets", label: "Targets", sub: "10 balls" },
+  { mode: "closest", label: "Closest to the pin", sub: "5 balls" },
 ];
 
 const MODES: { mode: Mode; label: string; sub: (d: string) => string }[] = [
@@ -170,7 +173,8 @@ function Course() {
       sound: true,
       hills: true,
       replays: !!L.gl && !reduce.current,
-      practice: s.mode === "range" ? "range" : s.mode === "green" ? "green" : undefined,
+      practice: onRange(s.mode) ? "range" : s.mode === "green" ? "green" : undefined,
+      challenge: isChallenge(s.mode) ? s.mode : undefined,
       reduce: reduce.current,
       teeCardS: (d) => (reduce.current || !L.gl ? 2 : flyoverS(d.yards)),
       say,
@@ -359,7 +363,7 @@ function Course() {
     return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   })();
   const menuBtn =
-    "group flex w-full items-baseline justify-between gap-4 rounded-xl border border-white/10 bg-[#0d100e]/70 px-4 py-3 text-left text-[#f2ead7] backdrop-blur hover:border-[#8ad9a8]/60 hover:bg-[#0d100e]/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8ad9a8] disabled:opacity-50";
+    "group flex w-full items-baseline justify-between gap-4 rounded-xl border border-white/10 bg-[#0d100e]/70 px-4 py-3 text-left text-[#f2ead7] backdrop-blur [@media(max-height:500px)]:py-1.5 hover:border-[#8ad9a8]/60 hover:bg-[#0d100e]/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8ad9a8] disabled:opacity-50";
   const sound = (
     <button type="button" aria-pressed={!muted} onClick={() => setMuted(!muted)} className={sub(false)}>
       Sound {muted ? "off" : "on"}
@@ -444,17 +448,17 @@ function Course() {
         </p>
 
         {screen === "title" && (
-          <div className="absolute inset-0 flex items-end sm:items-center justify-center sm:justify-start p-4 sm:p-10 bg-gradient-to-t from-[#0d100e]/70 via-[#0d100e]/10 to-transparent sm:bg-gradient-to-r">
+          <div className="absolute inset-0 overflow-y-auto flex items-end sm:items-center justify-center sm:justify-start p-4 sm:p-10 [@media(max-height:500px)]:!items-start [@media(max-height:500px)]:!p-3 bg-gradient-to-t from-[#0d100e]/70 via-[#0d100e]/10 to-transparent sm:bg-gradient-to-r">
             <div className="w-full max-w-sm">
-              <h1 className="text-[56px] sm:text-[72px] leading-none font-extrabold tracking-tight text-[#f2ead7] drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)]">Golf</h1>
-              <div ref={menu} className="mt-6 flex flex-col gap-2">
+              <h1 className="text-[56px] sm:text-[72px] [@media(max-height:500px)]:!text-[34px] leading-none font-extrabold tracking-tight text-[#f2ead7] drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)]">Golf</h1>
+              <div ref={menu} className="mt-6 [@media(max-height:500px)]:mt-2 flex flex-col gap-2 [@media(max-height:500px)]:gap-1.5">
                 {shared && (
                   <button type="button" aria-busy={waiting === shared} onClick={() => pick(shared)} className={`${menuBtn} border-[#8ad9a8]/70`}>
                     <span className="text-lg font-bold">Play this round</span>
                     <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8ad9a8]">{modeName(shared)}</span>
                   </button>
                 )}
-                {[...MODES, ...PRACTICE].map((m) => (
+                {MODES.map((m) => (
                   <button
                     key={m.mode}
                     type="button"
@@ -466,6 +470,21 @@ function Course() {
                     <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#b5b6ab] group-hover:text-[#8ad9a8]">{m.sub(day)}</span>
                   </button>
                 ))}
+                {/* practice and the range's challenges: smaller, two to a row */}
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  {PRACTICE.map((m) => (
+                    <button
+                      key={m.mode}
+                      type="button"
+                      aria-busy={waiting?.mode === m.mode && waiting !== shared}
+                      onClick={() => pick(setupFor(m.mode))}
+                      className={`${menuBtn} !flex-col !items-start !gap-0.5 !px-3 !py-2 ${waiting?.mode === m.mode && waiting !== shared ? "border-[#8ad9a8]/70" : ""}`}
+                    >
+                      <span className="text-sm font-bold">{m.label}</span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#b5b6ab] group-hover:text-[#8ad9a8]">{m.sub}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
               {/* how much of the course has loaded: under the menu, out of its flow, gone when the course is up */}
               <div
@@ -509,6 +528,9 @@ function Course() {
           </div>
         )}
 
+        {screen === "play" && phase === "round-card" && G?.challenge?.done && setup && (
+          <ChallengeEnd ch={G.challenge} setup={setup} onAgain={() => start(setupFor(setup.mode))} onMenu={toTitle} />
+        )}
         {screen === "play" && phase === "round-card" && G?.round && setup && (
           <RoundEnd game={G} setup={setup} onAgain={() => start(setup.mode === "daily" ? setup : setupFor(setup.mode))} onMenu={toTitle} />
         )}
