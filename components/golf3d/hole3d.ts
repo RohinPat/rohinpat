@@ -3,7 +3,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
-import { GH, GW, greenHeight } from "@/components/offhours/golf/green";
+import { GH, GW, greenHeight, zone } from "@/components/offhours/golf/green";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
 import { prepareScenery, type Skin } from "./scenery";
@@ -51,6 +51,8 @@ export type Hole3D = {
   /** the flag's group, scaled from the outside so it can be found from far away */
   flag: THREE.Group;
   cloth: THREE.Mesh;
+  /** the range's target flags (none on a hole of the course), scaled the same way */
+  targetFlags: THREE.Group[];
   /** trees, so the renderer can hide the ones between the camera and the ball */
   trees: { mesh: THREE.InstancedMesh; pos: Float32Array; mats: THREE.Matrix4[] }[];
   /** the backdrop's sky, and whether it brings its own far mountains (scenery/) */
@@ -183,6 +185,18 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   c.fillStyle = COL.greenB;
   for (let x = gr.x - 40; x < gr.x + 40; x += 5) c.fillRect(tx(x), tz(gr.z - 40), 2.5 * s, 80 * s);
   c.restore();
+  // the range's targets: rounds of green in a fringe, mown in rings
+  for (const tg of hole.world.greens.slice(1)) {
+    const ring = (rad: number) => tg.ring(rad).map(([x, , z]) => [x, z] as P);
+    path(ring(tg.r + tg.fringe));
+    c.fillStyle = COL.fringe;
+    c.fill();
+    for (let k = 0; k < 4; k++) {
+      path(ring(tg.r * (1 - k * 0.25)));
+      c.fillStyle = k % 2 ? COL.greenB : COL.green;
+      c.fill();
+    }
+  }
   // grain: thousands of faint flecks so the grass is not flat colour up close
   {
     const r = seeded(def.n * 977 + 3);
@@ -374,6 +388,11 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   }
 
   // ---------------------------------------------------------------- the flag and the cup
+  const targetPole = new THREE.CylinderGeometry(0.02, 0.02, 2.4, 6);
+  const poleMat = new THREE.MeshLambertMaterial({ color: "#f7f3e8" });
+  const targetCloth = new THREE.PlaneGeometry(0.62, 0.4).translate(0.31, 0, 0);
+  const targetMat = new THREE.MeshLambertMaterial({ color: "#edbb00", side: THREE.DoubleSide });
+  disposables.push(targetPole, poleMat, targetCloth, targetMat);
   const flag = new THREE.Group();
   const cloth = new THREE.Mesh();
   {
@@ -398,8 +417,23 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     disposables.push(pole.geometry, pole.material as THREE.Material, cg, cloth.material as THREE.Material, cup.geometry, cup.material as THREE.Material);
   }
 
+  // a flag on each target: gold, so they are not taken for the hole's
+  const targetFlags = hole.world.greens.slice(1).map((tg) => {
+    const f = new THREE.Group();
+    f.position.set(tg.x, ground.y(tg.x, tg.z), tg.z);
+    const pole = new THREE.Mesh(targetPole, poleMat);
+    pole.position.y = 1.2;
+    const cl = new THREE.Mesh(targetCloth, targetMat);
+    cl.position.y = 2.2;
+    cl.rotation.y = -Math.PI / 2;
+    f.add(pole, cl);
+    group.add(f);
+    return f;
+  });
+
   return {
     group,
+    targetFlags,
     heightAt,
     surfaceY: ground.y,
     waterY: ground.waterY,
@@ -451,6 +485,67 @@ function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: numb
   c.fillStyle = COL.greenB;
   for (let x = gr.x - 40; x < gr.x + 40; x += 5) c.fillRect((x - x0) * T, 0, 2.5 * T, ch);
   c.restore();
+  // a hillshade baked into the paint: the green lit low from one side so every slope is light on one face and shade on
+  // the other, and tinted by height (higher, warmer and paler; lower, deeper and cooler), so the break reads in a still
+  // frame as well as when the ball rolls. It is paint only: the ball plays on the true surface.
+  {
+    const g = 0.1;
+    const nx = Math.ceil(W / g) + 1, nz = Math.ceil(L / g) + 1;
+    const Hy = new Float32Array(nx * nz), Rz = new Float32Array(nx * nz);
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        const x = x0 + i * g, z = z0 + j * g;
+        Hy[j * nx + i] = relief.y(x, z);
+        const [gx, gy] = hole.toGreen(x, z);
+        const r = relief.rise(gx, gy);
+        const on = zone(hole.green, gx, gy) === 0;
+        Rz[j * nx + i] = on ? r : NaN;
+        if (on) {
+          lo = Math.min(lo, r);
+          hi = Math.max(hi, r);
+        }
+      }
+    const span = Math.max(0.06, hi - lo);
+    // light from the course's low-x, low-z side (the left, back of the green as the player sees it from the tee)
+    const lx = -0.6, lz = 0.8;
+    const ov = document.createElement("canvas");
+    ov.width = nx;
+    ov.height = nz;
+    const oc = ov.getContext("2d")!;
+    const img = oc.createImageData(nx, nz);
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        const a = j * nx + i;
+        const gx = (Hy[j * nx + Math.min(nx - 1, i + 1)] - Hy[j * nx + Math.max(0, i - 1)]) / (g * (Math.min(nx - 1, i + 1) - Math.max(0, i - 1)));
+        const gz = (Hy[Math.min(nz - 1, j + 1) * nx + i] - Hy[Math.max(0, j - 1) * nx + i]) / (g * (Math.min(nz - 1, j + 1) - Math.max(0, j - 1)));
+        // the slope toward the light: positive where the ground faces it, so it is lit
+        const sh = Math.tanh(-(gx * lx + gz * lz) * 22);
+        const hgt = Rz[a] === Rz[a] ? Math.max(-1, Math.min(1, ((Rz[a] - lo) / span) * 2 - 1)) : 0;
+        let r: number, gg: number, b: number, al: number;
+        if (sh >= 0) [r, gg, b, al] = [255, 255, 190, sh * 0.34];
+        else [r, gg, b, al] = [8, 44, 70, -sh * 0.5];
+        // the height tint: a faint warm wash high up, a faint cool one low down
+        const ta = Math.abs(hgt) * 0.12;
+        const o = a * 4;
+        const ra = al + ta * (1 - al);
+        const [tr, tg, tb] = hgt >= 0 ? [255, 240, 150] : [20, 90, 120];
+        r = (r * al + tr * ta * (1 - al)) / (ra || 1);
+        gg = (gg * al + tg * ta * (1 - al)) / (ra || 1);
+        b = (b * al + tb * ta * (1 - al)) / (ra || 1);
+        img.data[o] = r;
+        img.data[o + 1] = gg;
+        img.data[o + 2] = b;
+        img.data[o + 3] = Math.round(ra * 255);
+      }
+    oc.putImageData(img, 0, 0);
+    c.save();
+    path(gr.r + 1.1);
+    c.clip();
+    c.imageSmoothingQuality = "high";
+    c.drawImage(ov, 0, 0, nx, nz, 0, 0, nx * g * T, nz * g * T);
+    c.restore();
+  }
   // contours every 2.5 cm on the green and the fringe (marching squares, stroked smooth), then grain over everything
   {
     const g = 0.2, LV = 0.025;
@@ -489,8 +584,8 @@ function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: numb
           }
         }
       }
-    c.strokeStyle = "rgba(20,60,20,0.08)";
-    c.lineWidth = Math.max(1, T * 0.025);
+    c.strokeStyle = "rgba(20,60,20,0.16)";
+    c.lineWidth = Math.max(1, T * 0.03);
     c.stroke();
     c.restore();
     const r = seeded(hole.def.n * 131 + 7);

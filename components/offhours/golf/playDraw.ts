@@ -444,14 +444,26 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   panel(ctx, pad, pad, cw, 76);
   display(ctx, 18, 800);
   ctx.fillStyle = PAPER;
-  ctx.fillText(`HOLE ${def.n} · PAR ${def.par}`, pad + 10, pad + 26);
-  mono(ctx, 10);
-  ctx.fillStyle = DIM;
-  const toPin = g.yardsToPin();
-  const onGreen = g.lie === "green" || g.lie === "fringe";
-  const plays = onGreen || (g.phase !== "ready" && g.phase !== "swing") ? null : g.playsLike();
-  ctx.fillText(onGreen ? `${Math.round(toPin * 3)} FT TO THE PIN` : plays !== null ? `${Math.round(toPin)} YD · PLAYS ${plays}` : `${Math.round(toPin)} YD TO THE PIN`, pad + 10, pad + 46);
-  ctx.fillText(`STROKES ${g.strokes}`, pad + 10, pad + 62);
+  const aiming = g.phase === "ready" || g.phase === "swing";
+  if (g.opts.practice === "range") {
+    // the range: the flag aimed at, how it plays, and the balls hit
+    ctx.fillText("RANGE", pad + 10, pad + 26);
+    mono(ctx, 10);
+    ctx.fillStyle = DIM;
+    const yd = Math.round(g.yardsToTarget());
+    const plays = aiming ? g.playsLike() : null;
+    ctx.fillText(plays !== null ? `${yd} YD FLAG · PLAYS ${plays}` : `${yd} YD FLAG`, pad + 10, pad + 46);
+    ctx.fillText(`BALLS ${g.balls}`, pad + 10, pad + 62);
+  } else {
+    ctx.fillText(`HOLE ${def.n} · PAR ${def.par}`, pad + 10, pad + 26);
+    mono(ctx, 10);
+    ctx.fillStyle = DIM;
+    const toPin = g.yardsToPin();
+    const onGreen = g.lie === "green" || g.lie === "fringe";
+    const plays = onGreen || !aiming ? null : g.playsLike();
+    ctx.fillText(onGreen ? `${Math.round(toPin * 3)} FT TO THE PIN` : plays !== null ? `${Math.round(toPin)} YD · PLAYS ${plays}` : `${Math.round(toPin)} YD TO THE PIN`, pad + 10, pad + 46);
+    ctx.fillText(`STROKES ${g.strokes}`, pad + 10, pad + 62);
+  }
 
   // ---- top right: the wind, arrow relative to the aim (up = downrange)
   const wx = w - pad - 112;

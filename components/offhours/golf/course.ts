@@ -2,7 +2,7 @@ import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
 import type { Ground } from "./terrain";
-import { YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
+import { RANGE_WORLD, TARGETS, YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
 // The course: hand-authored holes (the decision on each hole is the design) and
 // what buildHole makes of one: where the ball stops (surfaceAt), the ground,
@@ -61,6 +61,8 @@ export type HoleDef = {
   landing: [number, number];
   /** the shape of the ground (terrain.ts); flat without one */
   ground?: Ground;
+  /** the range's target greens (scene.ts TARGETS) stand on it: flat rounds of green in a fringe, each with a flag */
+  targets?: boolean;
 };
 
 export const HOLE_DEFS: HoleDef[] = [
@@ -277,6 +279,37 @@ export const BACK_DEFS: HoleDef[] = [
 /** all nine */
 export const NINE_DEFS: HoleDef[] = [...HOLE_DEFS, ...BACK_DEFS];
 
+/** how far a target green's fringe reaches past its edge, m (the range's own) */
+export const TARGET_FRINGE = 2.8;
+/**
+ * The driving range as a hole of the 3D course: a wide, gently falling field with the range's six target greens on
+ * it, each guarded by sand, and a green at the far end. Practice is played on it (play.ts `practice: "range"`).
+ */
+export const RANGE_DEF: HoleDef = {
+  n: 10,
+  name: "The range",
+  par: 4,
+  yards: 300,
+  line: [[0, 0], [0, 150], [0, 300]],
+  half: [30, 40, 40],
+  rough: 18,
+  pin: [0, 300],
+  green: { c: [0, 301], seed: 4999, severity: 0.3 },
+  bunkers: TARGETS.flatMap((t, i) => {
+    const side = i % 2 ? -1 : 1;
+    return [
+      { x: (t.gx + side * (t.gr + 2.5)) / YD, z: (t.gz - t.gr * 0.4) / YD, rx: (3.2 + (i % 3) * 0.6) / YD, rz: (3.2 + (i % 3) * 0.6) / YD },
+      { x: (t.gx - side * (t.gr * 0.3)) / YD, z: (t.gz - t.gr - 2.2) / YD, rx: 2.6 / YD, rz: 2.6 / YD },
+    ];
+  }),
+  water: [],
+  trees: { seed: 77, edge: 10, spacing: 7 },
+  wind: { speed: 1.2, dir: 0.5 },
+  landing: [0, 150],
+  ground: { rise: [[0, 0], [40, -0.5], [300, -2]], swell: 0.25 },
+  targets: true,
+};
+
 const blobHit = (b: Blob, x: number, z: number) => {
   const dx = x - b.x * YD, dz = z - b.z * YD;
   const c = Math.cos(b.rot ?? 0), s = Math.sin(b.rot ?? 0);
@@ -395,6 +428,12 @@ export function buildHole(def: HoleDef): BuiltHole {
 
   const surfaceAt = (x: number, z: number): Surface => {
     for (const b of def.water) if (waterHit(b, x, z)) return "water";
+    if (def.targets)
+      for (const t of TARGETS) {
+        const d = Math.hypot(x - t.gx, z - t.gz);
+        if (d <= t.gr) return "green";
+        if (d <= t.gr + TARGET_FRINGE) return "fringe";
+      }
     // the green: only worth asking near it
     if (Math.abs(x - cx) < GW * 0.62 && Math.abs(z - cz) < GH * 0.7) {
       const [gx, gy] = toGreen(x, z);
@@ -543,7 +582,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     bunkers: [],
     sand: def.bunkers.map((b) => blobRing(b)),
     water: def.water.map((w) => waterRing(w)),
-    greens: [{ x: cx, z: cz, r: GH / 2, ring: greenRing, fringe: 0.7, pin, plain: true }],
+    greens: [{ x: cx, z: cz, r: GH / 2, ring: greenRing, fringe: 0.7, pin, plain: true }, ...(def.targets ? RANGE_WORLD.greens : [])],
     trees,
     boards: [],
     markers,

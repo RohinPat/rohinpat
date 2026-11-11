@@ -240,6 +240,9 @@ export type Putt = {
   aimPress: { x: number; y: number };
   kAngle: number;
   kPower: number;
+  /** the power that rolls a held-Space putt to the cup on a flat green; it ticks once as the charge passes it */
+  kMark: number;
+  kMarked: boolean;
   kCharging: boolean;
   kTouched: number;
   drops: Drop[];
@@ -278,6 +281,8 @@ export type PuttCourse = {
   /** pick the ball up when this many strokes have been played */
   pickUp: number;
   onDone: (strokes: number, pickedUp: boolean) => void;
+  /** a practice ball: no par, no score, the HUD says the green and the putts */
+  practice?: boolean;
 };
 
 export function newPutt(): Putt {
@@ -293,6 +298,8 @@ export function newPutt(): Putt {
     aimPress: { x: 0, y: 0 },
     kAngle: 0,
     kPower: 0,
+    kMark: 0,
+    kMarked: false,
     kCharging: false,
     kTouched: -9,
     drops: [],
@@ -548,6 +555,8 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
     if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap) {
       p.kCharging = true;
       p.kPower = 0;
+      p.kMark = puttPowerFor(Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y));
+      p.kMarked = false;
       p.kTouched = t;
     } else if (!down && p.kCharging) {
       p.kCharging = false;
@@ -571,7 +580,7 @@ function finishHole(p: Putt, t: number, env: PuttEnv, pickedUp = false) {
   p.pickedUp = pickedUp;
   if (p.course) {
     // the course keeps the card and says the result; the putt only shows the call, then hands the hole back
-    p.call = pickedUp ? "PICK UP" : callFor(p.strokes, H.par);
+    p.call = pickedUp ? "PICK UP" : p.course.practice ? (p.strokes === 1 ? "ONE PUTT" : `${p.strokes} PUTTS`) : callFor(p.strokes, H.par);
     p.callT = t;
     p.nextT = t + 1.5;
     return;
@@ -626,7 +635,14 @@ function update(p: Putt, dt: number, t: number, env: PuttEnv) {
     }
     if (pt.t > 0.5) p.putter = null;
   }
-  if (p.kCharging) p.kPower = Math.min(1, p.kPower + dt * 0.62);
+  if (p.kCharging) {
+    p.kPower = Math.min(1, p.kPower + dt * 0.62);
+    // the pace to the cup, to the ear (the aim line shows it as the roll's length)
+    if (!p.kMarked && p.kPower >= p.kMark) {
+      p.kMarked = true;
+      sfx("tick");
+    }
+  }
   if (p.ball.moving && !p.ball.sunk) {
     let ev: "sunk" | "lip" | null = null;
     for (let i = 0; i < 4 && !ev && p.ball.moving; i++) ev = stepBall(H, p.ball, dt / 4);
@@ -1097,12 +1113,12 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   panel(10, 10, cw, ch);
   ctx.fillStyle = "#f2ead7";
   display(ctx, play ? 20 : 14, 800);
-  ctx.fillText(`HOLE ${H.n} · PAR ${H.par}`, 20, play ? 34 : 28);
+  ctx.fillText(p.course?.practice ? `GREEN ${H.n}` : `HOLE ${H.n} · PAR ${H.par}`, 20, play ? 34 : 28);
   if (play) {
     mono(ctx, 10);
     ctx.fillStyle = "#b5b6ab";
     ctx.fillText(`${Math.round(dist * 3.281)} FT TO THE CUP`, 20, 52);
-    ctx.fillText(`STROKES ${p.strokes}`, 20, 66);
+    ctx.fillText(p.course?.practice ? `PUTTS ${p.strokes}` : `STROKES ${p.strokes}`, 20, 66);
   }
   if (!play) return;
 
