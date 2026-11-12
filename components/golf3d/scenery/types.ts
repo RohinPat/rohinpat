@@ -57,6 +57,8 @@ export type Palette = {
   reach?: number;
   /** metres beyond the playing area where it fades in, default [30, 90] */
   ramp?: [number, number];
+  /** phase 3: blotches of a second colour over the ground (gold aspen, willow): the share of ground they cover, their size in m */
+  patches?: { color: string; share: number; scale?: number; seed?: number };
 };
 
 export type HillsSpec = {
@@ -118,6 +120,28 @@ export type WallSpec = {
   seed?: number;
 };
 
+/** phase 3 (waterfall.ts): a fall down one of the scene's walls into a pool of its own at the foot */
+export type WaterfallSpec = {
+  /** which of the scene's walls it comes down (index into `walls`) */
+  wall: number;
+  /** where along that wall, 0 to 1 */
+  at: number;
+  /** m wide at the lip and at the foot */
+  width: [number, number];
+  /** the pool at the foot: its radius, m */
+  pool: number;
+  /** the water: its body and its froth (hex) */
+  tones?: { water: string; froth: string; pool: string };
+};
+
+/** phase 3 (mist.ts): low banks of mist lying round the hole beyond the trees, in rings at a few distances */
+export type MistSpec = {
+  color: string;
+  /** each ring: its distance from the middle of the hole, how high it stands above the hole's ground, its strength 0 to 1 */
+  layers: { radius: number; top: number; alpha: number }[];
+  seed?: number;
+};
+
 export type OpeningSpec =
   | { kind: "side"; side: "left" | "right"; from?: number; to?: number; /** the share of trees kept */ keep: number }
   | { kind: "beyond"; halfWidth: number; depth: number; keep: number };
@@ -133,4 +157,6 @@ export type SceneryRecord = {
   ringY0?: number;
   openings?: OpeningSpec[];
   props?: PropsSpec;
+  waterfall?: WaterfallSpec;
+  mist?: MistSpec;
 };
