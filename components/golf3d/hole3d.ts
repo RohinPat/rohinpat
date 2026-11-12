@@ -7,6 +7,7 @@ import { GH, GW, greenHeight, zone } from "@/components/offhours/golf/green";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
 import { prepareScenery, type Skin } from "./scenery";
+import { paintAreas } from "./areas3d";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
@@ -149,6 +150,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     c.fillRect(-3.5 * s, -4 * s, 7 * s, 9 * s);
     c.restore();
   }
+  // fescue, gorse, waste and out of bounds (areas3d.ts), under the sand and the water
+  paintAreas(c, hole.areas, tx, tz, s, def.n);
   // sand: a dark lip, then the sand, lighter in the middle
   for (const ring of hole.world.sand ?? []) {
     path(ring);
