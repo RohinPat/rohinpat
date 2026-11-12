@@ -265,33 +265,69 @@ export const HOLE_DEFS: HoleDef[] = [
     ],
   },
   {
-    // the green ringed with sand, a pond on its left edge, the strongest wind of the six blowing toward the pond
+    // blind over a dune: a drive aimed at the marker post on the crest has to carry a sandy waste and the dune's face, and
+    // drops to a short pitch into a punchbowl green; the safe line round the dune's low left shoulder leaves a longer one
     n: 5,
     name: "The Collar",
-    par: 3,
-    yards: 175,
-    line: [[0, 0], [0, 177]],
-    half: [10, 15],
+    par: 4,
+    yards: 362,
+    line: [[0, 0], [0, 205], [0, 262], [0, 362]],
+    half: [13, 25, 20, 14],
     rough: 12,
-    pin: [3, 174],
-    green: { c: [0, 176], seed: 4505, severity: 0.9 },
-    bunkers: [
-      { x: 0, z: 164.5, rx: 6, rz: 3.6 },
-      { x: 12, z: 168, rx: 5, rz: 4, rot: -0.7 },
-      { x: 16.5, z: 176, rx: 3.8, rz: 5 },
-      { x: 12, z: 184, rx: 5, rz: 4, rot: 0.7 },
-      { x: 0, z: 187.5, rx: 6, rz: 3.6 },
-      { x: -12, z: 184.5, rx: 4.5, rz: 3.6, rot: -0.7 },
-      { x: -12, z: 167.5, rx: 4.5, rz: 3.6, rot: 0.7 },
+    pin: [3, 359],
+    green: { c: [0, 361], seed: 4505, severity: 0.9 },
+    // (no bunkers: the waste and the bowl are the hazards)
+    bunkers: [],
+    water: [],
+    trees: {
+      seed: 53,
+      edge: 6,
+      spacing: 6,
+      sides: [0.45, 0.45],
+      behind: 0,
+      // dune country: the trees fall back from the waste, the dune and the bowl, and stand only by the tee
+      clear: [[[-420, 100], [-420, 760], [420, 760], [420, 100]]],
+    },
+    wind: { speed: 3, dir: -1.2 },
+    landing: [8, 238],
+    // a steady climb to the dune, a drop behind it, and the green down in the bowl
+    ground: {
+      rise: [[0, 0], [70, 0.3], [150, 0.8], [200, 1.3], [222, 1.8], [250, 0.2], [290, -1.6], [330, -2.8], [362, -2.8]],
+      swell: 0.3,
+      sigma: 9,
+      greenEase: 10,
+    },
+    features: [
+      // the dune: a long ridge across the corridor that is low at its left end (the safe way) and high at the post
+      { k: "ridge", path: [[0, 214], [22, 212], [50, 214], [86, 222]], w: 34, h: 3.4, h2: 4 },
+      { k: "mound", x: 18, z: 212, r: 26, rz: 24, h: 4.8 },
+      // the dunes to either side of the corridor, beyond the rough: the tee shot plays down a dune valley
+      { k: "ridge", path: [[-80, 150], [-86, 220], [-78, 300]], w: 30, h: 6 },
+      { k: "ridge", path: [[84, 140], [94, 220], [86, 300]], w: 30, h: 8 },
+      // dunes to either side down the lee, so the bowl sits in dune country
+      { k: "ridge", path: [[58, 290], [68, 330], [62, 380]], w: 20, h: 3 },
+      { k: "ridge", path: [[-58, 296], [-66, 340], [-60, 384]], w: 20, h: 2.6 },
+      // the punchbowl: a flat floor round the green, a rim that feeds the ball down, a gap at the front and a high back
+      { k: "bowl", x: 0, z: 361, r: 28, rz: 26, d: 1.3, flat: 0.55, rim: 2, rimW: 12 },
+      { k: "hollow", x: 0, z: 337, r: 6, rz: 8, d: 1.6 },
+      { k: "mound", x: 0, z: 392, r: 18, rz: 12, h: 2.2 },
+      // hummocks in the waste
+      { k: "mound", x: -24, z: 160, r: 8, rz: 5, rot: 0.4, h: 0.8 },
+      { k: "mound", x: 14, z: 172, r: 9, rz: 5, rot: -0.5, h: 0.9 },
+      { k: "mound", x: 30, z: 152, r: 7, rz: 5, rot: 0.2, h: 0.7 },
+      { k: "mound", x: -8, z: 190, r: 8, rz: 4, rot: 0.1, h: 0.7 },
     ],
-    water: [{ x: -18.5, z: 176, rx: 5.5, rz: 7.5 }],
-    trees: { seed: 53, edge: 6, spacing: 6 },
-    wind: { speed: 4.2, dir: -1.2 },
-    landing: [3, 174],
-    // uphill to the green: it plays longer than it reads
-    ground: { rise: [[0, 0], [80, 0.5], [150, 3], [177, 5]], swell: 0.3 },
-    // a sandy waste off the right of the line, short of the bunkers: any club plays from it, but it is not the fairway
-    areas: [{ kind: "waste", poly: [[13, 98], [22, 95], [32, 104], [37, 122], [35, 145], [28, 160], [18, 158], [14, 138], [15, 116]] }],
+    // a striped post on the crest to aim by
+    props: [{ kind: "post", at: [18, 212], h: 6.5, r: 0.14 }],
+    areas: [
+      // the waste across the fairway, short of the dune
+      { kind: "waste", poly: [[-44, 146], [-22, 140], [4, 144], [30, 138], [46, 142], [49, 172], [47, 204], [32, 214], [6, 212], [-14, 198], [-30, 187], [-47, 181], [-48, 160]] },
+      // the dune's face and crest in fescue, but for the notch on its low left shoulder
+      { kind: "fescue", poly: [[4, 214], [22, 216], [46, 216], [64, 218], [66, 230], [44, 232], [20, 230], [4, 226]] },
+      // sandy faces on the rim of the bowl, the rest left to the fairway and the rough
+      { kind: "waste", poly: [[16, 344], [28, 350], [31, 366], [26, 378], [19, 368], [17, 354]] },
+      { kind: "fescue", poly: [[-32, 346], [-24, 338], [-19, 356], [-24, 378], [-34, 370]] },
+    ],
   },
   {
     // a long dogleg left with water along the inside of the bend and the wind in your face
