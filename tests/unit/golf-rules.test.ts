@@ -172,7 +172,7 @@ describe("the lie order and surfaceAt", () => {
     }
   });
   it("precedence: water, out of bounds, the green and bunkers, then gorse, waste, fescue, then the fairway", () => {
-    const base = NINE_DEFS[4]; // hole 5: a green, a bunker ring and a pond
+    const base = NINE_DEFS[1]; // hole 2: a green, a bunker and a pond
     const all = (k: Area["kind"]): Area => ({ kind: k, poly: box(-80, 0, 80, 260) });
     const b = buildHole({ ...base, areas: [all("fescue"), all("waste"), all("gorse")] });
     expect(b.surfaceAt(0, 40 * YD)).toBe("gorse");
@@ -180,7 +180,7 @@ describe("the lie order and surfaceAt", () => {
     expect(buildHole({ ...base, areas: [all("fescue")] }).surfaceAt(0, 40 * YD)).toBe("fescue");
     // the green and a bunker are never swallowed
     expect(b.surfaceAt(base.green.c[0] * YD, base.green.c[1] * YD)).toBe("green");
-    expect(b.surfaceAt(0, 164.5 * YD)).toBe("bunker");
+    expect(b.surfaceAt(base.bunkers[0].x * YD, base.bunkers[0].z * YD)).toBe("bunker");
     // the pond beats everything, and out of bounds beats the rest
     const pond = base.water[0] as { x: number; z: number };
     expect(buildHole({ ...base, areas: [all("oob")] }).surfaceAt(pond.x * YD, pond.z * YD)).toBe("water");

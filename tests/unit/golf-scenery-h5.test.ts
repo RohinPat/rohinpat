@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { terrainOf } from "@/components/offhours/golf/terrain";
+import { YD } from "@/components/offhours/golf/scene";
 import { prepareScenery } from "@/components/golf3d/scenery";
 import { makeHeight } from "@/components/golf3d/scenery/height";
 import { ridgedLift, ridgedWindow } from "@/components/golf3d/scenery/ridged";
@@ -85,24 +86,34 @@ describe("hole 5's scene", () => {
     expect(at(w.bearing + w.half + 5)).toBeCloseTo(1, 6);
   });
 
-  it("past the green the sea band shows over the drawn dunes from the tee, from the tee deck and from over the trees", () => {
+  it("past the green the sea band shows over the drawn dunes from the crest and from over the trees, and the dune hides it from the golfer on the tee (the drive is blind)", () => {
     const { heightAt } = makeHeight(hole, ground, rec);
     const soft = rec.rings!.find((l) => l.soft)!;
     const seaDeg = (SEA_BEARING | 0);
     expect(rec.rings!.filter((l) => l.soft)).toHaveLength(1);
-    const g0 = ground(0, 0);
-    // the nearest the horizon of the drawn ground comes, as an angle above an eye, along a bearing from the tee
-    const horizon = (eyeY: number, deg: number) => {
+    // the nearest the horizon of the drawn ground comes, as an angle above an eye at (ex, ez), along a bearing
+    const horizon = (ex: number, ez: number, eyeY: number, deg: number) => {
       let top = -Infinity;
       for (let d = 20; d <= 2500; d += d < 400 ? 5 : 25) {
         const a = deg * DEG;
-        top = Math.max(top, (heightAt(Math.sin(a) * d, Math.cos(a) * d) - eyeY) / d);
+        top = Math.max(top, (heightAt(ex + Math.sin(a) * d, ez + Math.cos(a) * d) - eyeY) / d);
       }
       return top;
     };
     // the band's crest as an angle from the same eye
     const band = (eyeY: number, deg: number) => (ringHeight(soft, deg * DEG) - eyeY) / soft.radius;
-    for (const eyeY of [g0 + 3, g0 + 12, g0 + 40]) for (const deg of [seaDeg - 4, seaDeg, seaDeg + 4]) expect(band(eyeY, deg)).toBeGreaterThan(horizon(eyeY, deg));
+    const post = hole.def.props!.find((p) => p.kind === "post")!;
+    const [px, pz] = [post.at[0] * YD, post.at[1] * YD];
+    const g0 = ground(0, 0);
+    const eyes: [string, number, number, number][] = [
+      ["on the tee deck", 0, 0, g0 + 12],
+      ["over the trees", 0, 0, g0 + 40],
+      ["on the crest", px, pz, ground(px, pz) + 2],
+    ];
+    for (const [name, ex, ez, eyeY] of eyes) for (const deg of [seaDeg - 4, seaDeg, seaDeg + 4]) expect(band(eyeY, deg), `${name} at ${deg}`).toBeGreaterThan(horizon(ex, ez, eyeY, deg));
+    // from the golfer's own eye on the tee the dune is the horizon where it stands (the drive is blind), and the sea shows beside it
+    expect(band(g0 + 3, seaDeg - 4)).toBeGreaterThan(horizon(0, 0, g0 + 3, seaDeg - 4));
+    for (const deg of [seaDeg, seaDeg + 4]) expect(band(g0 + 3, deg)).toBeLessThan(horizon(0, 0, g0 + 3, deg));
   });
 
   it("the sea band is a gap in the land of the kept layer, and lower than the land beside it", () => {
@@ -111,17 +122,14 @@ describe("hole 5's scene", () => {
     for (const d of [-60, -35, 40, 90, 180]) expect(ringHeight(soft, d * DEG)).toBeGreaterThan(sea + 5);
   });
 
-  it("opens the trees behind the green, never the copse", () => {
+  it("dune country: the hole stands no trees past the tee, and the opening past the green never takes the copse", () => {
     const { beyond } = makeHeight(hole, ground, rec);
     const keep = makeTreeKeep(hole, rec, beyond)!;
     expect(keep).toBeDefined();
     for (const b of hole.blockers) expect(keep(b.x, b.z, b.h)).toBe(true);
-    const dropped = hole.world.trees.filter((t) => !keep(t.x, t.z, t.h));
-    expect(dropped.length).toBeGreaterThan(8);
-    for (const t of dropped) {
-      expect(beyond(t.x, t.z)).toBeGreaterThanOrEqual(5);
-      expect(t.z).toBeGreaterThan(170);
-    }
+    // (the hole clears its own trees from 100 yd on, so the opening has none of them left to drop)
+    expect(hole.world.trees.filter((t) => t.z > 100 * YD)).toEqual([]);
+    expect(hole.world.trees.length).toBeGreaterThan(5);
   });
 
   it("stays inside the budget of every tier", () => {

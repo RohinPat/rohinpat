@@ -106,7 +106,7 @@ describe("the round's stats", () => {
     });
     const s = roundStats(g);
     expect(s.greens).toMatch(/^\d\/6$/);
-    expect(s.fairways).toMatch(/^\d\/4$/);
+    expect(s.fairways).toMatch(/^\d\/5$/);
     expect(s.putts).toBe(g.stats.reduce((a, x) => a + x.putts, 0));
   });
 });
