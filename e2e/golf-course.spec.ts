@@ -63,9 +63,19 @@ async function swing(p: Page, yards: number) {
 async function putt(p: Page, feet: number) {
   const v = Math.sqrt(2 * 0.065 * 9.81 * (feet / 3.281 + 0.3));
   const power = Math.pow(Math.max(0, v - 0.12) / 4.7, 1 / 1.6);
+  // the power grows with the game's frames, not the wall clock (CI draws in software, a few frames a second):
+  // hold Space until the game's own charge has reached it
   await p.keyboard.down("Space");
-  await p.waitForTimeout(Math.max(80, (power / 0.62) * 1000));
+  await p.waitForFunction((pw) => ((window as unknown as PuttWin).__golf.putt.kPower ?? 0) >= pw, Math.min(1, Math.max(0.05, power)), SLOW);
   await p.keyboard.up("Space");
+}
+type PuttWin = { __golf: { putt: { kPower: number }; step(dt: number): void; puttState(): { rolling: boolean }; phase: string } };
+/** play the putt's roll out by hand, so a slow renderer does not stretch it past the waits */
+async function rollOut(p: Page) {
+  await p.evaluate(() => {
+    const g = (window as unknown as PuttWin).__golf;
+    for (let i = 0; i < 2400 && g.phase === "putt" && g.puttState().rolling; i++) g.step(1 / 60);
+  });
 }
 
 test("play hole 1 with the keyboard, and the page stays clean on the tee card, in flight and on the hole card", async ({ page }) => {
@@ -105,6 +115,7 @@ test("play hole 1 with the keyboard, and the page stays clean on the tee card, i
     else if (ph === "putt") {
       const f = latest(/(\d+) feet to the pin/);
       await putt(page, f ? Number(f[1]) : 12);
+      await rollOut(page);
       // until it stops (it says how far is left) or goes in
       await expect.poll(async () => (await phase(page)) !== "putt" || ((await live(page).textContent()) ?? "") !== last, { timeout: 12_000, intervals: [100] }).toBe(true);
     } else await page.waitForTimeout(150);

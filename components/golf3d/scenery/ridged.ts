@@ -7,7 +7,7 @@ import type { HillsSpec } from "./types";
 // height to add at a point `m` metres past the rough. height.ts multiplies it by a gate that is 0 inside 30 m.
 
 /** smooth value noise on a lattice, 0 to 1 */
-function vnoise(x: number, z: number, seed: number): number {
+export function vnoise(x: number, z: number, seed: number): number {
   const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
   const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
   const a = hash2(i, j, seed), b = hash2(i + 1, j, seed), c = hash2(i, j + 1, seed), d = hash2(i + 1, j + 1, seed);
