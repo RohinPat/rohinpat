@@ -93,6 +93,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // (scenery/ decides the hills and their colours; the same as ever for a hole without a scene)
   const scn = prepareScenery(hole, ground.y, opts.tier ?? "high", { reduce: !!opts.reduce, sun: opts.sun });
   const heightAt = scn.heightAt;
+  // the ground outside the rough: the course's dark green, or the scene's own earth (hole 3's canyon floor)
+  const deep = scn.rec.palette?.deep ?? COL.deep;
 
   // ---------------------------------------------------------------- the painted surfaces
   const maxTex = tier.tex;
@@ -109,7 +111,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     pts.forEach(([x, z], i) => (i ? c.lineTo(tx(x), tz(z)) : c.moveTo(tx(x), tz(z))));
     c.closePath();
   };
-  c.fillStyle = COL.deep;
+  c.fillStyle = deep;
   c.fillRect(0, 0, cw, ch);
   // the rough, with a soft darker band where it meets the woods
   c.lineJoin = "round";
@@ -277,7 +279,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
     uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
     // the hills are tinted by their height over the hole's ground: brighter and yellower higher up
-    scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+    scn.tint(x, z, y, ground.y(x, z), deep, hill);
     col[k * 3] = hill[0]; col[k * 3 + 1] = hill[1]; col[k * 3 + 2] = hill[2];
     k++;
   };
@@ -313,7 +315,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
         const x = vx(a), z = vz(b), y = hgt(a, b);
         pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
         uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
-        scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+        scn.tint(x, z, y, ground.y(x, z), deep, hill);
         // a steep face shows bare: a warm sod and earth, in bands like stacked turf
         const [sx, sz] = ground.slope(x, z);
         const st = smooth(0.45, 1.1, Math.hypot(sx, sz));

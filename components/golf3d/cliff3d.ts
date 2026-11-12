@@ -28,12 +28,26 @@ const SINK = 3;
 
 // bands of strata alternate cool grey and warm sandstone, with a dark stained band now and then; the face is lit by the sky
 // more than the sun, so the stone is painted a step brighter than it should read
-const COOL = ["#a3a5a8", "#9396a0", "#b0b1ac"];
-const WARM = ["#c4b497", "#b5a281", "#cdbda0"];
-const DARK = "#7b7774";
-const SCREE = ["#a29887", "#ab9f8c", "#9a9080"];
-const TURF = "#587f43";
-const LIP = "#8b8c7c";
+// (`rock: "canyon"`: the red and orange strata of hole 3's country, with dry ground on the rim and a rust-coloured scree)
+const STONE = {
+  cool: ["#a3a5a8", "#9396a0", "#b0b1ac"],
+  warm: ["#c4b497", "#b5a281", "#cdbda0"],
+  dark: "#7b7774",
+  scree: ["#a29887", "#ab9f8c", "#9a9080"],
+  turf: "#587f43",
+  lip: "#8b8c7c",
+  paint: { rock: "#8d897f", scree: "#938a7b" },
+};
+const CANYON_STONE: typeof STONE = {
+  cool: ["#c4673f", "#b85a38", "#d27a4a"],
+  warm: ["#e6ae78", "#dc9a62", "#eec28c"],
+  dark: "#7e4034",
+  scree: ["#c8946a", "#bb8660", "#d3a27a"],
+  turf: "#b8784a",
+  lip: "#cf9460",
+  paint: { rock: "#c0693f", scree: "#c8946a" },
+};
+const stoneOf = (g: CliffGeo) => (g.rock === "canyon" ? CANYON_STONE : STONE);
 
 const smooth = (a: number, b: number, v: number) => {
   const u = Math.max(0, Math.min(1, (v - a) / (b - a)));
@@ -148,13 +162,14 @@ export function buildCliffs(hole: BuiltHole, tier: Tier, disposables: { dispose:
   const T = terrainOf(hole);
   const cl = T.fx.cliffs;
   if (!cl.length) return null;
-  const cool = COOL.map(col), warm = WARM.map(col), dark = col(DARK), scree = SCREE.map(col), turf = col(TURF), lip = col(LIP);
   const pos: number[] = [], clr: number[] = [];
   const push = (a: number[], b: number[], c: number[], k: THREE.Color) => {
     pos.push(...a, ...b, ...c);
     for (let i = 0; i < 3; i++) clr.push(k.r, k.g, k.b);
   };
   for (const g of cl) {
+    const st = stoneOf(g);
+    const cool = st.cool.map(col), warm = st.warm.map(col), dark = col(st.dark), scree = st.scree.map(col), turf = col(st.turf), lip = col(st.lip);
     const { p, nrm, closed } = brink(g, STEP[tier]);
     const rows = rowsOf(g, tier);
     const R = rows.length, N = p.length;
@@ -281,8 +296,9 @@ export function paintCliffs(c: CanvasRenderingContext2D, hole: BuiltHole, tx: (x
         c.fill();
       }
     };
-    band(-BACK - 0.6, -0.3, TURF);
-    band(-0.3, g.run + 0.5, "#8d897f");
-    band(g.run + 0.5, reachOf(g) + 0.4, "#938a7b");
+    const st = stoneOf(g);
+    band(-BACK - 0.6, -0.3, st.turf);
+    band(-0.3, g.run + 0.5, st.paint.rock);
+    band(g.run + 0.5, reachOf(g) + 0.4, st.paint.scree);
   }
 }

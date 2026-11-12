@@ -142,6 +142,8 @@ export type CliffFeature = {
   fade?: number;
   /** the crags' and strata's own random hand */
   seed?: number;
+  /** the stone it is drawn in (cliff3d.ts): grey and sandstone bands (default), or the red and orange strata of the canyon country (hole 3) */
+  rock?: "stone" | "canyon";
 };
 
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -217,6 +219,7 @@ export type CliffGeo = {
   talus: number;
   ledges: number;
   seed: number;
+  rock: "stone" | "canyon";
   frac: (c: number) => number;
   at: (x: number, z: number) => { c: number; along: number };
 };
@@ -256,7 +259,7 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
           // (the true distance to the brink, signed: round a corner it is longer than the distance to either segment's line)
           return { c: i.s >= 0 ? i.d : -i.d, along: closed ? 1 : 1 - smooth(i.over / fade) };
         };
-        cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, frac, at });
+        cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, rock: f.rock ?? "stone", frac, at });
         // the zone the face and its apron cover, for the mesh and for "near": the path grown by the apron
         const apron = run + talus + 4;
         terms.push({
