@@ -1,4 +1,5 @@
 import { creekSd, lakeOf, lobeK, polyOf, ringSd, type BuiltHole, type CreekPt } from "./course";
+import { compileFeatures, type Compiled } from "./features";
 import { GH, GW, greenHeight, shapeR } from "./green";
 import { YD } from "./scene";
 
@@ -21,6 +22,17 @@ export type Ground = {
   swell?: number;
   /** mounds (a negative height a hollow): x, z, radius (yd) and height (m) */
   mounds?: [number, number, number, number][];
+  /** how far the line's height is blended across (a Gaussian, m; default 22). Small (6 to 9) keeps a crest, a step or a lip where a large one smooths it flat */
+  sigma?: number;
+  /** how far the ground eases down to the green's flat pad, m (default 14). Small puts a bank, a false front or a punchbowl's rim close to the green */
+  greenEase?: number;
+  /** the pad leans: its rise per metre to +x and to +z (a green that falls away; the putt's own contours ride on top) */
+  padTilt?: [number, number];
+  /** the tee's flat radius and its easing, m (default 7 and 9) */
+  teeFlat?: number;
+  teeEase?: number;
+  /** metres above sea level of the tee: nothing here reads it, the scenery may */
+  baseY?: number;
 };
 
 export type Terrain = {
@@ -36,6 +48,12 @@ export type Terrain = {
   pad: number;
   /** the green's own rise above its pad at a point of the green, m (0 off its raised ground) */
   rise: (gx: number, gy: number) => number;
+  /** the hole's features (features.ts), for the 3D mesh to refine round */
+  fx: Compiled;
+  /** the ground round the green is shaped by the hole (a short ease, a tilted pad or a feature near): the mesh is refined there */
+  greenShaped: boolean;
+  /** the tee's height above sea level (Ground.baseY), m */
+  baseY: number;
 };
 
 /** past the fringe the green's surface holds its height this far, m (a ball putted from just off the green rolls on it), then banks down over BANK m */
@@ -115,6 +133,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const rise = pchip(G.rise.map(([s, h]) => [s * YD, h] as [number, number]));
   const tilt = linear((G.tilt ?? []).map(([s, t]) => [s * YD, t] as [number, number]));
   const swell = G.swell ?? 0.6;
+  const SIG = G.sigma ?? SIGMA, EASE = G.greenEase ?? GREEN_EASE, T_FLAT = G.teeFlat ?? TEE_FLAT, T_EASE = G.teeEase ?? TEE_EASE;
+  const fx = compileFeatures(def.features, def.bunkers);
   const mounds = (G.mounds ?? []).map(([x, z, r, h]) => ({ x: x * YD, z: z * YD, r: r * YD, h }));
 
   // the line, every 5 yd, with how far along it each sample is from the tee and its normal
@@ -135,14 +155,14 @@ export function terrainOf(hole: BuiltHole): Terrain {
   /** the line's height and tilt carried out across the hole, blended between samples so a bend has no seam */
   const line = (x: number, z: number) => {
     let sw = 0, sv = 0, near = Infinity, nearV = 0;
-    const R2 = 16 * SIGMA * SIGMA;
+    const R2 = 16 * SIG * SIG;
     for (const p of S) {
       const dx = x - p.x, dz = z - p.z, d2 = dx * dx + dz * dz;
       const lat = Math.max(-TILT_REACH, Math.min(TILT_REACH, dx * p.nx + dz * p.nz));
       const v = p.h + p.t * lat;
       if (d2 < near) [near, nearV] = [d2, v];
       if (d2 > R2) continue;
-      const w = Math.exp(-d2 / (SIGMA * SIGMA));
+      const w = Math.exp(-d2 / (SIG * SIG));
       sw += w;
       sv += w * v;
     }
@@ -153,7 +173,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const swells = (x: number, z: number) =>
     swell * (0.55 * Math.sin(x * 0.071 + ph[0]) * Math.cos(z * 0.053 + ph[1]) + 0.3 * Math.sin((0.6 * x + z) * 0.043 + ph[2]) + 0.15 * Math.cos((x - 0.7 * z) * 0.09 + ph[0]));
   const raw = (x: number, z: number) => {
-    let y = line(x, z) + swells(x, z);
+    let y = line(x, z) + swells(x, z) + fx.y(x, z);
     for (const m of mounds) {
       const dx = x - m.x, dz = z - m.z;
       y += m.h * Math.exp((-2 * (dx * dx + dz * dz)) / (m.r * m.r));
@@ -162,18 +182,20 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
 
   // levelled: the tee, the green's pad
-  const teeY = line(0, 0);
+  const teeY = line(0, 0) + fx.y(0, 0);
   const [gcx, gcz] = hole.fromGreen(GW / 2, GH / 2);
-  const pad = line(gcx, gcz);
+  const pad = line(gcx, gcz) + fx.y(gcx, gcz);
+  const [ptx, ptz] = G.padTilt ?? [0, 0];
   /** how much of the green's level pad there is at a point: 1 on it, easing to 0 */
   const onPad = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
     if (gx < -40 || gx > GW + 40 || gy < -40 || gy > GH + 40) return 0;
-    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + BANK + 0.5)) / GREEN_EASE);
+    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + BANK + 0.5)) / EASE);
   };
   const levelled = (x: number, z: number) => {
-    const y = lerp(raw(x, z), teeY, 1 - smooth((Math.hypot(x, z) - TEE_FLAT) / TEE_EASE));
-    return lerp(y, pad, onPad(x, z));
+    const y = lerp(raw(x, z), teeY, 1 - smooth((Math.hypot(x, z) - T_FLAT) / T_EASE));
+    const k = onPad(x, z);
+    return k > 0 ? lerp(y, pad + ptx * (x - gcx) + ptz * (z - gcz), k) : y;
   };
 
   // water: a pond lies level in a hollow; a creek follows the ground, dug in
@@ -205,7 +227,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     }
     return best;
   };
-  const sand = def.bunkers.map((b) => ({ x: b.x * YD, z: b.z * YD, rx: b.rx * YD, rz: b.rz * YD, c: Math.cos(b.rot ?? 0), s: Math.sin(b.rot ?? 0) }));
+  const sand = def.bunkers.map((b) => ({ x: b.x * YD, z: b.z * YD, rx: b.rx * YD, rz: b.rz * YD, c: Math.cos(b.rot ?? 0), s: Math.sin(b.rot ?? 0), depth: b.depth ?? SAND_DIP }));
 
   /** the ground before anything is dug into it (a creek's water sits just under it) */
   const wet = (x: number, z: number) => {
@@ -224,6 +246,13 @@ export function terrainOf(hole: BuiltHole): Terrain {
     if (gx < -40 || gx > GW + 40 || gy < -40 || gy > GH + 40) return 1;
     return smooth((outsideGreen(hole, gx, gy) - (CELL * 1.5 + 0.2)) / 1);
   };
+  const potted = sand.map((_, i) => fx.pot(i, 1e9, 1e9) !== null);
+  /** a pot's face is too steep for the baked grid's cells: it is dug on top of the grid, exactly */
+  const pots = (x: number, z: number) => {
+    let d = 0;
+    for (let i = 0; i < sand.length; i++) if (potted[i]) d += fx.pot(i, x, z)!;
+    return d !== 0 ? -d * digs(x, z) : 0;
+  };
   const full = (x: number, z: number) => {
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
@@ -234,8 +263,11 @@ export function terrainOf(hole: BuiltHole): Terrain {
       // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN
       dig += CREEK_DIP * smooth((BANK_RUN * 0.55 - sd) / BANK_RUN) + (sd < 0 ? 0.35 * smooth(-sd / 3) : 0);
     }
-    for (const b of sand) dig += SAND_DIP * smooth((1.08 - blobR(b, x, z)) / 0.45);
-    return wet(x, z) - (dig > 0 ? dig * digs(x, z) : 0);
+    sand.forEach((b, i) => {
+      // a pot bunker is its own shape (features.ts); any other is a bowl as deep as the bunker says
+      if (!potted[i]) dig += b.depth * smooth((1.08 - blobR(b, x, z)) / 0.45);
+    });
+    return wet(x, z) - (dig !== 0 ? dig * digs(x, z) : 0);
   };
 
   // baked on a grid over the hole (the line's blend is the slow part), read back bilinearly
@@ -269,9 +301,10 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return f > 0 ? f * (greenHeight(H, gx, gy) - low + 0.03) : 0;
   };
 
+  const anyPot = potted.some(Boolean);
   const y = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
-    return base(x, z) + relief(gx, gy);
+    return base(x, z) + relief(gx, gy) + (anyPot ? pots(x, z) : 0);
   };
   const E = 0.2;
   const t: Terrain = {
@@ -288,6 +321,9 @@ export function terrainOf(hole: BuiltHole): Terrain {
     },
     pad,
     rise: relief,
+    fx,
+    greenShaped: G.greenEase !== undefined || !!G.padTilt || fx.near(gcx, gcz, 30),
+    baseY: G.baseY ?? 0,
   };
   cache.set(hole, t);
   return t;

@@ -572,7 +572,7 @@ function hud(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number)
   // what the last shot did
   if (g.phase === "rest" && g.result) {
     mono(ctx, 10);
-    pill(ctx, fit(ctx, [g.result, g.result.split(" · ")[0]], room), w / 2, slot0 - 28, g.result.startsWith("WATER") || g.result.startsWith("TREES") ? "#ff9a8f" : PAPER);
+    pill(ctx, fit(ctx, [g.result, g.result.split(" · ")[0]], room), w / 2, slot0 - 28, /^(WATER|TREES|IN THE GORSE|OUT OF BOUNDS)/.test(g.result) ? "#ff9a8f" : PAPER);
   }
 
   // ---- the shot card, while the ball is down

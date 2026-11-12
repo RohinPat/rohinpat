@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { clamp, noise1, signedDist, smooth } from "./geo";
+import { vnoise } from "./ridged";
 import type { RGB, SceneryRecord } from "./types";
 
 // The terrain's texture stops at the edge of the painted box and is clamped, so out on the hills every texel is the
@@ -26,6 +27,7 @@ export function makeTint(rec: SceneryRecord, beyond: (x: number, z: number) => n
   // never before the gate, whatever the scene says
   const r0 = Math.max(30, P.ramp?.[0] ?? 30), r1 = Math.max(r0 + 1, P.ramp?.[1] ?? 90);
   const coast = rec.coast;
+  const patch = P.patches ? { c: lin(P.patches.color), share: clamp(P.patches.share, 0, 1), f: 1 / (P.patches.scale ?? 70), seed: P.patches.seed ?? 3 } : null;
   const rock = coast?.cliff ? coast.cliff.rock.map(lin) : [];
   const rockFoot = coast?.cliff ? lin(coast.cliff.foot) : base;
   let texelKey = "", tex: RGB = [1, 1, 1];
@@ -41,7 +43,12 @@ export function makeTint(rec: SceneryRecord, beyond: (x: number, z: number) => n
       tex = lin(texel);
     }
     const u = clamp((y - groundY) / reach, 0, 1);
-    for (let i = 0; i < 3; i++) out[i] = 1 + (ratio(base[i] + (high[i] - base[i]) * u, i) - 1) * w;
+    // blotches of a second colour where a slow noise rises past its share, a little paler up high
+    const pa = patch ? smooth(0.66 - patch.share * 0.45, 0.75 - patch.share * 0.45, 0.62 * vnoise(x * patch.f, z * patch.f, patch.seed) + 0.38 * vnoise(x * patch.f * 2.7 + 9, z * patch.f * 2.7 + 4, patch.seed + 1)) : 0;
+    for (let i = 0; i < 3; i++) {
+      const ground = base[i] + (high[i] - base[i]) * u;
+      out[i] = 1 + (ratio(patch ? ground + (patch.c[i] - ground) * pa : ground, i) - 1) * w;
+    }
     if (coast && rock.length) {
       // the drop to the water is rock: bands by height over the sea, darker at the foot
       const sd = signedDist(coast, x, z);

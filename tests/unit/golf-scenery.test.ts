@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import * as THREE from "three";
-import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { YD } from "@/components/offhours/golf/scene";
 import { bearingOf, isSimple, lineFrame, offsetLine, polygonArea, signedDist } from "@/components/golf3d/scenery/geo";
@@ -38,7 +38,7 @@ function samplePoints(hole: ReturnType<typeof buildHole>): [number, number][] {
 }
 
 describe("the backdrop leaves the playable ground alone", () => {
-  for (const def of NINE_DEFS) {
+  for (const def of [...NINE_DEFS, RANGE_DEF]) {
     it(`hole ${def.n}: the drawn ground, the tint and the trees that stop a ball`, () => {
       const hole = buildHole(def);
       const ground = terrainOf(hole).y;
@@ -71,7 +71,7 @@ describe("the backdrop leaves the playable ground alone", () => {
       coast: { line: [[-12, -400], [-12, 800]], sea: "left", seaY: -300, deep: 50, keepOut: 0, tones: { shallow: "#000000", mid: "#000000", deep: "#000000", foam: "#ffffff" } },
       palette: { base: "#ff0000", high: "#00ff00", ramp: [0, 5] },
     };
-    for (const def of NINE_DEFS) {
+    for (const def of [...NINE_DEFS, RANGE_DEF]) {
       const hole = buildHole(def);
       const ground = terrainOf(hole).y;
       const { heightAt, beyond } = makeHeight(hole, ground, hostile);
@@ -152,7 +152,7 @@ describe("a hole without a scene is drawn as it always was", () => {
 describe("the scenes", () => {
   for (const n of SCENERY_HOLES) {
     it(`hole ${n}: its record is valid against its hole`, () => {
-      expect(validateScenery(buildHole(NINE_DEFS.find((d) => d.n === n)!), sceneryFor(n))).toEqual([]);
+      expect(validateScenery(buildHole([...NINE_DEFS, RANGE_DEF].find((d) => d.n === n)!), sceneryFor(n))).toEqual([]);
     });
   }
 
@@ -291,7 +291,7 @@ describe("geometry", () => {
 
   it("the rings stay inside the budget of every tier", () => {
     for (const n of SCENERY_HOLES) {
-      const hole = buildHole(NINE_DEFS.find((d) => d.n === n)!);
+      const hole = buildHole([...NINE_DEFS, RANGE_DEF].find((d) => d.n === n)!);
       const rec = sceneryFor(n);
       const hi = ringGeometry(rec, ringCentre(hole), "high").tris;
       const lo = ringGeometry(rec, ringCentre(hole), "low").tris;

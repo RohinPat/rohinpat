@@ -9,7 +9,13 @@
 // a restitution, and the contact point slides until friction (or the ball
 // rolling) stops the slip, which is how a wedge checks up and a driver runs.
 
-export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "water" | "out";
+import { collide, type Solid } from "./solids";
+
+/**
+ * What the ball lies on. "out" is the woods; "oob" is out of bounds (stroke and distance), "gorse" an unplayable bush (a
+ * drop and a stroke), "fescue" long rough, "waste" firm sandy scrub (see lie.ts for what each costs).
+ */
+export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "water" | "out" | "fescue" | "gorse" | "waste" | "oob";
 
 export type Club = {
   id: string;
@@ -54,7 +60,17 @@ const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; k
   // never used to bounce: water ends the shot where it lands
   water: { e: 0, et: 0, mu: 1, roll: 40, keep: 0 },
   out: { e: 0.05, et: 0, mu: 0.9, roll: 14, keep: 0.1 },
+  // long, wispy grass: grabs the ball more than the rough
+  fescue: { e: 0.1, et: 0, mu: 0.85, roll: 8, keep: 0.35 },
+  // a bush: the ball stops dead in it
+  gorse: { e: 0.04, et: 0, mu: 0.95, roll: 22, keep: 0.05 },
+  // firm sand and scrub: between the fairway and a bunker, it takes a little bounce and rolls out less than the rough
+  waste: { e: 0.14, et: 0, mu: 0.85, roll: 5, keep: 0.3 },
+  // over the stakes: it rolls like the woods (the shot is played again anyway)
+  oob: { e: 0.05, et: 0, mu: 0.9, roll: 14, keep: 0.1 },
 };
+/** surfaces a ball does not bounce off: it plugs, and rolls from there */
+const DEAD: ReadonlySet<Surface> = new Set<Surface>(["bunker", "out", "gorse", "oob"]);
 
 /** how the ball lies changes the strike: multipliers on what the swing gives (see golf/lie.ts) */
 export type Lie = {
@@ -102,6 +118,8 @@ export type ShotIn = {
   ground?: { y: (x: number, z: number) => number; slope: (x: number, z: number) => [number, number] };
   /** the cup, in world coordinates: a ball that rolls over it slowly enough drops in */
   cup?: [number, number];
+  /** walls, boulders, posts a ball can hit, in world metres (solids.ts); none: every step below is the one without */
+  solids?: Solid[];
 };
 
 export type Shot = {
@@ -131,6 +149,8 @@ export type Shot = {
   tree: { x: number; z: number } | null;
   /** it rolled into the cup */
   holed: boolean;
+  /** the first wall, boulder or post it hit (relative to the origin), if it did */
+  prop?: { x: number; z: number; kind: Solid["kind"] };
 };
 
 const YD = 0.9144;
@@ -174,6 +194,37 @@ export function simulate(inp: ShotIn): Shot {
   let rolling = false;
   let holed = false;
   let tree: Shot["tree"] = null;
+  let prop: Shot["prop"];
+  const solids = inp.solids && inp.solids.length ? inp.solids : null;
+  // a ball meets a solid: out of it, the way in turned back (a wall takes most of the speed; a ball in the air drops)
+  const meet = (airborne: boolean) => {
+    const c = collide(solids!, x + ox, z + oz, y + oy, R, gr ? gr.y(x + ox, z + oz) : 0, vx, vz);
+    if (!c) return;
+    if (!prop) prop = { x, z, kind: c.solid.kind };
+    if (airborne && c.top && vy < 0) {
+      // dropped on top of it: a small hop, and off
+      y = c.topY - oy + 0.001;
+      vy = -vy * 0.25;
+      vx *= 0.7;
+      vz *= 0.7;
+      return;
+    }
+    x += c.nx * (c.depth + 1e-3);
+    z += c.nz * (c.depth + 1e-3);
+    const vn = vx * c.nx + vz * c.nz;
+    if (vn < 0) {
+      const e = airborne ? c.solid.e : c.solid.e * 0.7;
+      // the normal part turns back by e; the part along the face keeps most of itself
+      const tx = vx - vn * c.nx, tz = vz - vn * c.nz;
+      vx = tx * 0.65 - e * vn * c.nx;
+      vz = tz * 0.65 - e * vn * c.nz;
+    }
+    if (airborne) {
+      vy = Math.min(vy, 0) * 0.5;
+      wb *= 0.4;
+      ws = 0;
+    }
+  };
   let steps = 0;
   const x0 = Math.sin(az), z0 = Math.cos(az);
   while (t < 28) {
@@ -230,6 +281,7 @@ export function simulate(inp: ShotIn): Shot {
           }
         }
       }
+      if (solids) meet(true);
       const floor = gr ? gy(x, z) : 0;
       // the ground's normal (straight up on the flat)
       let nx = 0, ny = 1, nz = 0;
@@ -283,7 +335,7 @@ export function simulate(inp: ShotIn): Shot {
           vy = ty * k + ny * up;
           vz = tz * k + nz * up;
         }
-        if (up < 1.1 || surf === "bunker" || surf === "out") {
+        if (up < 1.1 || DEAD.has(surf)) {
           vy = 0;
           rolling = true;
         }
@@ -318,6 +370,7 @@ export function simulate(inp: ShotIn): Shot {
       x += vx * DT;
       z += vz * DT;
       y = gy(x, z);
+      if (solids) meet(false);
       if (inp.cup && Math.hypot(x + ox - inp.cup[0], z + oz - inp.cup[1]) < HOLE_R && Math.hypot(vx, vz) < HOLE_V) {
         // in the hole
         holed = true;
@@ -386,6 +439,7 @@ export function simulate(inp: ShotIn): Shot {
     drop,
     tree,
     holed,
+    ...(prop ? { prop } : {}),
   };
 }
 
