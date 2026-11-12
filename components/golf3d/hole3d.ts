@@ -4,7 +4,7 @@ import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { GH, GW, greenHeight, zone } from "@/components/offhours/golf/green";
-import { terrainOf } from "@/components/offhours/golf/terrain";
+import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
 import { prepareScenery, type Skin } from "./scenery";
 
@@ -68,9 +68,9 @@ const smooth = (a: number, b: number, v: number) => {
 /** how much to draw: "low" (a phone) has a smaller texture, coarser ground and half the trees in the woods; "soft" (no GPU) less again */
 export type Tier = "high" | "low" | "soft";
 const TIERS = {
-  high: { tex: 4096, cell: 2.5, perTree: 70, gcell: 0.2, gtex: 48 },
-  low: { tex: 2048, cell: 4, perTree: 140, gcell: 0.33, gtex: 30 },
-  soft: { tex: 1024, cell: 6, perTree: 700, gcell: 0.6, gtex: 14 },
+  high: { tex: 4096, cell: 2.5, perTree: 70, gcell: 0.2, gtex: 48, sub: 5, sub2: 3, gsub: 2 },
+  low: { tex: 2048, cell: 4, perTree: 140, gcell: 0.33, gtex: 30, sub: 4, sub2: 2, gsub: 2 },
+  soft: { tex: 1024, cell: 6, perTree: 700, gcell: 0.6, gtex: 14, sub: 3, sub2: 2, gsub: 0 },
 };
 
 export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boolean; sun?: THREE.Vector3 } = {}): Hole3D {
@@ -216,7 +216,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   disposables.push(tex);
 
   // ---------------------------------------------------------------- the terrain
-  // a rectilinear grid: 2.5 m cells over the hole (coarser on a phone), 25 m cells out to the hills
+  // a rectilinear grid: 2.5 m cells over the hole (coarser on a phone), 25 m cells out to the hills. Cells round a pot, a
+  // bank, a ravine or a shaped green are cut finer (`sub` x `sub`), as part of the same mesh
   const cell = tier.cell;
   const axis = (a0: number, a1: number, far: number) => {
     const out: number[] = [];
@@ -229,8 +230,31 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   const nx = xs.length, nz = zs.length;
   const H = new Float32Array(nx * nz);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) H[j * nx + i] = heightAt(xs[i], zs[j]);
+  const cx = nx - 1, cz = nz - 1;
+  const subOf = new Uint8Array(cx * cz);
+  let fineCells = 0, fineTris = 0;
+  if (ground.fx.bounds.length || ground.greenShaped) {
+    const reach = cell * 0.75;
+    for (let j = 0; j < cz; j++)
+      for (let i = 0; i < cx; i++) {
+        if (Math.abs(xs[i + 1] - xs[i] - cell) > 1e-6 || Math.abs(zs[j + 1] - zs[j] - cell) > 1e-6) continue;
+        const mx = (xs[i] + xs[i + 1]) / 2, mz = (zs[j] + zs[j + 1]) / 2;
+        const lvl = ground.fx.fine(mx, mz, reach);
+        let sb = lvl === 2 ? tier.sub : lvl === 1 ? tier.sub2 : 0;
+        if (!sb && ground.greenShaped) {
+          const [gx, gy] = hole.toGreen(mx, mz);
+          if (outsideGreen(hole, gx, gy) < 16) sb = tier.gsub;
+        }
+        if (sb > 1) {
+          subOf[j * cx + i] = sb;
+          fineCells++;
+          fineTris += 2 * sb * sb;
+        }
+      }
+  }
+  const isFine = (i: number, j: number) => i >= 0 && j >= 0 && i < cx && j < cz && subOf[j * cx + i] > 0;
   // flat-shaded: every triangle has its own three vertices
-  const tris = (nx - 1) * (nz - 1) * 2;
+  const tris = (cx * cz - fineCells) * 2 + fineTris;
   const pos = new Float32Array(tris * 9), uv = new Float32Array(tris * 6), col = new Float32Array(tris * 9);
   let k = 0;
   const hill: [number, number, number] = [1, 1, 1];
@@ -243,11 +267,52 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     col[k * 3] = hill[0]; col[k * 3 + 1] = hill[1]; col[k * 3 + 2] = hill[2];
     k++;
   };
-  for (let j = 0; j < nz - 1; j++)
-    for (let i = 0; i < nx - 1; i++) {
+  for (let j = 0; j < cz; j++)
+    for (let i = 0; i < cx; i++) {
+      if (subOf[j * cx + i]) continue;
       // wound so the faces point up in the course's own frame (three.js handles the mirrored parent)
       put(i, j); put(i, j + 1); put(i + 1, j);
       put(i + 1, j); put(i, j + 1); put(i + 1, j + 1);
+    }
+  // the finer cells. Their edges shared with a coarse cell lie on the coarse cell's own edge, so the mesh has no cracks
+  const fineAt: [number, number][] = [];
+  const fineFirst = k;
+  for (let j = 0; j < cz; j++)
+    for (let i = 0; i < cx; i++) {
+      const s2 = subOf[j * cx + i];
+      if (!s2) continue;
+      const at = (ii: number, jj: number) => H[jj * nx + ii];
+      const vx = (a: number) => xs[i] + ((xs[i + 1] - xs[i]) * a) / s2;
+      const vz = (b: number) => zs[j] + ((zs[j + 1] - zs[j]) * b) / s2;
+      const hgt = (a: number, b: number) => {
+        const edgeA = a === 0 || a === s2, edgeB = b === 0 || b === s2;
+        if (edgeA && edgeB) {
+          const vi = i + (a === s2 ? 1 : 0), vj = j + (b === s2 ? 1 : 0);
+          if (!(isFine(vi - 1, vj - 1) && isFine(vi, vj - 1) && isFine(vi - 1, vj) && isFine(vi, vj))) return at(vi, vj);
+        } else if (a === 0 && !isFine(i - 1, j)) return at(i, j) + (at(i, j + 1) - at(i, j)) * (b / s2);
+        else if (a === s2 && !isFine(i + 1, j)) return at(i + 1, j) + (at(i + 1, j + 1) - at(i + 1, j)) * (b / s2);
+        else if (b === 0 && !isFine(i, j - 1)) return at(i, j) + (at(i + 1, j) - at(i, j)) * (a / s2);
+        else if (b === s2 && !isFine(i, j + 1)) return at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * (a / s2);
+        return heightAt(vx(a), vz(b));
+      };
+      const fput = (a: number, b: number) => {
+        const x = vx(a), z = vz(b), y = hgt(a, b);
+        pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
+        uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
+        scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+        // a steep face shows bare: a warm sod and earth, in bands like stacked turf
+        const [sx, sz] = ground.slope(x, z);
+        const st = smooth(0.45, 1.1, Math.hypot(sx, sz));
+        const band = 1 - 0.14 * st * (Math.floor(y * 3) & 1);
+        col[k * 3] = hill[0] * (1 - 0.35 * st) * band; col[k * 3 + 1] = hill[1] * (1 - 0.5 * st) * band; col[k * 3 + 2] = hill[2] * (1 - 0.72 * st) * band;
+        fineAt.push([x, z]);
+        k++;
+      };
+      for (let b = 0; b < s2; b++)
+        for (let a = 0; a < s2; a++) {
+          fput(a, b); fput(a, b + 1); fput(a + 1, b);
+          fput(a + 1, b); fput(a, b + 1); fput(a + 1, b + 1);
+        }
     }
   const tg = new THREE.BufferGeometry();
   tg.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -255,38 +320,46 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   tg.setAttribute("color", new THREE.BufferAttribute(col, 3));
   tg.computeVertexNormals();
   // where the ball plays, the ground is lit smooth and as if four times steeper than it is, so a few per cent of slope
-  // shows as light and shade; the hills beyond keep their flat facets
+  // shows as light and shade (less for a steep face, which needs no help); the hills beyond keep their flat facets
   {
-    const SHADE = 4, e = 1;
+    const e = 1;
+    const lit = (x: number, z: number, out: Float32Array, o: number) => {
+      const w = 1 - smooth(18, 34, hole.margin(x, z) - rough);
+      if (w <= 0) return;
+      const sx = (ground.y(x + e, z) - ground.y(x - e, z)) / (2 * e), sz = (ground.y(x, z + e) - ground.y(x, z - e)) / (2 * e);
+      const SHADE = 4 - 2.7 * smooth(0.2, 0.7, Math.hypot(sx, sz));
+      const l = Math.hypot(SHADE * sx, 1, SHADE * sz);
+      out[o] = (-SHADE * sx) / l;
+      out[o + 1] = 1 / l;
+      out[o + 2] = (-SHADE * sz) / l;
+      out[o + 3] = w;
+    };
     const gn = new Float32Array(nx * nz * 4);
-    for (let j = 0; j < nz; j++)
-      for (let i = 0; i < nx; i++) {
-        const x = xs[i], z = zs[j], q = (j * nx + i) * 4;
-        const w = 1 - smooth(18, 34, hole.margin(x, z) - rough);
-        if (w <= 0) continue;
-        const sx = (ground.y(x + e, z) - ground.y(x - e, z)) / (2 * e), sz = (ground.y(x, z + e) - ground.y(x, z - e)) / (2 * e);
-        const l = Math.hypot(SHADE * sx, 1, SHADE * sz);
-        gn[q] = (-SHADE * sx) / l;
-        gn[q + 1] = 1 / l;
-        gn[q + 2] = (-SHADE * sz) / l;
-        gn[q + 3] = w;
-      }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) lit(xs[i], zs[j], gn, (j * nx + i) * 4);
     const na = tg.attributes.normal as THREE.BufferAttribute;
+    const blend = (v: number, n0: number, n1: number, n2: number, w: number) => {
+      const fx = na.getX(v) + (n0 - na.getX(v)) * w, fy = na.getY(v) + (n1 - na.getY(v)) * w, fz = na.getZ(v) + (n2 - na.getZ(v)) * w;
+      const l = Math.hypot(fx, fy, fz) || 1;
+      na.setXYZ(v, fx / l, fy / l, fz / l);
+    };
     let v = 0;
     const set = (i: number, j: number) => {
       const q = (j * nx + i) * 4, w = gn[q + 3];
-      if (w > 0) {
-        const fx = na.getX(v) + (gn[q] - na.getX(v)) * w, fy = na.getY(v) + (gn[q + 1] - na.getY(v)) * w, fz = na.getZ(v) + (gn[q + 2] - na.getZ(v)) * w;
-        const l = Math.hypot(fx, fy, fz) || 1;
-        na.setXYZ(v, fx / l, fy / l, fz / l);
-      }
+      if (w > 0) blend(v, gn[q], gn[q + 1], gn[q + 2], w);
       v++;
     };
-    for (let j = 0; j < nz - 1; j++)
-      for (let i = 0; i < nx - 1; i++) {
+    for (let j = 0; j < cz; j++)
+      for (let i = 0; i < cx; i++) {
+        if (subOf[j * cx + i]) continue;
         set(i, j); set(i, j + 1); set(i + 1, j);
         set(i + 1, j); set(i, j + 1); set(i + 1, j + 1);
       }
+    const tmp = new Float32Array(4);
+    fineAt.forEach(([x, z], n) => {
+      tmp[3] = 0;
+      lit(x, z, tmp, 0);
+      if (tmp[3] > 0) blend(fineFirst + n, tmp[0], tmp[1], tmp[2], tmp[3]);
+    });
     na.needsUpdate = true;
   }
   const tm =new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
