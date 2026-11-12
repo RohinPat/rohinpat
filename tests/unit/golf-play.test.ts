@@ -282,7 +282,7 @@ describe("the green", () => {
     expect(g.phase).toBe("round-card");
     expect(g.round).not.toBeNull();
     expect(g.round!.total).toBe(r.total);
-    expect(g.round!.par).toBe(23);
+    expect(g.round!.par).toBe(24);
     expect(g.round!.isBest).toBe(true);
     expect(g.round!.previous).toBeNull();
     // a press too soon is ignored (the key that holed it)
@@ -332,12 +332,12 @@ describe("repeatability and the idle player", () => {
 });
 
 describe("the bots: measured bands, pinned", () => {
-  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these.
+  // 30 seeded rounds each over all six holes (par 24). The numbers in the PR are these.
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
   const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));
 
-  it("skilled (aim off by 0.03 rad, power by 8%): par + 3 to par + 6, never stuck", { timeout: 90_000 }, () => {
+  it("skilled (aim off by 0.03 rad, power by 8%): par + 2 to par + 5, never stuck", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(26);
@@ -352,7 +352,7 @@ describe("the bots: measured bands, pinned", () => {
     expect(rs.reduce((a, r) => a + r.pickedUp, 0)).toBeLessThanOrEqual(2);
   });
 
-  it("casual (aim off by 0.08 rad, power by 15%): par + 9 to par + 14, with a few pick-ups", { timeout: 90_000 }, () => {
+  it("casual (aim off by 0.08 rad, power by 15%): par + 8 to par + 13, with a few pick-ups", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.casual);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(32);

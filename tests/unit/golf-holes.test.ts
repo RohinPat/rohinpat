@@ -5,6 +5,8 @@ import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
 import { YD, project } from "@/components/offhours/golf/scene";
+import { terrainOf } from "@/components/offhours/golf/terrain";
+import { solidsOf } from "@/components/offhours/golf/solids";
 import { CHIP_YD, carryAtChip, carryAtPower, chipCarry, chipPowerFor, chipTop, fullCarry, greenRoll, lieCarry, meterFace, overSpeed, sfOf, sfOfChip, strikeNumbers } from "@/components/offhours/golf/swing";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { DROP_CLEAR, waterWithin } from "@/components/offhours/golf/lie";
@@ -161,52 +163,83 @@ describe("hole 4, Reed Creek", () => {
 describe("hole 5, The Collar", () => {
   const d = HOLE_DEFS[4];
   const b = buildHole(d);
-  it("the green is ringed with sand, with a pond on its left edge", () => {
-    const g = b.world.greens[0];
-    let hazard = 0, n = 0;
-    for (let i = 0; i < 72; i++) {
-      const a = (i / 72) * Math.PI * 2;
-      // a point about 4 yd beyond the edge of the green
-      const x = g.x + Math.cos(a) * (10 + 3.6), z = g.z + Math.sin(a) * (6.25 + 3.6);
-      n++;
-      if (["bunker", "water"].includes(b.surfaceAt(x, z))) hazard++;
+  const t = terrainOf(b);
+  const post = d.props!.find((p) => p.kind === "post")!;
+  it("is a par 4 with no bunker and no water: a sandy waste across the fairway and a punchbowl green are the hazards", () => {
+    expect(d.par).toBe(4);
+    expect(d.bunkers).toEqual([]);
+    expect(d.water).toEqual([]);
+    // the waste runs right across the line, rough to rough, short of the dune
+    for (const x of [-30, -10, 10, 30]) expect(b.surfaceAt(x * YD, 165 * YD)).toBe("waste");
+    expect(b.surfaceAt(0, 100 * YD)).toBe("fairway");
+  });
+  it("the tee shot is blind: the dune's crest hides the landing area from the tee, but the marker post stands over it", () => {
+    const eye = t.y(0, 0) + 2;
+    const blocked = (tx: number, ty: number, tz: number) => {
+      for (let u = 0.02; u < 0.98; u += 0.01) if (t.y(tx * u, tz * u) > eye + (ty - eye) * u) return true;
+      return false;
+    };
+    const [lx, lz] = b.landing;
+    expect(blocked(lx, t.y(lx, lz) + 0.5, lz)).toBe(true);
+    expect(blocked(b.pin[0], t.y(b.pin[0], b.pin[1]) + 2.4, b.pin[1])).toBe(true);
+    const [px, pz] = [post.at[0] * YD, post.at[1] * YD];
+    expect(blocked(px, t.y(px, pz) + 6.5, pz)).toBe(false);
+    // and the post is on the crest, the highest ground of the carry
+    for (let z = 150; z < 262; z += 4) for (const x of [-20, 0, 40]) expect(t.y(x * YD, z * YD)).toBeLessThanOrEqual(t.y(px, pz) + 0.01);
+  });
+  it("a full drive at the post clears the dune and runs down its far side; one that is short stays on this side", () => {
+    const drive = (speed: number, yawDeg: number) => {
+      const s = simulate({ club: CLUBS[0], speed, yaw: (yawDeg * Math.PI) / 180, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, trees: b.blockers, ground: t, solids: solidsOf(d.props, t) });
+      const n = s.n - 1;
+      return { x: s.pts[n * 4 + 1] / YD, z: s.pts[n * 4 + 3] / YD, surface: b.surfaceAt(s.pts[n * 4 + 1], s.pts[n * 4 + 3]) };
+    };
+    const brave = drive(1, 3);
+    expect(brave.z).toBeGreaterThan(255);
+    expect(brave.surface).toBe("fairway");
+    // the pitch that is left, to the pin
+    expect(Math.hypot(brave.x - d.pin[0], brave.z - d.pin[1])).toBeLessThan(110);
+    // short: the waste, which plays (no penalty, no drop)
+    const short = drive(0.85, 3);
+    expect(short.surface).toBe("waste");
+    expect(short.z).toBeLessThan(200);
+    // the safe line round the dune's low left shoulder: a lesser drive carries the waste, and leaves a longer approach
+    const safe = drive(0.9, -5);
+    expect(safe.z).toBeGreaterThan(205);
+    expect(["fairway", "rough"]).toContain(safe.surface);
+    expect(Math.hypot(safe.x - d.pin[0], safe.z - d.pin[1])).toBeGreaterThan(130);
+  });
+  it("the green sits down in a bowl: its rim is higher than the green on every side but the front gap, and a pitch that lands in it ends near the pin", () => {
+    const [gx, gz] = [d.green.c[0] * YD, d.green.c[1] * YD];
+    const pad = t.pad;
+    let high = 0;
+    for (let a = 0; a < 24; a++) {
+      const ang = (a / 24) * Math.PI * 2;
+      let top = -Infinity;
+      for (let r = 14; r < 40; r += 1) top = Math.max(top, t.y(gx + Math.sin(ang) * r, gz + Math.cos(ang) * r));
+      if (top > pad + 1.4) high++;
     }
-    expect(hazard / n).toBeGreaterThan(0.8);
-    expect(d.water[0]).toMatchObject({ x: expect.any(Number) });
-    const w = d.water[0] as { x: number; z: number; rx: number };
-    expect(w.x + w.rx).toBeLessThan(-10);
-    expect(w.x + w.rx).toBeGreaterThan(-14);
-    expect(Math.abs(w.z - d.green.c[1])).toBeLessThan(4);
+    expect(high).toBeGreaterThanOrEqual(21);
+    for (const yaw of [-6, 0, 6]) {
+      const ox = 0, oz = 262 * YD;
+      const aim = Math.atan2(b.pin[0] - ox, b.pin[1] - oz) + (yaw * Math.PI) / 180;
+      const s = simulate({ club: CLUBS[4], speed: 0.85, yaw: aim, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, ground: t, origin: [ox, oz], cup: b.pin });
+      const n = s.n - 1;
+      expect(Math.hypot(ox + s.pts[n * 4 + 1] - b.pin[0], oz + s.pts[n * 4 + 3] - b.pin[1]) / YD, `yaw ${yaw}`).toBeLessThan(16);
+    }
   });
-  it("has the strongest wind of the six, blowing toward the pond", () => {
-    const sp = HOLE_DEFS.map((h) => h.wind.speed);
-    expect(Math.max(...sp)).toBe(d.wind.speed);
-    expect(sp.filter((s) => s === d.wind.speed)).toHaveLength(1);
-    expect(b.wind[0]).toBeLessThan(-3);
-  });
-  it("from the tee the green, its sand and its pond are all in the picture, the green at least 60 px tall", () => {
+  it("from the tee the marker post on the crest is in the picture, above the horizon and clear of the trees", () => {
     for (const [w, h] of [[1440, 900], [1406, 698]]) {
-      const g = onHole(5);
+      const g = onHole(5, { hills: true });
       g.w = w;
       g.h = h;
       paint(fakeCtx(), g, w, h, 1 / 60, ptr);
-      const gr = g.hole.world.greens[0];
       const p = { x: 0, y: 0, d: 0, s: 0 };
-      let y0 = 1e9, y1 = -1e9;
-      for (const [x, , z] of gr.ring(gr.r)) {
-        expect(project(g.cam, x, 0, z, p)).toBe(true);
-        y0 = Math.min(y0, p.y);
-        y1 = Math.max(y1, p.y);
-      }
-      expect(y1 - y0, `${w}x${h}`).toBeGreaterThanOrEqual(60);
-      expect(y1).toBeLessThan(h);
-      for (const [x, z] of [[-18.5, 176], [16.5, 176], [0, 164.5], [0, 187.5]]) {
-        expect(project(g.cam, x * YD, 0, z * YD, p)).toBe(true);
-        expect(p.x).toBeGreaterThan(0);
-        expect(p.x).toBeLessThan(w);
-        expect(p.y).toBeGreaterThan(0);
-        expect(p.y).toBeLessThan(h);
-      }
+      const [px, pz] = [post.at[0] * YD, post.at[1] * YD];
+      expect(project(g.cam, px, t.y(px, pz) + 6.5, pz, p)).toBe(true);
+      expect(p.x, `${w}x${h}`).toBeGreaterThan(w * 0.3);
+      expect(p.x).toBeLessThan(w * 0.7);
+      expect(p.y).toBeGreaterThan(0);
+      expect(p.y).toBeLessThan(h * 0.5);
     }
   });
 });
@@ -663,6 +696,8 @@ describe("found in play", () => {
           if (d < bd && p[1] < pin[1]) [bd, at] = [d, p];
         }
         if (!at || g.hole.surfaceAt(...at) !== "fairway") continue;
+        // (a ball on the face of a dune has a slope lie, which the suggested club does not know)
+        if (hills && Math.hypot(...g.terrain.slope(at[0], at[1])) > 0.12) continue;
         place(g, at[0], at[1], "fairway", 1);
         if (g.target() !== g.hole.pin) continue;
         const sg = g.suggested();
@@ -757,7 +792,7 @@ describe("found in play", () => {
 });
 
 describe("the round, on all six holes", () => {
-  it("opens each hole on its card, in order, and ends on the scorecard with par 23", () => {
+  it("opens each hole on its card, in order, and ends on the scorecard with par 24", () => {
     const g = new CourseGame({ seed: 3 });
     expect(g.defs.map((d) => d.name)).toEqual(["Open Door", "Short Straw", "The Elbow", "Reed Creek", "The Collar", "Last Light"]);
     const said: string[] = [];

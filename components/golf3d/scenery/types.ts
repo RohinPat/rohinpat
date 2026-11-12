@@ -59,6 +59,8 @@ export type Palette = {
   ramp?: [number, number];
   /** phase 3: blotches of a second colour over the ground (gold aspen, willow): the share of ground they cover, their size in m */
   patches?: { color: string; share: number; scale?: number; seed?: number };
+  /** the ground between the rough and the hills is painted in `base` instead of woodland green, so a hole whose trees are cleared has no dark band (dune country) */
+  paintOut?: boolean;
 };
 
 export type HillsSpec = {
