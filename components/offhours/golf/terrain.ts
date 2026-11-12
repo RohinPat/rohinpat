@@ -1,4 +1,4 @@
-import type { BuiltHole } from "./course";
+import { creekSd, lakeOf, lobeK, polyOf, ringSd, type BuiltHole, type CreekPt } from "./course";
 import { compileFeatures, type Compiled } from "./features";
 import { GH, GW, greenHeight, shapeR } from "./green";
 import { YD } from "./scene";
@@ -67,7 +67,13 @@ const TILT_REACH = 40;
 /** the levelled ground: the tee out to this radius, then eased over TEE_EASE; around the green over GREEN_EASE */
 const TEE_FLAT = 7, TEE_EASE = 9, GREEN_EASE = 14;
 /** depths, m: a pond's bed, a creek's, a bunker's */
-const POND_DIP = 0.6, CREEK_DIP = 0.7, SAND_DIP = 0.35;
+const POND_DIP = 1.1, CREEK_DIP = 0.95, SAND_DIP = 0.35;
+/** a creek's or lake's bank run from the level ground to the waterline, m */
+const BANK_RUN = 2.4;
+/** how far a pond's surface lies under the ground it is dug into (the bank's lip), m */
+const POND_LIP = 0.22;
+/** a creek's surface under the ground beside it, as a share of CREEK_DIP (the bank's waterline) */
+const CREEK_LINE = 0.6;
 /** the baked grid's cell, m */
 const CELL = 1.5;
 
@@ -193,17 +199,23 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
 
   // water: a pond lies level in a hollow; a creek follows the ground, dug in
-  type Pond = { x: number; z: number; rx: number; rz: number; c: number; s: number; level: number };
+  type Pond = { x: number; z: number; rx: number; rz: number; c: number; s: number; level: number; lobe?: number };
   const ponds: Pond[] = [];
-  const creeks: { path: [number, number][]; hw: number }[] = [];
+  const creeks: CreekPt[][] = [];
+  const lakes: { ring: [number, number][]; level: number }[] = [];
   for (const w of def.water) {
-    if ("path" in w) creeks.push({ path: w.path.map(([x, z]) => [x * YD, z * YD] as [number, number]), hw: (w.w * YD) / 2 });
-    else ponds.push({ x: w.x * YD, z: w.z * YD, rx: w.rx * YD, rz: w.rz * YD, c: Math.cos(w.rot ?? 0), s: Math.sin(w.rot ?? 0), level: levelled(w.x * YD, w.z * YD) });
+    if ("path" in w) creeks.push(polyOf(w));
+    else if ("shore" in w) {
+      const ring = lakeOf(w);
+      const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
+      lakes.push({ ring, level: w.level ?? levelled(mx, mz) });
+    } else ponds.push({ x: w.x * YD, z: w.z * YD, rx: w.rx * YD, rz: w.rz * YD, c: Math.cos(w.rot ?? 0), s: Math.sin(w.rot ?? 0), level: levelled(w.x * YD, w.z * YD), lobe: w.lobe });
   }
-  const blobR = (b: { x: number; z: number; rx: number; rz: number; c: number; s: number }, x: number, z: number) => {
+  const blobR = (b: { x: number; z: number; rx: number; rz: number; c: number; s: number; lobe?: number }, x: number, z: number) => {
     const dx = x - b.x, dz = z - b.z;
     const u = dx * b.c + dz * b.s, v = -dx * b.s + dz * b.c;
-    return Math.hypot(u / b.rx, v / b.rz);
+    const a = u / b.rx, e = v / b.rz;
+    return Math.hypot(a, e) / lobeK(b.lobe, Math.atan2(e, a));
   };
   const pathDist = (path: [number, number][], x: number, z: number) => {
     let best = Infinity;
@@ -224,6 +236,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     if (ponds.length) {
       const k = 1 - onPad(x, z);
       for (const p of ponds) y = lerp(y, p.level, k * (1 - smooth((blobR(p, x, z) - 1.1) / 0.9)));
+      for (const l of lakes) y = lerp(y, l.level, k * (1 - smooth((ringSd(l.ring, x, z) - 2) / 14)));
     }
     return y;
   };
@@ -242,8 +255,14 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
   const full = (x: number, z: number) => {
     let dig = 0;
-    for (const p of ponds) dig += POND_DIP * smooth((1.05 - blobR(p, x, z)) / 0.3);
-    for (const c of creeks) dig += CREEK_DIP * smooth((c.hw + 1 - pathDist(c.path, x, z)) / (c.hw * 0.6 + 1));
+    // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
+    for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
+    for (const l of lakes) dig += POND_DIP * smooth((0.67 - ringSd(l.ring, x, z)) / BANK_RUN);
+    for (const c of creeks) {
+      const sd = creekSd(c, x, z);
+      // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN
+      dig += CREEK_DIP * smooth((BANK_RUN * 0.55 - sd) / BANK_RUN) + (sd < 0 ? 0.35 * smooth(-sd / 3) : 0);
+    }
     sand.forEach((b, i) => {
       // a pot bunker is its own shape (features.ts); any other is a bowl as deep as the bunker says
       if (!potted[i]) dig += b.depth * smooth((1.08 - blobR(b, x, z)) / 0.45);
@@ -295,7 +314,11 @@ export function terrainOf(hole: BuiltHole): Terrain {
       const [x, z] = hole.fromGreen(gx, gy);
       return base(x, z) + relief(gx, gy);
     },
-    waterY: (x, z) => wet(x, z) - 0.05,
+    waterY: (x, z) => {
+      for (const c of creeks) if (creekSd(c, x, z) < 1.5) return wet(x, z) - CREEK_LINE * CREEK_DIP;
+      for (const l of lakes) if (ringSd(l.ring, x, z) < 1.5) return l.level - POND_LIP;
+      return wet(x, z) - POND_LIP;
+    },
     pad,
     rise: relief,
     fx,
