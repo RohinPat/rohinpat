@@ -589,8 +589,49 @@ export const ringSd = (ring: [number, number][], x: number, z: number) => {
 };
 const lakeCache = new WeakMap<Lake, [number, number][]>();
 export const lakeOf = (l: Lake) => { let r = lakeCache.get(l); if (!r) { r = lakeRing(l); lakeCache.set(l, r); } return r; };
-// (a lake is hit by a point-in-polygon test, not a distance to every edge: surfaceAt asks this for every step of every ball)
-const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? creekSd(polyOf(w), x, z) < 0 : isLake(w) ? inPoly(lakeOf(w), x, z) : blobHit(w, x, z));
+/**
+ * Is a point in a lake? surfaceAt asks this for every step of every ball (and the tests ask it for every cell of a hole), and a
+ * lake's ring has a point every 2.5 m: so the ring is sorted once into a coarse grid, a cell known to be wholly in or wholly out
+ * answers at once, and only the cells the shore passes through test the ring.
+ */
+const HIT_CELL = 6;
+const lakeHitCache = new WeakMap<Lake, (x: number, z: number) => boolean>();
+const lakeHit = (l: Lake) => {
+  let f = lakeHitCache.get(l);
+  if (f) return f;
+  const ring = lakeOf(l);
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of ring) [x0, x1, z0, z1] = [Math.min(x0, x), Math.max(x1, x), Math.min(z0, z), Math.max(z1, z)];
+  const nx = Math.ceil((x1 - x0) / HIT_CELL) + 1, nz = Math.ceil((z1 - z0) / HIT_CELL) + 1;
+  // 0 out, 1 in, 2 the shore passes through: found by the ring's own points and the cells between them
+  const kind = new Uint8Array(nx * nz).fill(3);
+  const mark = (i: number, j: number) => { if (i >= 0 && j >= 0 && i < nx && j < nz) kind[j * nx + i] = 2; };
+  for (let k = 0; k < ring.length; k++) {
+    const [ax, az] = ring[k], [bx, bz] = ring[(k + 1) % ring.length];
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / (HIT_CELL / 2)));
+    for (let q = 0; q <= n; q++) {
+      const fx = (ax + ((bx - ax) * q) / n - x0) / HIT_CELL, fz = (az + ((bz - az) * q) / n - z0) / HIT_CELL;
+      for (const di of [-1, 0, 1]) for (const dj of [-1, 0, 1]) mark(Math.floor(fx) + di, Math.floor(fz) + dj);
+    }
+  }
+  const poly = (x: number, z: number) => inPoly(ring, x, z);
+  f = (x, z) => {
+    const i = Math.floor((x - x0) / HIT_CELL), j = Math.floor((z - z0) / HIT_CELL);
+    if (i < 0 || j < 0 || i >= nx || j >= nz) return false;
+    const k = kind[j * nx + i];
+    if (k === 2) return poly(x, z);
+    // (a cell the shore does not touch is all in or all out: its first visit decides)
+    if (k === 3) {
+      const cx = x0 + (i + 0.5) * HIT_CELL, cz = z0 + (j + 0.5) * HIT_CELL;
+      kind[j * nx + i] = poly(cx, cz) ? 1 : 0;
+      return kind[j * nx + i] === 1;
+    }
+    return k === 1;
+  };
+  lakeHitCache.set(l, f);
+  return f;
+};
+const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? creekSd(polyOf(w), x, z) < 0 : isLake(w) ? lakeHit(w)(x, z) : blobHit(w, x, z));
 const creekRing = (c: Creek): [number, number][] => {
   const P = polyOf(c);
   const left: [number, number][] = [], right: [number, number][] = [];

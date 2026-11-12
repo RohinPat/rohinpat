@@ -4,7 +4,7 @@ import type { SceneryRecord } from "./types";
 // left (south); on the left lies the estuary and the head of Long Water, a shallow basin with tidal flats; ahead, over
 // the peninsula's neck, the low sun; to the right, the peninsula and dunes. Wave 2: the tee stands 22 m over the flats,
 // the arm of the tide that crosses the line is the hole's own water (a Lake), and it opens into this estuary, so the
-// coast lies on the arm's left end (keepOut 0) and the sea's level is the flats' (-21 m under the tee). Do not import
+// coast lies on the arm's left end (keepOut 0) and the sea stands just over the arm's surface (-20.65 m under the tee), so it covers the arm's open end. Do not import
 // from scenes.ts (it imports this file).
 
 export const HOLE6: SceneryRecord | null = {
@@ -15,14 +15,14 @@ export const HOLE6: SceneryRecord | null = {
   ringY0: -21,
   coast: {
     sea: "left",
-    seaY: -21,
+    seaY: -20.65,
     deep: 6,
     keepOut: 0,
     tones: { shallow: "#7fb9ae", mid: "#68a4b0", deep: "#6a7fae", foam: "#fff0d4" },
     glitter: 0.9,
     sandBars: 0.8,
     slope: { drop: 12, reach: 220 },
-    line: [[-190, -250], [-188, -40], [-176, 60], [-160, 140], [-152, 188], [-168, 215], [-178, 260], [-180, 330], [-182, 400], [-170, 450], [-150, 520], [-120, 600], [-90, 700], [-40, 800], [20, 900]],
+    line: [[-192, -250], [-184, -190], [-196, -130], [-186, -70], [-198, -10], [-184, 40], [-190, 85], [-174, 125], [-182, 160], [-166, 195], [-176, 240], [-168, 285], [-181, 330], [-176, 380], [-186, 420], [-168, 465], [-150, 520], [-120, 600], [-90, 700], [-40, 800], [20, 900]],
   },
   rings: [
     {
