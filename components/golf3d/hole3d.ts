@@ -6,6 +6,7 @@ import { YD } from "@/components/offhours/golf/scene";
 import { GH, GW, greenHeight, zone } from "@/components/offhours/golf/green";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
+import { buildProps3D } from "./props3d";
 import { prepareScenery, type Skin } from "./scenery";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
@@ -347,6 +348,12 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // ---------------------------------------------------------------- trees
   const trees = buildTrees(hole, heightAt, X0, X1, Z0, Z1, disposables, tier.perTree, scn.treeKeep);
   for (const t of trees) group.add(t.mesh);
+
+  // ---------------------------------------------------------------- props (walls, boulders, posts, a bridge, reeds)
+  {
+    const pr = buildProps3D(hole, ground, opts.tier ?? "high", disposables);
+    if (pr) group.add(pr.group);
+  }
 
   // ---------------------------------------------------------------- the backdrop: far mountains, sea, rock
   {

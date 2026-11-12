@@ -5,6 +5,7 @@ import { blend, poseFor, type Pose } from "./golfer";
 import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, zone, type Putt, type PuttEnv } from "./green";
 import { bothLies, dropFor, lieFor, slopeLie, slopeWords } from "./lie";
 import { FLAT, terrainOf, type Terrain } from "./terrain";
+import { solidsOf } from "./solids";
 import type { RemoteShot } from "./remoteSwing";
 import { TARGETS, YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
@@ -847,6 +848,7 @@ export class CourseGame {
       ground: this.opts.hills ? this.terrain : undefined,
       rng: this.rng,
       trees: this.hole.blockers.length ? this.hole.blockers : undefined,
+      solids: solidsOf(this.hole.def.props, this.terrain),
       cup: this.hole.pin,
     });
     this.shot = shot;
