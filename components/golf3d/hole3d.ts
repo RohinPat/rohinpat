@@ -5,6 +5,7 @@ import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { buildGreen, buildPin, greenSink } from "./green3d";
+import { buildProps3D } from "./props3d";
 import { prepareScenery, type Skin } from "./scenery";
 import { paintAreas } from "./areas3d";
 
@@ -338,6 +339,12 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // ---------------------------------------------------------------- trees
   const trees = buildTrees(hole, heightAt, X0, X1, Z0, Z1, disposables, tier.perTree, scn.treeKeep);
   for (const t of trees) group.add(t.mesh);
+
+  // ---------------------------------------------------------------- props (walls, boulders, posts, a bridge, reeds)
+  {
+    const pr = buildProps3D(hole, ground, opts.tier ?? "high", disposables);
+    if (pr) group.add(pr.group);
+  }
 
   // ---------------------------------------------------------------- the backdrop: far mountains, sea, rock
   {

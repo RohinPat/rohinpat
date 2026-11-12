@@ -1,5 +1,6 @@
 import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
+import { stakesAround, type Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
 import type { Ground } from "./terrain";
 import { RANGE_WORLD, TARGETS, YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
@@ -102,6 +103,8 @@ export type HoleDef = {
   ground?: Ground;
   /** the range's target greens (scene.ts TARGETS) stand on it: flat rounds of green in a fringe, each with a flag */
   targets?: boolean;
+  /** placed props, in yd like the rest of the hole (solids.ts): boulders, walls, posts, stakes, a bridge, reeds. The solid ones stop and turn a ball; components/golf3d/props3d.ts draws them all. */
+  props?: Prop[];
   /**
    * Yards of fescue, gorse, waste or out of bounds (see Area). surfaceAt reads them in this order: water, then out of
    * bounds, then the green and its fringe, then the bunkers (those four are authored objects and always win over a field
@@ -110,6 +113,9 @@ export type HoleDef = {
    */
   areas?: Area[];
 };
+
+/** the pond on hole 2, which its boulders and stakes sit around */
+const POND_2 = { x: -17, z: 108, rx: 11, rz: 9, rot: 0.3 };
 
 export const HOLE_DEFS: HoleDef[] = [
   {
@@ -143,12 +149,24 @@ export const HOLE_DEFS: HoleDef[] = [
     pin: [-3, 135],
     green: { c: [0, 137], seed: 4202, severity: 0.75 },
     bunkers: [{ x: 17, z: 134, rx: 6, rz: 8 }],
-    water: [{ x: -17, z: 108, rx: 11, rz: 9, rot: 0.3 }],
+    water: [POND_2],
     trees: { seed: 23, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
     // a long way down to the green: it plays shorter than it reads
     ground: { rise: [[0, 0], [35, -1], [110, -7], [137, -8]], swell: 0.3 },
+    // granite in the rough behind and beside the pond, and red stakes down the fairway side of it (a lateral hazard)
+    props: [
+      { kind: "boulder", at: [-30.5, 112], size: 2.1, seed: 3 },
+      { kind: "boulder", at: [-26, 122], size: 1.5, seed: 5 },
+      { kind: "boulder", at: [-24.5, 96.5], size: 1.2, seed: 8 },
+      { kind: "boulder", at: [-11.5, 121.5], size: 0.9, seed: 12 },
+      { kind: "rocks", at: [-27.5, 118], r: 3, n: 9, seed: 2 },
+      { kind: "rocks", at: [-29, 104], r: 2.5, n: 7, seed: 6 },
+      { kind: "tuft", at: [-28, 120], r: 5, n: 24, seed: 1 },
+      { kind: "reeds", at: [-9, 108], r: 4, n: 30, seed: 4 },
+      ...stakesAround(POND_2, -1.1, 1.1, 5, "red"),
+    ],
   },
   {
     // a dogleg right at 205 yd. The inside of the bend is a bunker and a stand of trees: a driver aimed over them gets home,
@@ -195,6 +213,21 @@ export const HOLE_DEFS: HoleDef[] = [
     landing: [0, 255],
     // the fairway runs down to the creek, so a lay-up keeps rolling toward it; then up again to a raised green
     ground: { rise: [[0, 0], [110, 2], [230, 0], [300, -2], [327, -3.5], [370, -1.5], [430, 2], [474, 3.5]], tilt: [[200, 0.02], [300, 0], [420, -0.015]] },
+    // a footbridge over the creek on the right, past the fairway's edge, yellow stakes on both banks, reeds, rocks
+    props: [
+      { kind: "bridge", a: [30, 316], b: [30, 339], w: 2.6 },
+      ...[-24, -10, 12, 22].flatMap((x): Prop[] => [
+        { kind: "stake", at: [x, 318.5], color: "yellow" },
+        { kind: "stake", at: [x, 336.5], color: "yellow" },
+      ]),
+      { kind: "reeds", at: [14, 320.5], r: 4, n: 34, seed: 1 },
+      { kind: "reeds", at: [-34, 321], r: 5, n: 34, seed: 2 },
+      { kind: "reeds", at: [24, 335], r: 4, n: 30, seed: 3 },
+      { kind: "reeds", at: [-4, 335], r: 5, n: 34, seed: 7 },
+      { kind: "rocks", at: [27.5, 317], r: 2, n: 8, seed: 3 },
+      { kind: "rocks", at: [32.5, 338.5], r: 2, n: 8, seed: 4 },
+      { kind: "tuft", at: [34, 322], r: 4, n: 20, seed: 5 },
+    ],
   },
   {
     // the green ringed with sand, a pond on its left edge, the strongest wind of the six blowing toward the pond
@@ -274,6 +307,16 @@ export const BACK_DEFS: HoleDef[] = [
     wind: { speed: 2.2, dir: 2.6 },
     landing: [0, 235],
     ground: { rise: [[0, 0], [120, 4], [225, 9], [245, 9.5], [275, 7], [387, 3]], tilt: [[200, 0], [240, 0.02], [300, 0]] },
+    // a field wall down the right of the climb with a gated gap, and a striped post on the crest to aim by
+    props: [
+      { kind: "wall", path: [[29, 100], [30, 205], [31, 262], [29, 308]], h: 1.2, gaps: [[95, 103]], seed: 7 },
+      { kind: "gatepost", at: [30, 199], yaw: 0, gap: 8 * YD },
+      { kind: "post", at: [0, 246], h: 6.5, r: 0.14 },
+      { kind: "tuft", at: [31, 150], r: 4, n: 22, seed: 2 },
+      { kind: "tuft", at: [31, 240], r: 4, n: 22, seed: 3 },
+      { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
+      { kind: "sign", at: [6, 4], yaw: -0.3 },
+    ],
     // gorse on the left of the climb and the right of the crest: a ball in it is unplayable
     areas: [
       { kind: "gorse", poly: [[-28, 160], [-34, 168], [-38, 184], [-34, 202], [-28, 198], [-26, 178]] },
