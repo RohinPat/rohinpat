@@ -7,6 +7,7 @@ import { terrainOf } from "@/components/offhours/golf/terrain";
 import { YD } from "@/components/offhours/golf/scene";
 import { bearingOf, isSimple, lineFrame, offsetLine, polygonArea, signedDist } from "@/components/golf3d/scenery/geo";
 import { LEGACY, SCENERY_HOLES, sceneryFor } from "@/components/golf3d/scenery/scenes";
+import { DOOR } from "@/components/golf3d/scenery/hole1";
 import { legacyNoise, makeHeight } from "@/components/golf3d/scenery/height";
 import { makeTint } from "@/components/golf3d/scenery/tint";
 import { makeTreeKeep } from "@/components/golf3d/scenery/openings";
@@ -178,14 +179,19 @@ describe("the scenes", () => {
     expect(seen.filter(Boolean).length / bearings.length).toBeGreaterThanOrEqual(0.2);
   });
 
-  it("hole 1's door is a gap in the near foothills, and its peak stands in it", () => {
+  it("hole 1's door is a gap in the near foothills, cut at the bearing of the green, and its peak stands in it", () => {
     const rec = sceneryFor(1);
+    const hole = buildHole(NINE_DEFS[0]);
+    // the fairway turns gently right: the green is DOOR degrees off the line from the tee, so the peak stands behind it
+    const toGreen = (Math.atan2(hole.pin[0], hole.pin[1]) * 180) / Math.PI;
+    expect(Math.abs(toGreen - DOOR)).toBeLessThan(1);
     const l1 = rec.rings![0];
     const max = l1.sectors[0].h[1];
-    expect(ringHeight(l1, 0)).toBeLessThanOrEqual(0.1 * max);
-    expect(ringHeight(l1, (60 * Math.PI) / 180)).toBeGreaterThan(0.5 * max);
+    const deg = Math.PI / 180;
+    expect(ringHeight(l1, DOOR * deg)).toBeLessThanOrEqual(0.1 * max);
+    expect(ringHeight(l1, (DOOR + 60) * deg)).toBeGreaterThan(0.5 * max);
     const peak = rec.rings![2];
-    expect(ringHeight(peak, 0)).toBeGreaterThan(600);
+    expect(ringHeight(peak, DOOR * deg)).toBeGreaterThan(600);
     // the mesas sit to the right of the door, low behind the foothills
     const l2 = rec.rings![1];
     expect(l2.sectors.some((s) => s.shape === "mesa" && s.from === 20 && s.to === 55)).toBe(true);

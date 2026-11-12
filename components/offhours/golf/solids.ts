@@ -68,6 +68,8 @@ export type Prop =
       at: P;
       yaw: number;
       gap: number;
+      /** the posts' height, m (default 1.6) */
+      h?: number;
     }
   | { kind: "reeds"; at: P; r: number; n: number; seed?: number }
   | { kind: "tuft"; at: P; r: number; n: number; seed?: number }
@@ -208,7 +210,7 @@ export function solidsOf(props: Prop[] | undefined, ground: PropGround): Solid[]
       const sx = Math.sin(p.yaw) * p.gap / 2, sz = Math.cos(p.yaw) * p.gap / 2;
       for (const s of [-1, 1]) {
         const x = p.at[0] * YD + s * sx, z = p.at[1] * YD + s * sz;
-        out.push({ kind: "gatepost", ax: x, az: z, bx: x, bz: z, r: 0.3, h: 1.6, e: 0.3 });
+        out.push({ kind: "gatepost", ax: x, az: z, bx: x, bz: z, r: 0.3, h: p.h ?? 1.6, e: 0.3 });
       }
     } else if (p.kind === "bridge") {
       const b = bridgeShape(p, ground);

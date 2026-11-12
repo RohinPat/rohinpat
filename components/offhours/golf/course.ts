@@ -152,24 +152,59 @@ const POND_2 = { x: -17, z: 108, rx: 11, rz: 9, rot: 0.3, lobe: 4.5 };
 
 export const HOLE_DEFS: HoleDef[] = [
   {
+    // a raised tee by the clubhouse looks down a wide fairway that turns gently right, round a lone oak on the inside of the
+    // bend. The ground climbs from the swale, up a face (a false front: a short approach rolls back down) to a plateau green
+    // framed by two stone gateposts, with the Door peak behind it
     n: 1,
     name: "Open Door",
     par: 4,
     yards: 340,
-    line: [[0, 0], [0, 230], [0, 342]],
-    half: [14, 24, 22],
+    line: [[0, 0], [0, 172], [9, 262], [40, 338]],
+    half: [17, 33, 32, 17],
     rough: 14,
-    pin: [4, 339.5],
-    green: { c: [0, 341], seed: 4101, severity: 0.6 },
-    bunkers: [{ x: -21, z: 235, rx: 6, rz: 10 }],
+    pin: [42, 337.4],
+    green: { c: [40, 339], seed: 4101, severity: 0.6 },
+    bunkers: [{ x: -29, z: 258, rx: 5, rz: 9, rot: -0.12 }],
     water: [],
-    trees: { seed: 11, edge: 6, spacing: 6 },
+    trees: {
+      seed: 11,
+      edge: 6,
+      spacing: 6,
+      // open country: a thin screen of trees down the left, thinner on the right, and none past the landing area, none behind the
+      // green, so the plateau and the Door stand clear
+      sides: [0.4, 0.22],
+      behind: 0,
+      clear: [
+        [[48, 262], [48, 440], [320, 440], [320, 262]],
+        [[-320, 290], [-320, 440], [-36, 440], [-36, 290]],
+        [[-320, 340], [-320, 440], [320, 440], [320, 340]],
+      ],
+    },
+    // the oak, 26 m, a little right of the line at 206 yd: a driver flies over it, a 3 wood aimed at it goes in and drops short
+    copse: [[15, 206, 26]],
     wind: { speed: 1.5, dir: 0.6 },
-    landing: [0, 252],
-    // off a raised tee, down into a wide landing area that leans right, then up a little to the green
-    ground: { rise: [[0, 0], [40, -1], [150, -5], [250, -6], [342, -4]], tilt: [[150, -0.02], [260, -0.03], [330, 0]], mounds: [[-30, 180, 9, 1.4], [32, 300, 10, 1.6]] },
-    // a band of long fescue down the outside of the right rough: a drive that leaks right does not just find the rough
-    areas: [{ kind: "fescue", poly: [[28, 140], [30, 185], [31.5, 230], [31, 275], [38, 275], [39, 230], [36, 185], [35.5, 140]] }],
+    landing: [0, 240],
+    ground: {
+      rise: [[0, 0], [24, -0.3], [52, -3.2], [110, -4.4], [190, -5.6], [235, -5.4], [258, -4.2], [284, -0.6], [306, 5.2], [324, 8.8], [342, 9.7]],
+      tilt: [[150, 0], [200, -0.025], [262, -0.03], [310, 0]],
+      mounds: [[-30, 180, 9, 1.2], [44, 262, 10, 1.1], [41, 354, 12, 2.6]],
+      sigma: 11,
+      greenEase: 10,
+      baseY: 30,
+    },
+    props: [
+      // two stone gateposts frame the green, with the peak between them
+      { kind: "gatepost", at: [40, 357], yaw: Math.PI / 2, gap: 34, h: 4.2 },
+      { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
+      { kind: "sign", at: [6, 4], yaw: -0.3 },
+    ],
+    areas: [
+      // a sandy scrape in the rough off the right of the landing area, on the inside of the bend: a drive that leaks right is not lost
+      { kind: "waste", poly: [[46, 178], [54, 192], [57, 214], [55, 240], [48, 238], [45, 214], [42, 194]] },
+      // long fescue in the rough on both flanks of the face, so a miss either side of the plateau is a harder lie
+      { kind: "fescue", poly: [[52, 264], [60, 282], [65, 304], [64, 322], [54, 320], [49, 300], [47, 278]] },
+      { kind: "fescue", poly: [[-8, 284], [2, 288], [4, 300], [10, 318], [14, 328], [6, 330], [0, 322], [-4, 310], [-9, 296]] },
+    ],
   },
   {
     n: 2,
