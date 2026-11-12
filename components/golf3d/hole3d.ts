@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { seeded } from "@/components/offhours/useCanvas";
-import type { BuiltHole } from "@/components/offhours/golf/course";
+import { treeClear, type BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { buildGreen, buildPin, greenSink } from "./green3d";
@@ -513,6 +513,7 @@ function buildTrees(
   type T = { x: number; z: number; h: number; pine: boolean; w: number; rot: number; tint: number };
   const list: T[] = [];
   const r = seeded(hole.def.trees.seed * 7 + 1);
+  const open = treeClear(hole.def);
   // the trees course.ts places (the copse among them: those stop balls)
   for (const t of hole.world.trees) list.push({ x: t.x, z: t.z, h: t.h, pine: t.kind >= 2, w: t.kind === 3 ? 0.62 : t.kind === 2 ? 0.75 : 0.85, rot: r() * 6.28, tint: 0.85 + r() * 0.3 });
   // and the woods behind them, thick enough to read as a forest, out onto the hills
@@ -521,7 +522,7 @@ function buildTrees(
   for (let i = 0; i < tries; i++) {
     const x = X0 - 150 + r() * (X1 - X0 + 300), z = Z0 - 150 + r() * (Z1 - Z0 + 300);
     const m = hole.margin(x, z) - rough;
-    if (m < 22 || hole.surfaceAt(x, z) !== "out") continue;
+    if (m < 22 || hole.surfaceAt(x, z) !== "out" || !open(x, z)) continue;
     // thinner far out, so the hills show between them
     if (r() > 1.15 - m / 220) continue;
     const pine = r() > 0.45;

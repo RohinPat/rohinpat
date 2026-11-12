@@ -67,6 +67,11 @@ export type AreaM = { kind: AreaKind; ring: [number, number][]; stakes: [number,
 export const STAKE_GAP = 6;
 /** which kind wins where areas overlap (first in the list wins) */
 const AREA_ORDER: AreaKind[] = ["oob", "gorse", "waste", "fescue"];
+/** true if a tree may stand at (x, z) m: outside every `trees.clear` polygon */
+export const treeClear = (def: HoleDef) => {
+  const polys = (def.trees.clear ?? []).map((p) => p.map(([x, z]) => [x * YD, z * YD] as [number, number]));
+  return (x: number, z: number) => !polys.some((p) => inPoly(p, x, z));
+};
 const inPoly = (ring: [number, number][], x: number, z: number) => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -106,7 +111,19 @@ export type HoleDef = {
   green: { c: [number, number]; seed: number; severity: number };
   bunkers: Blob[];
   water: Water[];
-  trees: { seed: number; /** yd of clear ground beyond the rough before the trees */ edge: number; /** yd between trees along the edge */ spacing: number };
+  trees: {
+    seed: number;
+    /** yd of clear ground beyond the rough before the trees */
+    edge: number;
+    /** yd between trees along the edge */
+    spacing: number;
+    /** polygons (yd) kept clear of every tree: the edge rows, the rows behind the green and the woods. Open a view with them */
+    clear?: [number, number][][];
+    /** 0..1, [left, right] (looking down the hole): the share of the edge trees kept on each side (default 1: a full row) */
+    sides?: [number, number];
+    /** rows of trees behind the green (default 3); 0 leaves the view past the green open */
+    behind?: number;
+  };
   /** trees that stop a ball in the air: x and z (yd) and the height (m). They are drawn with the rest. */
   copse?: [number, number, number][];
   /** where the wind blows to: 0 is straight downrange (a tailwind), pi/2 to the right; m/s */
@@ -722,22 +739,34 @@ export function buildHole(def: HoleDef): BuiltHole {
     const out = rough + def.trees.edge * YD;
     const sp = def.trees.spacing * YD;
     // inside a bend the offset from one segment can land on the other's rough: leave those out (the draws are still made, so the rest do not move)
-    const keep = (t: Tree) => {
-      if (margin(t.x, t.z) > rough + 3 * YD) trees.push(t);
+    // and never in water, in a clearing, or on a side the hole thins (a hash, so the draws, and the rest, do not move)
+    const open = treeClear(def);
+    const sides = def.trees.sides;
+    const keep = (t: Tree, s = 0) => {
+      if (margin(t.x, t.z) <= rough + 3 * YD || !open(t.x, t.z) || surfaceAt(t.x, t.z) === "water") return;
+      if (s && sides) {
+        const k = sides[s < 0 ? 0 : 1], h = Math.abs(Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453) % 1;
+        if (h >= k) return;
+      }
+      trees.push(t);
     };
     for (let i = 0; i < samples.length; i++) {
       if (i % Math.max(1, Math.round(sp / (5 * YD))) !== 0) continue;
       const a = samples[i];
       for (const s of [-1, 1]) {
         const d = a.hw + out + r() * 4;
-        keep({ x: a.x + s * a.nx * d, z: a.z + s * a.nz * d + (r() - 0.5) * 3, h: 11 + r() * 9, kind: Math.floor(r() * 4), flip: r() > 0.5 });
-        if (r() > 0.45) keep({ x: a.x + s * a.nx * (d + 9 + r() * 14), z: a.z + s * a.nz * (d + 9 + r() * 14) + r() * 4, h: 15 + r() * 10, kind: Math.floor(r() * 4), flip: r() > 0.5 });
+        keep({ x: a.x + s * a.nx * d, z: a.z + s * a.nz * d + (r() - 0.5) * 3, h: 11 + r() * 9, kind: Math.floor(r() * 4), flip: r() > 0.5 }, s);
+        if (r() > 0.45) keep({ x: a.x + s * a.nx * (d + 9 + r() * 14), z: a.z + s * a.nz * (d + 9 + r() * 14) + r() * 4, h: 15 + r() * 10, kind: Math.floor(r() * 4), flip: r() > 0.5 }, s);
       }
     }
     // the copse: trees a ball in the air can hit, set where the hole's decision is
     for (const [x, z, h] of def.copse ?? []) trees.push({ x: x * YD, z: z * YD, h, kind: Math.floor(r() * 3), flip: r() > 0.5 });
     const end = pts[pts.length - 1];
-    for (let row = 0; row < 3; row++) for (let x = -130; x < 130; x += 6 + r() * 4) trees.push({ x: end[0] + x, z: end[1] + 22 + row * 14 + r() * 6, h: 15 + r() * 12 + row * 3, kind: Math.floor(r() * 4), flip: r() > 0.5 });
+    for (let row = 0; row < (def.trees.behind ?? 3); row++)
+      for (let x = -130; x < 130; x += 6 + r() * 4) {
+        const t = { x: end[0] + x, z: end[1] + 22 + row * 14 + r() * 6, h: 15 + r() * 12 + row * 3, kind: Math.floor(r() * 4), flip: r() > 0.5 };
+        if (open(t.x, t.z) && surfaceAt(t.x, t.z) !== "water") trees.push(t);
+      }
   }
 
   const fairHalfAt = (z: number) => {
