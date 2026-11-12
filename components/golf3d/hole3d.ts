@@ -7,6 +7,7 @@ import { GH, GW, greenHeight, zone } from "@/components/offhours/golf/green";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PAD as GPAD, reliefOf } from "./relief";
 import { prepareScenery, type Skin } from "./scenery";
+import { buildWater } from "./water3d";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
@@ -15,7 +16,7 @@ import { prepareScenery, type Skin } from "./scenery";
 // (terrain.ts, which the ball plays on), rising into wooded hills beyond the trees. The green is its own finer
 // mesh on top, shaped by the putt's height field (relief.ts), with a sharper
 // texture, since the putting camera looks at it from a metre or two. Trees are instanced low-poly
-// shapes; water is a glossy sheet on top of the painted pond.
+// shapes; water is its own sheet (water3d.ts) on top of the painted bank.
 //
 // The hole's frame: x right, z downrange, y up, metres. course.ts's frame is
 // left-handed seen from three.js, so everything here sits under a parent with
@@ -162,11 +163,15 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     c.fillStyle = COL.sand;
     c.fill();
   }
-  // water: a dark bank and deep water (the glossy sheet goes on top)
+  // water: the bank (wet earth, steep faces stretch the top-down texture, so it is wide) and a pale lip at the top of it;
+  // the water sheet (water3d.ts) goes on top
   for (const ring of hole.world.water) {
     path(ring);
-    c.strokeStyle = COL.bank;
-    c.lineWidth = 2.2 * s;
+    c.strokeStyle = "#5f5636";
+    c.lineWidth = 4 * s;
+    c.stroke();
+    c.strokeStyle = "#c4bb86";
+    c.lineWidth = 1.5 * s;
     c.stroke();
     c.fillStyle = COL.pond;
     c.fill();
@@ -299,49 +304,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   group.add(buildGreen(hole, canvas, { X0, Z0, s }, tier, disposables));
 
   // ---------------------------------------------------------------- water
-  // a pond is a level sheet; a creek is a strip down its path, following the ground it is dug into
   if (hole.world.water.length) {
-    const wm = new THREE.MeshPhongMaterial({ color: "#4f97c0", specular: "#e8f6ff", shininess: 90, transparent: true, opacity: 0.82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-    disposables.push(wm);
-    def.water.forEach((w, wi) => {
-      let g: THREE.BufferGeometry;
-      if ("path" in w) {
-        const path = w.path.map(([x, z]) => [x * YD, z * YD] as P);
-        const hw = (w.w * YD) / 2;
-        const pts: P[] = [];
-        for (let i = 0; i < path.length - 1; i++) {
-          const [ax, az] = path[i], [bx, bz] = path[i + 1];
-          const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 2));
-          for (let k = 0; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
-        }
-        pts.push(path[path.length - 1]);
-        const pos: number[] = [], idx: number[] = [];
-        pts.forEach(([x, z], i) => {
-          const [ax, az] = pts[Math.max(0, i - 1)], [bx, bz] = pts[Math.min(pts.length - 1, i + 1)];
-          const l = Math.hypot(bx - ax, bz - az) || 1;
-          const nx = (bz - az) / l, nz = -(bx - ax) / l;
-          for (const s of [-1, 1]) {
-            const px = x + s * nx * hw, pz = z + s * nz * hw;
-            pos.push(px, ground.waterY(px, pz), pz);
-          }
-          if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i, 2 * i - 1, 2 * i + 1);
-        });
-        g = new THREE.BufferGeometry();
-        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-        g.setIndex(idx);
-        g.computeVertexNormals();
-      } else {
-        const ring = hole.world.water[wi];
-        const shape = new THREE.Shape(ring.map(([x, z]) => new THREE.Vector2(x, -z)));
-        g = new THREE.ShapeGeometry(shape);
-        g.rotateX(-Math.PI / 2);
-        g.translate(0, ground.waterY(w.x * YD, w.z * YD), 0);
-      }
-      const m = new THREE.Mesh(g, wm);
-      m.receiveShadow = true;
-      group.add(m);
-      disposables.push(g);
-    });
+    buildWater({ hole, ground, tier: opts.tier ?? "high", sun: opts.sun ?? new THREE.Vector3(-0.4, 0.7, 0.5), reduce: !!opts.reduce, bay: scn.rec.coast?.tones, group, disposables });
   }
 
   // ---------------------------------------------------------------- trees

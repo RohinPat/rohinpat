@@ -9,7 +9,7 @@ import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound,
 // The course's data, the lie table and the scoring: no screen, no clock.
 
 /** a point on a hazard that is inside it, yd */
-const inside = (w: Water): [number, number] => ("path" in w ? w.path[Math.floor(w.path.length / 2)] : [w.x, w.z]);
+const inside = (w: Water): [number, number] => ("path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? w.shore[0] : [w.x, w.z]);
 /** where along the line (yd) the nearest point to (x, z) is, and how far off it (yd) */
 function along(def: HoleDef, x: number, z: number) {
   const L = def.line;
@@ -70,7 +70,7 @@ describe("course data", () => {
       it("the tee is mown, with no sand or water near it", () => {
         expect(b.surfaceAt(0, 0)).toBe("fairway");
         for (const blob of def.bunkers) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(60);
-        for (const w of def.water) for (const [x, z] of "path" in w ? w.path : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(60);
+        for (const w of def.water) for (const [x, z] of "path" in w ? w.path : "shore" in w ? w.shore : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(60);
       });
       it("the line from tee to green is fairway all the way, but for a creek across it and the sand round a green (no pond across it)", () => {
         const end = along(def, def.pin[0], def.pin[1]).s - 30;

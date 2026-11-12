@@ -30,11 +30,14 @@ const LOW_M = 100;
 /** the flag is at least this tall on screen, px */
 const FLAG_MIN_PX = 34;
 
-export type Blob = { x: number; z: number; rx: number; rz: number; rot?: number };
-/** a creek: water along a path (yd), `w` yd wide */
-export type Creek = { path: [number, number][]; w: number };
-export type Water = Blob | Creek;
+export type Blob = { x: number; z: number; rx: number; rz: number; rot?: number; /** shore wobble seed (water only): a lobed, natural shore instead of an ellipse */ lobe?: number };
+/** a creek: water along a path (yd), `w` yd wide; the path is smoothed into a meander */
+export type Creek = { path: [number, number][]; w: number; /** width (yd) at each path point (eased between them), so the carry varies along the creek */ ws?: number[] };
+/** a lake: water inside a closed shore (yd, the points are smoothed into a curve), lying level in ground at `level` m (the ground at its shore; else the ground at its middle), its surface a lip under that */
+export type Lake = { shore: [number, number][]; level?: number };
+export type Water = Blob | Creek | Lake;
 const isCreek = (w: Water): w is Creek => "path" in w;
+const isLake = (w: Water): w is Lake => "shore" in w;
 
 export type HoleDef = {
   n: number;
@@ -95,7 +98,7 @@ export const HOLE_DEFS: HoleDef[] = [
     pin: [-3, 135],
     green: { c: [0, 137], seed: 4202, severity: 0.75 },
     bunkers: [{ x: 17, z: 134, rx: 6, rz: 8 }],
-    water: [{ x: -17, z: 108, rx: 11, rz: 9, rot: 0.3 }],
+    water: [{ x: -17, z: 108, rx: 11, rz: 9, rot: 0.3, lobe: 4.5 }],
     trees: { seed: 23, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
@@ -141,7 +144,7 @@ export const HOLE_DEFS: HoleDef[] = [
       { x: 23, z: 268, rx: 5, rz: 9 },
       { x: 33, z: 470, rx: 5, rz: 6 },
     ],
-    water: [{ path: [[-56, 327.5], [-28, 326.5], [0, 327], [28, 327.5], [56, 326.5]], w: 14 }],
+    water: [{ path: [[-64, 333], [-44, 324], [-24, 329], [0, 328], [20, 322.5], [42, 328], [66, 326]], w: 14, ws: [12, 13, 15, 13.5, 11, 14, 12] }],
     trees: { seed: 41, edge: 6, spacing: 6 },
     wind: { speed: 2.5, dir: 0.3 },
     landing: [0, 255],
@@ -190,7 +193,7 @@ export const HOLE_DEFS: HoleDef[] = [
       { x: -19, z: 263, rx: 4.5, rz: 8, rot: 0.515 },
       { x: -91, z: 355, rx: 5, rz: 4.5 },
     ],
-    water: [{ path: [[-54, 189], [-81, 233], [-106, 276], [-130, 320], [-142, 342]], w: 11 }],
+    water: [{ path: [[-54, 189], [-64, 213], [-88, 238], [-92, 259], [-116, 282], [-119, 306], [-138, 330], [-146, 346]], w: 11, ws: [8, 9, 12, 13, 9, 11, 14, 9] }],
     trees: { seed: 67, edge: 6, spacing: 6 },
     copse: [[-47, 128, 18], [-53, 139, 20], [-45, 150, 16], [-58, 154, 19], [-50, 165, 17], [-60, 172, 18], [-52, 180, 20]],
     wind: { speed: 2.8, dir: 3.4 },
@@ -242,8 +245,8 @@ export const BACK_DEFS: HoleDef[] = [
       { x: 29, z: 514, rx: 4, rz: 6 },
     ],
     water: [
-      { x: 64, z: 400, rx: 15, rz: 34, rot: -0.18 },
-      { x: 67, z: 499, rx: 8, rz: 10 },
+      { x: 64, z: 400, rx: 15, rz: 34, rot: -0.18, lobe: 2.3 },
+      { x: 67, z: 499, rx: 8, rz: 10, lobe: 1.1 },
     ],
     trees: { seed: 83, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: 1.2 },
@@ -267,7 +270,7 @@ export const BACK_DEFS: HoleDef[] = [
       { x: -84, z: 397, rx: 5, rz: 4, rot: 0.5 },
       { x: -55, z: 421, rx: 4, rz: 5 },
     ],
-    water: [{ x: -93, z: 428, rx: 10, rz: 7, rot: 0.4 }],
+    water: [{ x: -93, z: 428, rx: 10, rz: 7, rot: 0.4, lobe: 5.2 }],
     trees: { seed: 97, edge: 6, spacing: 6 },
     copse: [[-38, 148, 17], [-44, 159, 19], [-36, 169, 16], [-48, 173, 18], [-40, 184, 20], [-52, 189, 17]],
     wind: { speed: 3, dir: -2.2 },
@@ -314,14 +317,23 @@ const blobHit = (b: Blob, x: number, z: number) => {
   const dx = x - b.x * YD, dz = z - b.z * YD;
   const c = Math.cos(b.rot ?? 0), s = Math.sin(b.rot ?? 0);
   const u = dx * c + dz * s, v = -dx * s + dz * c;
-  return (u / (b.rx * YD)) ** 2 + (v / (b.rz * YD)) ** 2 < 1;
+  const a = u / (b.rx * YD), e = v / (b.rz * YD);
+  return Math.hypot(a, e) < lobeK(b.lobe, Math.atan2(e, a));
 };
-const blobRing = (b: Blob, n = 20): [number, number][] => {
+/** shore wobble: radius scale at angle a for a lobe seed (1 for none) */
+export const lobeK = (seed: number | undefined, a: number) => {
+  if (!seed) return 1;
+  let k = 1;
+  for (let h = 2; h <= 5; h++) k += (0.16 / (h - 1)) * Math.sin(h * a + seed * h * 1.7 + h);
+  return k;
+};
+const blobRing = (b: Blob, n = b.lobe ? 48 : 20): [number, number][] => {
   const c = Math.cos(b.rot ?? 0), s = Math.sin(b.rot ?? 0);
   const out: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    const u = Math.cos(a) * b.rx * YD, v = Math.sin(a) * b.rz * YD;
+    const k = lobeK(b.lobe, a);
+    const u = Math.cos(a) * b.rx * YD * k, v = Math.sin(a) * b.rz * YD * k;
     out.push([b.x * YD + u * c - v * s, b.z * YD + u * s + v * c]);
   }
   return out;
@@ -338,22 +350,83 @@ const pathDist = (path: [number, number][], x: number, z: number) => {
   }
   return best;
 };
-const creekPath = (c: Creek) => c.path.map(([x, z]) => [x * YD, z * YD] as [number, number]);
-const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? pathDist(creekPath(w), x, z) < (w.w * YD) / 2 : blobHit(w, x, z));
-/** a creek's outline: its bank on one side out, on the other back */
+/** a creek as a dense smooth polyline in metres, with the half width at each point */
+export type CreekPt = { x: number; z: number; hw: number; s: number };
+export const creekPoly = (c: Creek): CreekPt[] => {
+  const P = c.path.map(([x, z]) => [x * YD, z * YD]);
+  const W = (c.ws ?? c.path.map(() => c.w)).map((w) => (w * YD) / 2);
+  const out: CreekPt[] = [];
+  const at = (i: number) => Math.max(0, Math.min(P.length - 1, i));
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[at(i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[at(i + 2)];
+    const n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 1.5));
+    for (let k = 0; k < n; k++) {
+      const t = k / n, t2 = t * t, t3 = t2 * t;
+      const f = (a: number, b: number, c2: number, d: number) => 0.5 * (2 * b + (-a + c2) * t + (2 * a - 5 * b + 4 * c2 - d) * t2 + (-a + 3 * b - 3 * c2 + d) * t3);
+      out.push({ x: f(p0[0], p1[0], p2[0], p3[0]), z: f(p0[1], p1[1], p2[1], p3[1]), hw: W[i] + (W[i + 1] - W[i]) * (t * t * (3 - 2 * t)), s: 0 });
+    }
+  }
+  const l = P[P.length - 1];
+  out.push({ x: l[0], z: l[1], hw: W[W.length - 1], s: 0 });
+  for (let i = 1; i < out.length; i++) out[i].s = out[i - 1].s + Math.hypot(out[i].x - out[i - 1].x, out[i].z - out[i - 1].z);
+  return out;
+};
+/** metres from the creek's bank (negative: in the water) */
+export const creekSd = (poly: CreekPt[], x: number, z: number) => {
+  let best = Infinity;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const a = poly[i], b = poly[i + 1];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const u = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+    best = Math.min(best, Math.hypot(x - (a.x + dx * u), z - (a.z + dz * u)) - (a.hw + (b.hw - a.hw) * u));
+  }
+  return best;
+};
+const polyCache = new WeakMap<Creek, CreekPt[]>();
+export const polyOf = (c: Creek) => { let p = polyCache.get(c); if (!p) { p = creekPoly(c); polyCache.set(c, p); } return p; };
+/** a lake's shore as a smooth closed curve in metres (Catmull-Rom through the points, a point about every 2.5 m) */
+export const lakeRing = (l: Lake): [number, number][] => {
+  const P = l.shore.map(([x, z]) => [x * YD, z * YD]);
+  const n = P.length, out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = P[(i + n - 1) % n], p1 = P[i], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+    const m = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 2.5));
+    for (let k = 0; k < m; k++) {
+      const t = k / m, t2 = t * t, t3 = t2 * t;
+      const f = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+    }
+  }
+  return out;
+};
+/** metres from a closed ring's edge (negative: inside) */
+export const ringSd = (ring: [number, number][], x: number, z: number) => {
+  let best = Infinity, inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, az] = ring[j], [bx, bz] = ring[i];
+    if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+    const dx = bx - ax, dz = bz - az;
+    const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+    best = Math.min(best, Math.hypot(x - (ax + dx * u), z - (az + dz * u)));
+  }
+  return inside ? -best : best;
+};
+const lakeCache = new WeakMap<Lake, [number, number][]>();
+export const lakeOf = (l: Lake) => { let r = lakeCache.get(l); if (!r) { r = lakeRing(l); lakeCache.set(l, r); } return r; };
+const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? creekSd(polyOf(w), x, z) < 0 : isLake(w) ? ringSd(lakeOf(w), x, z) < 0 : blobHit(w, x, z));
 const creekRing = (c: Creek): [number, number][] => {
-  const P = creekPath(c), hw = (c.w * YD) / 2;
+  const P = polyOf(c);
   const left: [number, number][] = [], right: [number, number][] = [];
-  P.forEach(([x, z], i) => {
-    const [ax, az] = P[Math.max(0, i - 1)], [bx, bz] = P[Math.min(P.length - 1, i + 1)];
-    const l = Math.hypot(bx - ax, bz - az) || 1;
-    const nx = (bz - az) / l, nz = -(bx - ax) / l;
-    left.push([x + nx * hw, z + nz * hw]);
-    right.push([x - nx * hw, z - nz * hw]);
+  P.forEach((p, i) => {
+    const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)];
+    const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    const nx = (b.z - a.z) / l, nz = -(b.x - a.x) / l;
+    left.push([p.x + nx * p.hw, p.z + nz * p.hw]);
+    right.push([p.x - nx * p.hw, p.z - nz * p.hw]);
   });
   return [...left, ...right.reverse()];
 };
-const waterRing = (w: Water) => (isCreek(w) ? creekRing(w) : blobRing(w));
+const waterRing = (w: Water) => (isCreek(w) ? creekRing(w) : isLake(w) ? lakeOf(w) : blobRing(w));
 
 /** a point along the ribbon: its normal (to the right of the line), the half width, and how much to stretch an offset at a bend so the edge stays a constant distance from the line */
 type Sample = { x: number; z: number; nx: number; nz: number; hw: number; m: number };

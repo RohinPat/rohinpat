@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole, polyOf, type Creek } from "@/components/offhours/golf/course";
 import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
@@ -104,11 +104,13 @@ describe("hole 3, The Elbow", () => {
 describe("hole 4, Reed Creek", () => {
   const d = HOLE_DEFS[3];
   const b = buildHole(d);
-  const creek = d.water[0] as { path: [number, number][]; w: number };
-  it("a creek across the fairway from 320 to 334 yd, and the green 136 yd past it", () => {
-    const zs = creek.path.map((p) => p[1]);
-    expect(Math.min(...zs) - creek.w / 2).toBeGreaterThanOrEqual(319);
-    expect(Math.max(...zs) + creek.w / 2).toBeLessThanOrEqual(335.5);
+  const creek = d.water[0] as Creek;
+  it("a meandering creek across the fairway from about 315 to 336 yd, and the green 136 yd past it", () => {
+    const poly = polyOf(d.water[0] as Creek).filter((p) => Math.abs(p.x) < 40 * YD);
+    expect(Math.min(...poly.map((p) => p.z - p.hw)) / YD).toBeGreaterThanOrEqual(315);
+    expect(Math.max(...poly.map((p) => p.z + p.hw)) / YD).toBeLessThanOrEqual(337);
+    // its width changes along it (the carry varies)
+    expect(Math.max(...poly.map((p) => p.hw)) - Math.min(...poly.map((p) => p.hw))).toBeGreaterThan(1.5 * YD);
     expect(d.pin[1] - 334).toBeGreaterThanOrEqual(135);
     // it runs the whole width of the fairway and the rough, and a ball down the middle lands in it
     for (const x of [-34, -20, 0, 20, 34]) expect(b.surfaceAt(x * YD, 327 * YD), `x ${x}`).toBe("water");
@@ -125,7 +127,7 @@ describe("hole 4, Reed Creek", () => {
     expect(h.shot!.surface).toBe("water");
     expect(h.dropped).toBe(true);
     expect(h.strokes).toBe(4);
-    expect(h.ball[1]).toBeLessThan(318 * YD);
+    expect(h.ball[1]).toBeLessThan(320 * YD);
     expect(h.hole.surfaceAt(h.ball[0], h.ball[1])).not.toBe("water");
   });
   it("with water across the line the camera rises to show it, and the creek is on screen with room to spare", () => {
@@ -733,7 +735,7 @@ describe("found in play", () => {
     expect(Math.hypot(wet.ball[0] - inAt.x, wet.ball[1] - inAt.z) / YD).toBeLessThan(40);
     expect(wet.yardsToPin()).toBeLessThan(200);
     // a little further left is the trees: the water costs about the same, not 200 yd more
-    const dry = tee(-14);
+    const dry = tee(-16);
     expect(dry.result).toBe("TREES · +1");
     expect(wet.yardsToPin() - dry.yardsToPin()).toBeLessThan(50);
   });
