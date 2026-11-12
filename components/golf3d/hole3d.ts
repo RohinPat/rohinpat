@@ -9,6 +9,7 @@ import { buildProps3D } from "./props3d";
 import { prepareScenery, type Skin } from "./scenery";
 import { buildWater } from "./water3d";
 import { paintAreas } from "./areas3d";
+import { buildCliffs, cliffCovers, cliffSink, paintCliffs } from "./cliff3d";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
@@ -153,6 +154,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   }
   // fescue, gorse, waste and out of bounds (areas3d.ts), under the sand and the water
   paintAreas(c, hole.areas, tx, tz, s, def.n);
+  // cliffs: turf behind the lip, rock and scree (their ribbon is its own mesh, below)
+  paintCliffs(c, hole, tx, tz);
   // sand: a dark lip, then the sand, lighter in the middle
   for (const ring of hole.world.sand ?? []) {
     path(ring);
@@ -225,16 +228,30 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   const nx = xs.length, nz = zs.length;
   const H = new Float32Array(nx * nz);
   // the terrain is sunk a hand's breadth under the green's own fine mesh (green3d.ts), so the two never fight for the pixel
-  const sink = greenSink(hole);
+  const gSink = greenSink(hole), cSink = cliffSink(hole);
+  const sink = (x: number, z: number) => gSink(x, z) + cSink(x, z);
+  const covered = cliffCovers(hole);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) H[j * nx + i] = heightAt(xs[i], zs[j]) - sink(xs[i], zs[j]);
   const cx = nx - 1, cz = nz - 1;
   const subOf = new Uint8Array(cx * cz);
-  let fineCells = 0, fineTris = 0;
+  // cells a cliff's ribbon covers all over need no ground under them
+  const skip = new Uint8Array(cx * cz);
+  let fineCells = 0, fineTris = 0, skipped = 0;
+  if (covered)
+    for (let j = 0; j < cz; j++)
+      for (let i = 0; i < cx; i++) {
+        if (Math.abs(xs[i + 1] - xs[i] - cell) > 1e-6 || Math.abs(zs[j + 1] - zs[j] - cell) > 1e-6) continue;
+        const x0 = xs[i], x1 = xs[i + 1], z0 = zs[j], z1 = zs[j + 1];
+        if (covered(x0, z0) && covered(x1, z0) && covered(x0, z1) && covered(x1, z1) && covered((x0 + x1) / 2, (z0 + z1) / 2)) {
+          skip[j * cx + i] = 1;
+          skipped++;
+        }
+      }
   if (ground.fx.bounds.length || ground.greenShaped) {
     const reach = cell * 0.75;
     for (let j = 0; j < cz; j++)
       for (let i = 0; i < cx; i++) {
-        if (Math.abs(xs[i + 1] - xs[i] - cell) > 1e-6 || Math.abs(zs[j + 1] - zs[j] - cell) > 1e-6) continue;
+        if (Math.abs(xs[i + 1] - xs[i] - cell) > 1e-6 || Math.abs(zs[j + 1] - zs[j] - cell) > 1e-6 || skip[j * cx + i]) continue;
         const mx = (xs[i] + xs[i + 1]) / 2, mz = (zs[j] + zs[j + 1]) / 2;
         const lvl = ground.fx.fine(mx, mz, reach);
         let sb = lvl === 2 ? tier.sub : lvl === 1 ? tier.sub2 : 0;
@@ -251,7 +268,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   }
   const isFine = (i: number, j: number) => i >= 0 && j >= 0 && i < cx && j < cz && subOf[j * cx + i] > 0;
   // flat-shaded: every triangle has its own three vertices
-  const tris = (cx * cz - fineCells) * 2 + fineTris;
+  const tris = (cx * cz - fineCells - skipped) * 2 + fineTris;
   const pos = new Float32Array(tris * 9), uv = new Float32Array(tris * 6), col = new Float32Array(tris * 9);
   let k = 0;
   const hill: [number, number, number] = [1, 1, 1];
@@ -266,7 +283,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   };
   for (let j = 0; j < cz; j++)
     for (let i = 0; i < cx; i++) {
-      if (subOf[j * cx + i]) continue;
+      if (subOf[j * cx + i] || skip[j * cx + i]) continue;
       // wound so the faces point up in the course's own frame (three.js handles the mirrored parent)
       put(i, j); put(i, j + 1); put(i + 1, j);
       put(i + 1, j); put(i, j + 1); put(i + 1, j + 1);
@@ -347,7 +364,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     };
     for (let j = 0; j < cz; j++)
       for (let i = 0; i < cx; i++) {
-        if (subOf[j * cx + i]) continue;
+        if (subOf[j * cx + i] || skip[j * cx + i]) continue;
         set(i, j); set(i, j + 1); set(i + 1, j);
         set(i + 1, j); set(i, j + 1); set(i + 1, j + 1);
       }
@@ -371,6 +388,12 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // ---------------------------------------------------------------- water
   if (hole.world.water.length) {
     buildWater({ hole, ground, tier: opts.tier ?? "high", sun: opts.sun ?? new THREE.Vector3(-0.4, 0.7, 0.5), reduce: !!opts.reduce, bay: scn.rec.coast?.tones, group, disposables });
+  }
+
+  // ---------------------------------------------------------------- cliffs
+  {
+    const cl = buildCliffs(hole, opts.tier ?? "high", disposables);
+    if (cl) group.add(cl.mesh);
   }
 
   // ---------------------------------------------------------------- trees

@@ -33,6 +33,8 @@ export type Ground = {
   teeEase?: number;
   /** metres above sea level of the tee: nothing here reads it, the scenery may */
   baseY?: number;
+  /** the cell of the grid the ground is baked on, m (default 1.5). A cliff's face (features.ts) needs 0.75 */
+  cell?: number;
 };
 
 export type Terrain = {
@@ -74,8 +76,8 @@ const BANK_RUN = 2.4;
 const POND_LIP = 0.22;
 /** a creek's surface under the ground beside it, as a share of CREEK_DIP (the bank's waterline) */
 const CREEK_LINE = 0.6;
-/** the baked grid's cell, m */
-const CELL = 1.5;
+/** the baked grid's cell, m (Ground.cell) */
+const CELL_DEFAULT = 1.5;
 
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
@@ -135,6 +137,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const swell = G.swell ?? 0.6;
   const SIG = G.sigma ?? SIGMA, EASE = G.greenEase ?? GREEN_EASE, T_FLAT = G.teeFlat ?? TEE_FLAT, T_EASE = G.teeEase ?? TEE_EASE;
   const fx = compileFeatures(def.features, def.bunkers);
+  const CELL = G.cell ?? CELL_DEFAULT;
+  const cliffy = fx.cliffs.length > 0;
   const mounds = (G.mounds ?? []).map(([x, z, r, h]) => ({ x: x * YD, z: z * YD, r: r * YD, h }));
 
   // the line, every 5 yd, with how far along it each sample is from the tee and its normal
@@ -202,13 +206,13 @@ export function terrainOf(hole: BuiltHole): Terrain {
   type Pond = { x: number; z: number; rx: number; rz: number; c: number; s: number; level: number; lobe?: number };
   const ponds: Pond[] = [];
   const creeks: CreekPt[][] = [];
-  const lakes: { ring: [number, number][]; level: number }[] = [];
+  const lakes: { ring: [number, number][]; level: number; depth: number }[] = [];
   for (const w of def.water) {
     if ("path" in w) creeks.push(polyOf(w));
     else if ("shore" in w) {
       const ring = lakeOf(w);
       const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
-      lakes.push({ ring, level: w.level ?? levelled(mx, mz) });
+      lakes.push({ ring, level: w.level ?? levelled(mx, mz), depth: w.depth ?? POND_DIP });
     } else ponds.push({ x: w.x * YD, z: w.z * YD, rx: w.rx * YD, rz: w.rz * YD, c: Math.cos(w.rot ?? 0), s: Math.sin(w.rot ?? 0), level: levelled(w.x * YD, w.z * YD), lobe: w.lobe });
   }
   const blobR = (b: { x: number; z: number; rx: number; rz: number; c: number; s: number; lobe?: number }, x: number, z: number) => {
@@ -234,7 +238,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
     let y = levelled(x, z);
     // (never over the green's pad: the putt's surface stays exactly the putt's)
     if (ponds.length) {
-      const k = 1 - onPad(x, z);
+      // (a lake does not level ground a cliff has dropped: its face and foot stay as they are)
+      const k = (1 - onPad(x, z)) * (cliffy ? 1 - fx.held(x, z) : 1);
       for (const p of ponds) y = lerp(y, p.level, k * (1 - smooth((blobR(p, x, z) - 1.1) / 0.9)));
       for (const l of lakes) y = lerp(y, l.level, k * (1 - smooth((ringSd(l.ring, x, z) - 2) / 14)));
     }
@@ -257,7 +262,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
     for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
-    for (const l of lakes) dig += POND_DIP * smooth((0.67 - ringSd(l.ring, x, z)) / BANK_RUN);
+    for (const l of lakes) dig += l.depth * smooth((0.67 - ringSd(l.ring, x, z)) / BANK_RUN);
     for (const c of creeks) {
       const sd = creekSd(c, x, z);
       // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN

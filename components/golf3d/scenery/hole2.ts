@@ -10,11 +10,11 @@ const GRANITE = ["#d9dcd8", "#bdc2c2", "#a3a9ad", "#848c93"];
 export const HOLE2: SceneryRecord | null = {
   id: "short-straw",
   skin: { skyTop: "#4a8fd9", skyLow: "#bfdcf0", haze: "#dce9f1", glow: "#f6f8ff" },
-  hills: { base: 4, amp: 12, reach: 150 },
+  hills: { base: 10, amp: 20, reach: 110 },
   palette: { base: "#5c9660", high: "#b9bd9e", reach: 40, patches: { color: "#a8993f", share: 0.22, scale: 70, seed: 6 } },
   walls: [
     // the granite wall ahead, bowed round the green; the waterfall comes down it
-    { follow: "beyond", offset: 150, halfWidth: 250, curve: 80, height: 50, rows: 8, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 70, seed: 21 },
+    { follow: "beyond", offset: 140, halfWidth: 250, curve: 80, height: 50, rows: 8, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 70, seed: 21 },
     // its shoulder on the left, over the tarn
     { follow: "line", side: "left", offset: 120, from: 0.55, to: 1, height: 38, rows: 6, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 60, seed: 22 },
   ],

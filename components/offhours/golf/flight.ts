@@ -48,6 +48,17 @@ const MASS = 0.04593;
 const DT = 1 / 240;
 /** a ball rolling down a slope is pulled on by this much of g per unit of slope */
 const ROLL_G = (5 / 7) * G;
+/**
+ * Steep ground (E5). A rolling ball on ground steeper than STEEP_SLIDE (rise per metre) has nothing to stop it: it keeps
+ * going, on a far smaller friction. Steeper than STEEP_FALL (a face, a cliff) it is not rolling at all: it leaves the
+ * ground and falls, bounces off the face and goes on down to the foot, where the slope eases and it rolls out as ever.
+ * A ball that comes to rest on ground steeper than STEEP_REST within STEEP_RING m of it (a ledge on a face, the foot of one)
+ * is `steep` in the Shot: it cannot be played, and play.ts takes it for a drop. Every hole's ground is gentler than all
+ * three (golf-hills.test.ts keeps it under 0.6 where a ball can be), so only a cliff ever meets them.
+ */
+export const STEEP_SLIDE = 0.8, STEEP_FALL = 1.0, STEEP_REST = 0.75, STEEP_RING = 1.2;
+/** a ball scraping down a face loses speed at this rate (1/s): its fastest is g / SCRAPE */
+const SCRAPE = 1.6;
 /** a rolling ball whose middle passes this close to the middle of the cup (m), no faster than HOLE_V (m/s), drops in */
 const HOLE_R = 0.06, HOLE_V = 1.5;
 
@@ -149,6 +160,8 @@ export type Shot = {
   tree: { x: number; z: number } | null;
   /** it rolled into the cup */
   holed: boolean;
+  /** it ended on ground too steep to stand on (STEEP_REST): the ball is unplayable, whatever it lies on */
+  steep: boolean;
   /** the first wall, boulder or post it hit (relative to the origin), if it did */
   prop?: { x: number; z: number; kind: Solid["kind"] };
 };
@@ -192,6 +205,7 @@ export function simulate(inp: ShotIn): Shot {
   let t = 0;
   let apex = 0, apexT = 0, landT = 0, carry = 0, curveY = 0;
   let rolling = false;
+  let scraping = false;
   let holed = false;
   let tree: Shot["tree"] = null;
   let prop: Shot["prop"];
@@ -284,9 +298,10 @@ export function simulate(inp: ShotIn): Shot {
       if (solids) meet(true);
       const floor = gr ? gy(x, z) : 0;
       // the ground's normal (straight up on the flat)
-      let nx = 0, ny = 1, nz = 0;
+      let nx = 0, ny = 1, nz = 0, msl = 0;
       if (gr && y <= floor) {
         const [sx, sz] = gr.slope(x + ox, z + oz);
+        msl = Math.hypot(sx, sz);
         const l = Math.hypot(sx, 1, sz);
         nx = -sx / l;
         ny = 1 / l;
@@ -298,46 +313,64 @@ export function simulate(inp: ShotIn): Shot {
         const P = SURF[surf];
         // into the ground and along it
         const vn = vx * nx + vy * ny + vz * nz;
-        const tx = vx - vn * nx, ty = vy - vn * ny, tz = vz - vn * nz;
-        const vh = Math.hypot(tx, ty, tz);
-        const vin = -vn;
-        if (!bounces.length) {
-          landT = t;
-          carry = Math.hypot(x, z) / YD;
-          curveY = (x * z0 - z * x0) / YD;
-        }
-        bounces.push({ t, x, z, vy: vin, surface: surf });
-        if (surf === "water") {
-          // a splash: the ball is gone
-          vx = 0;
-          vz = 0;
-          t += DT;
-          steps++;
-          break;
-        }
-        // the tangential slip: sliding forward plus the backspin at the contact point
-        const s = vh + R * wb;
-        const full = ((1 + P.et) * Math.abs(s)) / 3.5; // impulse that leaves a clean roll (with tangential give)
-        const grip = P.mu * (1 + P.e) * vin;
-        const dv = Math.min(full, grip) * Math.sign(s);
-        const nvh = vh - dv;
-        const k = vh > 1e-6 ? (nvh / vh) * (nvh > 0 ? P.keep : 1) : 0;
-        wb -= (2.5 * dv) / R;
-        // sidespin skids off, taking some sideways speed with it
-        ws *= 0.3;
-        const up = vin * P.e;
-        if (!gr) {
-          vx *= k;
-          vz *= k;
-          vy = up;
+        if (msl > STEEP_FALL && surf !== "water") {
+          // a face: the ball scrapes down it, losing the part of its speed that goes into the rock and a little along it
+          if (!bounces.length) {
+            landT = t;
+            carry = Math.hypot(x, z) / YD;
+            curveY = (x * z0 - z * x0) / YD;
+          }
+          if (!scraping) bounces.push({ t, x, z, vy: -vn, surface: surf });
+          scraping = true;
+          const keep = Math.exp(-SCRAPE * DT);
+          vx = (vx - vn * nx) * keep;
+          vy = (vy - vn * ny) * keep;
+          vz = (vz - vn * nz) * keep;
+          wb *= 0.97;
+          ws = 0;
         } else {
-          vx = tx * k + nx * up;
-          vy = ty * k + ny * up;
-          vz = tz * k + nz * up;
-        }
-        if (up < 1.1 || DEAD.has(surf)) {
-          vy = 0;
-          rolling = true;
+          scraping = false;
+          const tx = vx - vn * nx, ty = vy - vn * ny, tz = vz - vn * nz;
+          const vh = Math.hypot(tx, ty, tz);
+          const vin = -vn;
+          if (!bounces.length) {
+            landT = t;
+            carry = Math.hypot(x, z) / YD;
+            curveY = (x * z0 - z * x0) / YD;
+          }
+          bounces.push({ t, x, z, vy: vin, surface: surf });
+          if (surf === "water") {
+            // a splash: the ball is gone
+            vx = 0;
+            vz = 0;
+            t += DT;
+            steps++;
+            break;
+          }
+          // the tangential slip: sliding forward plus the backspin at the contact point
+          const s = vh + R * wb;
+          const full = ((1 + P.et) * Math.abs(s)) / 3.5; // impulse that leaves a clean roll (with tangential give)
+          const grip = P.mu * (1 + P.e) * vin;
+          const dv = Math.min(full, grip) * Math.sign(s);
+          const nvh = vh - dv;
+          const k = vh > 1e-6 ? (nvh / vh) * (nvh > 0 ? P.keep : 1) : 0;
+          wb -= (2.5 * dv) / R;
+          // sidespin skids off, taking some sideways speed with it
+          ws *= 0.3;
+          const up = vin * P.e;
+          if (!gr) {
+            vx *= k;
+            vz *= k;
+            vy = up;
+          } else {
+            vx = tx * k + nx * up;
+            vy = ty * k + ny * up;
+            vz = tz * k + nz * up;
+          }
+          if (up < 1.1 || DEAD.has(surf)) {
+            vy = 0;
+            rolling = true;
+          }
         }
       }
     } else {
@@ -351,47 +384,60 @@ export function simulate(inp: ShotIn): Shot {
         steps++;
         break;
       }
-      const dec = SURF[surf].roll;
-      // downhill pulls a rolling ball on (5/7 of g along the slope, for a ball that rolls without slipping)
-      let ax = 0, az = 0;
+      let dec = SURF[surf].roll;
+      let steepNow = false;
       if (gr) {
-        const [sx, sz] = gr.slope(x + ox, z + oz);
-        ax = -ROLL_G * sx;
-        az = -ROLL_G * sz;
-        vx += ax * DT;
-        vz += az * DT;
+        const [fx0, fz0] = gr.slope(x + ox, z + oz);
+        const m = Math.hypot(fx0, fz0);
+        if (m > STEEP_FALL) {
+          // a face: the ball is off the ground and falling (its speed along the face goes into the fall, less what the scree takes)
+          rolling = false;
+          steepNow = true;
+          vy = fx0 * vx + fz0 * vz;
+        } else if (m > STEEP_SLIDE) dec *= 0.1;
       }
-      const vh = Math.hypot(vx, vz);
-      const d = Math.min(vh, dec * DT);
-      if (vh > 1e-6) {
-        vx -= (vx / vh) * d;
-        vz -= (vz / vh) * d;
+      if (!steepNow) {
+        // downhill pulls a rolling ball on (5/7 of g along the slope, for a ball that rolls without slipping)
+        let ax = 0, az = 0;
+        if (gr) {
+          const [sx, sz] = gr.slope(x + ox, z + oz);
+          ax = -ROLL_G * sx;
+          az = -ROLL_G * sz;
+          vx += ax * DT;
+          vz += az * DT;
+        }
+        const vh = Math.hypot(vx, vz);
+        const d = Math.min(vh, dec * DT);
+        if (vh > 1e-6) {
+          vx -= (vx / vh) * d;
+          vz -= (vz / vh) * d;
+        }
+        x += vx * DT;
+        z += vz * DT;
+        y = gy(x, z);
+        if (solids) meet(false);
+        if (inp.cup && Math.hypot(x + ox - inp.cup[0], z + oz - inp.cup[1]) < HOLE_R && Math.hypot(vx, vz) < HOLE_V) {
+          // in the hole
+          holed = true;
+          x = inp.cup[0] - ox;
+          z = inp.cup[1] - oz;
+          vx = 0;
+          vz = 0;
+          t += DT;
+          steps++;
+          break;
+        }
+        // it stops when it is slow and the slope cannot start it again
+        if (vh - d < 0.04 && Math.hypot(ax, az) < dec) {
+          vx = 0;
+          vz = 0;
+          t += DT;
+          steps++;
+          if (steps % 4 === 0) pts.push(t, x, y, z);
+          break;
+        }
       }
-      x += vx * DT;
-      z += vz * DT;
-      y = gy(x, z);
-      if (solids) meet(false);
-      if (inp.cup && Math.hypot(x + ox - inp.cup[0], z + oz - inp.cup[1]) < HOLE_R && Math.hypot(vx, vz) < HOLE_V) {
-        // in the hole
-        holed = true;
-        x = inp.cup[0] - ox;
-        z = inp.cup[1] - oz;
-        vx = 0;
-        vz = 0;
-        t += DT;
-        steps++;
-        break;
       }
-      // it stops when it is slow and the slope cannot start it again
-      if (vh - d < 0.04 && Math.hypot(ax, az) < dec) {
-        vx = 0;
-        vz = 0;
-        t += DT;
-        steps++;
-        if (steps % 4 === 0) pts.push(t, x, y, z);
-        break;
-      }
-    }
     t += DT;
     steps++;
     if (steps % 4 === 0) pts.push(t, x, gr ? Math.max(gy(x, z), y) : Math.max(0, y), z);
@@ -405,6 +451,16 @@ export function simulate(inp: ShotIn): Shot {
   const aimX = Math.sin(inp.yaw), aimZ = Math.cos(inp.yaw);
   const side = (x * aimZ - z * aimX) / YD;
   const surface = surfAt(x, z);
+  // at rest on ground too steep to stand on: the ball and the ring of ground round it
+  let steep = false;
+  if (gr && surface !== "water" && !holed) {
+    const slopeAt = (px: number, pz: number) => {
+      const [sx, sz] = gr.slope(px + ox, pz + oz);
+      return Math.hypot(sx, sz);
+    };
+    steep = slopeAt(x, z) > STEEP_REST;
+    for (let i = 0; i < 8 && !steep; i++) steep = slopeAt(x + Math.cos(i * 0.7854) * STEEP_RING, z + Math.sin(i * 0.7854) * STEEP_RING) > STEEP_REST;
+  }
   let drop: Shot["drop"] = null;
   if (surface === "water") {
     // back along the flight to the last point that was not over water
@@ -439,6 +495,7 @@ export function simulate(inp: ShotIn): Shot {
     drop,
     tree,
     holed,
+    steep,
     ...(prop ? { prop } : {}),
   };
 }

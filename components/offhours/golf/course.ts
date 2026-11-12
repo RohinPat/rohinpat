@@ -2,7 +2,7 @@ import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
 import type { Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
-import type { Feature } from "./features";
+import { compileFeatures, type Feature } from "./features";
 import type { Ground } from "./terrain";
 import { RANGE_WORLD, TARGETS, YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
@@ -46,7 +46,12 @@ export type Blob = {
 /** a creek: water along a path (yd), `w` yd wide; the path is smoothed into a meander */
 export type Creek = { path: [number, number][]; w: number; /** width (yd) at each path point (eased between them), so the carry varies along the creek */ ws?: number[] };
 /** a lake: water inside a closed shore (yd, the points are smoothed into a curve), lying level in ground at `level` m (the ground at its shore; else the ground at its middle), its surface a lip under that */
-export type Lake = { shore: [number, number][]; level?: number };
+export type Lake = {
+  shore: [number, number][];
+  level?: number;
+  /** how deep the bed is dug under the ground at the shore, m (default 1.1). A deep tarn: 2 to 4. The waterline sits on the shore when `level` is the ground there, plus 0.22, less 0.19 x depth */
+  depth?: number;
+};
 export type Water = Blob | Creek | Lake;
 const isCreek = (w: Water): w is Creek => "path" in w;
 const isLake = (w: Water): w is Lake => "shore" in w;
@@ -145,10 +150,16 @@ export type HoleDef = {
    * which a field replaces where it lies. The 3D ground paints them; wave 2 holes author their own.
    */
   areas?: Area[];
+  /**
+   * Drop zones, [x, z] in yd: where a ball is dropped when it is in water, in the woods or unplayable on a cliff (flight.ts
+   * `steep`), for a stroke, instead of back along its line or beside where it stopped. The one nearest where the ball
+   * went in is used. Put them on dry, flat ground in play, short of the hazard; none: the ordinary drops (lie.ts).
+   */
+  drops?: [number, number][];
 };
 
-/** the pond on hole 2, which its boulders and stakes sit around */
-const POND_2 = { x: -17, z: 108, rx: 11, rz: 9, rot: 0.3, lobe: 4.5 };
+/** hole 2's rock knoll: the brink of the cliff round the tee, walked clockwise on the plan so the drop is outside (yd) */
+const KNOLL_2: [number, number][] = [[-0.6, 19.5], [7.9, 19.8], [16.7, 16.1], [22.8, 6.5], [26, 3.4], [24.2, -4.6], [23.9, -11.9], [22.4, -17.9], [13.1, -21.8], [8.2, -27.3], [1, -24.2], [-6.4, -23.5], [-14, -20.8], [-25.3, -17.4], [-24.1, -10.9], [-29.5, -7.7], [-28.4, 3.2], [-23, 8.6], [-16.5, 16.4], [-10.2, 19.3]];
 
 export const HOLE_DEFS: HoleDef[] = [
   {
@@ -172,33 +183,55 @@ export const HOLE_DEFS: HoleDef[] = [
     areas: [{ kind: "fescue", poly: [[28, 140], [30, 185], [31.5, 230], [31, 275], [38, 275], [39, 230], [36, 185], [35.5, 140]] }],
   },
   {
+    // off a rock ledge 30 m over a mountain tarn, 150 yd to a green on a peninsula under the falls. All carry: the tee is a
+    // knoll with a cliff all round it (a face of 30 m in 3 yd), the tarn fills the valley floor, and the green is a tongue of
+    // land out into it. Short, left and long-left are the tarn; the safe line is the bench on the right, 100 yd out, with
+    // a pitch to the green. A ball in the tarn, or one that goes off the ledge and lands on the rock, is dropped on the bench.
     n: 2,
     name: "Short Straw",
     par: 3,
-    yards: 135,
-    line: [[0, 0], [0, 137]],
-    half: [10, 17],
+    yards: 150,
+    line: [[0, 0], [0, 152]],
+    half: [10, 30],
     rough: 12,
-    pin: [-3, 135],
-    green: { c: [0, 137], seed: 4202, severity: 0.75 },
-    bunkers: [{ x: 17, z: 134, rx: 6, rz: 8 }],
-    water: [POND_2],
-    trees: { seed: 23, edge: 6, spacing: 6 },
+    pin: [-3, 150],
+    green: { c: [0, 152], seed: 4202, severity: 0.75 },
+    bunkers: [{ x: 31, z: 152, rx: 5, rz: 6.5, rot: 0.2 }],
+    water: [
+      {
+        shore: [[-46, 40], [-12, 35], [14, 40], [17, 62], [15, 92], [18, 114], [21, 125], [14, 129], [0, 130], [-14, 130], [-21, 138], [-22, 158], [-21, 172], [-30, 178], [-48, 172], [-52, 120], [-50, 75]],
+        // a deep tarn (4 m under its waterline), its surface on the shore
+        level: -30.3,
+        depth: 2.6,
+      },
+    ],
+    trees: {
+      seed: 23,
+      edge: 6,
+      spacing: 6,
+      // the valley is open: a stand of pines at its far sides and none between the ledge and the falls
+      clear: [[[-62, -34], [62, -34], [62, 200], [-62, 200]]],
+      sides: [0.3, 0.3],
+      behind: 0,
+    },
     wind: { speed: 2, dir: Math.PI / 2 },
-    landing: [-3, 135],
-    // a long way down to the green: it plays shorter than it reads. The drop is the plan's 13.5 m, in a short slope
-    // (a small `sigma` keeps the lip of the tee and the foot of the drop)
-    ground: { rise: [[0, 0], [24, 0], [55, -8], [95, -13], [137, -13.5]], swell: 0.3, sigma: 9 },
-    // granite in the rough behind and beside the pond (water3d stakes its edge)
+    landing: [-3, 150],
+    // the ledge is level, the valley floor 30 m under it (the cliff below does that), and the green's tongue stands
+    // most of a metre over the tarn
+    ground: { rise: [[0, 0], [118, 0], [146, 0.8], [152, 0.8]], swell: 0.15, sigma: 9, teeFlat: 9, teeEase: 4, greenEase: 4, cell: 0.75, baseY: 52 },
+    features: [
+      { k: "cliff", path: KNOLL_2, closed: true, drop: 30, run: 3, talus: 10, scree: 0.1, ledges: 6, seed: 7 },
+    ],
+    // drop zone: on the bench, a short pitch to the green
+    drops: [[28, 137]],
     props: [
-      { kind: "boulder", at: [-30.5, 112], size: 2.1, seed: 3 },
-      { kind: "boulder", at: [-26, 122], size: 1.5, seed: 5 },
-      { kind: "boulder", at: [-24.5, 96.5], size: 1.2, seed: 8 },
-      { kind: "boulder", at: [-11.5, 121.5], size: 0.9, seed: 12 },
-      { kind: "rocks", at: [-27.5, 118], r: 3, n: 9, seed: 2 },
-      { kind: "rocks", at: [-29, 104], r: 2.5, n: 7, seed: 6 },
-      { kind: "tuft", at: [-28, 120], r: 5, n: 24, seed: 1 },
-      { kind: "reeds", at: [-9, 108], r: 4, n: 30, seed: 4 },
+      { kind: "boulder", at: [-14, 34], size: 2.1, seed: 3 },
+      { kind: "boulder", at: [15, 33], size: 1.6, seed: 5 },
+      { kind: "rocks", at: [4, 33.5], r: 3, n: 9, seed: 2 },
+      { kind: "rocks", at: [-23, 26], r: 3, n: 8, seed: 11 },
+      { kind: "rocks", at: [-30, 176], r: 3, n: 8, seed: 6 },
+      { kind: "reeds", at: [17.5, 100], r: 4, n: 30, seed: 4 },
+      { kind: "reeds", at: [-17.5, 165], r: 4, n: 22, seed: 9 },
     ],
   },
   {
@@ -577,6 +610,8 @@ export type BuiltHole = {
   green: Hole;
   toGreen: (x: number, z: number) => [number, number];
   fromGreen: (gx: number, gy: number) => [number, number];
+  /** the drop zones in metres (HoleDef.drops), empty without any */
+  drops: [number, number][];
   /** pin and the aim for the tee shot, metres */
   pin: [number, number];
   landing: [number, number];
@@ -653,9 +688,12 @@ export function buildHole(def: HoleDef): BuiltHole {
     return null;
   };
 
+  // a cliff's rock face is no ground to play from: a ball that stops on it is "out" (and, being steep, unplayable: flight.ts)
+  const cliffs = (def.features ?? []).some((f) => f.k === "cliff") ? compileFeatures(def.features, def.bunkers) : null;
   const surfaceAt = (x: number, z: number): Surface => {
     for (const b of def.water) if (waterHit(b, x, z)) return "water";
     if (areas.length && areaAt(x, z, ["oob"])) return "oob";
+    if (cliffs && cliffs.rock(x, z)) return "out";
     if (def.targets)
       for (const t of TARGETS) {
         const d = Math.hypot(x - t.gx, z - t.gz);
@@ -843,6 +881,16 @@ export function buildHole(def: HoleDef): BuiltHole {
       return Math.hypot(x + (dx / l) * u - b.x, z + (dz / l) * u - b.z) < b.r + 2;
     });
   };
+  const dropsM = (def.drops ?? []).map(([x, z]) => [x * YD, z * YD] as [number, number]);
+  /** the drop zone nearest a point, or null */
+  const dropNear = (x: number, z: number): [number, number] | null => {
+    let best: [number, number] | null = null, bd = Infinity;
+    for (const q of dropsM) {
+      const d = Math.hypot(q[0] - x, q[1] - z);
+      if (d < bd) [best, bd] = [q, d];
+    }
+    return best;
+  };
   const edgeDrop = (x: number, z: number): [number, number] => {
     // walk from the ball toward the line until the ground is in play, then a little further in
     let best: [number, number] = [0, 0], bd = Infinity;
@@ -864,7 +912,9 @@ export function buildHole(def: HoleDef): BuiltHole {
         return [x + (dx / l) * q, z + (dz / l) * q];
       }
     }
-    return best;
+    // (no ground in play on the way to the line: the nearest drop zone, if the hole has one)
+    const zone = dropNear(x, z);
+    return zone ?? best;
   };
 
   const edge = (k: number): [number, number][] => {
@@ -894,6 +944,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     green,
     toGreen,
     fromGreen,
+    drops: dropsM,
     pin,
     landing: [def.landing[0] * YD, def.landing[1] * YD],
     toPin: (x, z) => Math.hypot(pin[0] - x, pin[1] - z),

@@ -177,7 +177,7 @@ export const swingLen = (h: number) => clamp(h * 0.3, 110, 230);
 const LIE_WORDS: Partial<Record<Surface, string>> = { fairway: "in the fairway", rough: "in the rough", bunker: "in the bunker", fringe: "on the fringe", green: "on the green", fescue: "in the long fescue", waste: "in the waste area" };
 const LIE_CAPS: Partial<Record<Surface, string>> = { fairway: "FAIRWAY", rough: "ROUGH", bunker: "BUNKER", fringe: "FRINGE", green: "GREEN", fescue: "FESCUE", waste: "WASTE AREA" };
 /** the HUD's line for a penalty drop */
-const DROP_CAPS: Record<"water" | "out" | "gorse" | "oob", string> = { water: "WATER · +1", out: "TREES · +1", gorse: "IN THE GORSE · +1", oob: "OUT OF BOUNDS · +1" };
+const DROP_CAPS: Record<"water" | "out" | "gorse" | "oob" | "steep", string> = { water: "WATER · +1", out: "TREES · +1", gorse: "IN THE GORSE · +1", oob: "OUT OF BOUNDS · +1", steep: "UNPLAYABLE · +1" };
 /** a lie the driver cannot be played from (it is too thick round the club) */
 const NO_DRIVER = new Set<Surface>(["rough", "fescue"]);
 
@@ -1014,7 +1014,7 @@ export class CourseGame {
     const club = CLUBS[this.club];
     const e = at(sh, sh.restT);
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
-    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin);
+    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin, this.hole.drops, (x, z) => Math.hypot(...this.terrain.slope(x, z)) < 0.3);
     const def = this.hole.def;
     const fromYd = this.hole.toPin(sh.ox, sh.oz) / YD;
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);

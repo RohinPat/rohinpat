@@ -65,7 +65,8 @@ describe("modes", () => {
       const r = playRound(BOTS.skilled, s.seed, { game: { holes: s.defs } });
       expect(r.finished, day).toBe(true);
       expect(r.pickedUp, day).toBe(0);
-      expect(r.total - r.par, day).toBeLessThan(10);
+      // (hole 2 is a 150 yd carry over a tarn: one bad day costs a stroke more than it did)
+      expect(r.total - r.par, day).toBeLessThan(11);
     }
   });
 });

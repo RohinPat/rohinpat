@@ -10,6 +10,7 @@ import { puttPowerFor } from "@/components/offhours/golf/green";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 import { BOTS, Player, mean, playRound } from "./golf-bots";
+import { OLD_H2 } from "./golf-old-h2";
 
 // these play real shots and rounds, which run many times slower under coverage on CI
 vi.setConfig({ testTimeout: 60_000 });
@@ -173,10 +174,10 @@ describe("a hole, from the tee card", () => {
 
 describe("water, the woods, pick-up", () => {
   it("water: one stroke, the ball dropped on dry ground, and it says so", () => {
-    const g = new CourseGame({ seed: 5, holes: [HOLE_DEFS[1]] });
+    const g = new CourseGame({ seed: 5, holes: [OLD_H2] });
     g.key({ key: " " }, true);
     g.wind = [0, 0];
-    const d = HOLE_DEFS[1].water[0] as Blob;
+    const d = OLD_H2.water[0] as Blob;
     const yd = Math.hypot(d.x, d.z);
     g.setAim(Math.atan2(d.x, d.z));
     g.setClub(3);

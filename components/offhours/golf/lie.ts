@@ -74,9 +74,10 @@ export const LIE_ORDER: Surface[] = ["fairway", "fringe", "rough", "waste", "fes
 
 /**
  * A penalty drop. `why`: "water", "out" (the woods), "gorse" (unplayable: dropped beside it, no nearer the hole) or "oob"
- * (out of bounds: stroke and distance, so the ball goes back to where the shot was played from).
+ * (out of bounds: stroke and distance, so the ball goes back to where the shot was played from) or "steep" (on ground too
+ * steep to stand on, a cliff's face or its foot: unplayable, a drop like gorse).
  */
-export type Drop = { x: number; z: number; why: "water" | "out" | "gorse" | "oob"; /** strokes added */ penalty: number; say: string };
+export type Drop = { x: number; z: number; why: "water" | "out" | "gorse" | "oob" | "steep"; /** strokes added */ penalty: number; say: string };
 
 /** a ball dropped out of gorse is at least this far (m) from any other gorse */
 export const GORSE_CLEAR = 1.5;
@@ -138,9 +139,25 @@ export const DROP_BACK_MAX = 23;
  * the woods, with nothing playable on the line until near the tee), it is dropped beside where it went in, toward the
  * middle of the hole, as a ball in the woods is.
  */
-export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: number) => [number, number], surfaceAt?: (x: number, z: number) => Surface, pin?: [number, number]): Drop | null {
+export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: number) => [number, number], surfaceAt?: (x: number, z: number) => Surface, pin?: [number, number], zones: [number, number][] = [], flat?: (x: number, z: number) => boolean): Drop | null {
   const n = shot.n;
   const ex = shot.ox + shot.pts[(n - 1) * 4 + 1], ez = shot.oz + shot.pts[(n - 1) * 4 + 3];
+  // unplayable on a cliff: a drop zone if the hole has one, else the nearest flat open ground
+  if (shot.steep && ground !== "water" && ground !== "oob") {
+    const z = nearestZone(zones, ex, ez);
+    const [x, y] = z ?? (surfaceAt && flat ? flatDrop(surfaceAt, flat, ex, ez) : null) ?? edgeDrop(ex, ez);
+    return { x, z: y, why: "steep", penalty: 1, say: "Unplayable on the rock. One stroke added. Dropping." };
+  }
+  if (zones.length && (ground === "water" || ground === "out" || ground === "gorse")) {
+    // (water: where the ball crossed in, else where it came to rest)
+    let cx = ex, cz = ez;
+    if (ground === "water") {
+      const d = shot.drop ?? { x: 0, z: 0 };
+      [cx, cz] = [shot.ox + d.x, shot.oz + d.z];
+    }
+    const [x, y] = nearestZone(zones, cx, cz)!;
+    return { x, z: y, why: ground, penalty: 1, say: `${ground === "water" ? "Water" : ground === "out" ? "In the trees" : "In the gorse. Unplayable"}. One stroke added. Dropping at the drop zone.` };
+  }
   if (ground === "water") {
     const d = shot.drop ?? { x: 0, z: 0 };
     let best = { x: shot.ox + d.x, z: shot.oz + d.z };
@@ -193,6 +210,29 @@ function besideWater(x: number, z: number, edgeDrop: (x: number, z: number) => [
     const px = x + (dx / l) * d, pz = z + (dz / l) * d;
     const sf = surfaceAt(px, pz);
     if ((sf === "fairway" || DRY_ROUGH.has(sf)) && waterWithin(surfaceAt, px, pz, DROP_CLEAR) === null) return { x: px, z: pz };
+  }
+  return null;
+}
+
+/** the drop zone nearest a point, or null without any */
+function nearestZone(zones: [number, number][], x: number, z: number): [number, number] | null {
+  let best: [number, number] | null = null, bd = Infinity;
+  for (const q of zones) {
+    const d = Math.hypot(q[0] - x, q[1] - z);
+    if (d < bd) [best, bd] = [q, d];
+  }
+  return best;
+}
+
+/** the nearest open, flat, dry ground to a point (within 60 m), for a ball that cannot be played where it lies */
+function flatDrop(surfaceAt: (x: number, z: number) => Surface, flat: (x: number, z: number) => boolean, x: number, z: number): [number, number] | null {
+  for (let r = 1; r <= 60; r += 0.5) {
+    const n = Math.max(16, Math.round(r * 8));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      if (OPEN.has(surfaceAt(px, pz)) && flat(px, pz) && waterWithin(surfaceAt, px, pz, DROP_CLEAR) === null) return [px, pz];
+    }
   }
   return null;
 }

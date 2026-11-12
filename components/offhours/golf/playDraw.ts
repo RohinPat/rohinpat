@@ -79,6 +79,16 @@ const HIGH = 44, HIGH_BACK = 16;
 /** the raised camera is zoomed until the green is this tall on screen, px, as far as the width allows (about 52 m across) */
 const GREEN_PX = 72, SPAN_M = 52, GREEN_DEPTH_M = 12.5;
 
+/**
+ * 0..1: how big the drop is from the ball to the shot's target: none under 10 m, all of it from 16 m (hole 2's ledge is 30 m over
+ * its green). A shot over such a drop is not taken from the raised camera, which stands straight over the ledge and looks at the
+ * green as a map: it is taken from the golfer's eye, so the brink, the cliff's lip and the whole drop to the green are in the picture.
+ */
+const dropOf = (g: CourseGame, G: Ground, bx: number, bz: number) => {
+  const [tx, tz] = g.target();
+  return smooth(clamp((G(bx, bz) - G(tx, tz) - 10) / 6, 0, 1));
+};
+
 /** the far bank (m from the ball) of the first water the aim line crosses within 140 yd, or null */
 function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: number): number | null {
   const sf = g.hole.surfaceAt;
@@ -113,12 +123,32 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   let lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
   // water across the line within reach: the eye rises so that it can be seen, and looks at it
   const hz = waterAhead(g, bx, bz, yaw, dm);
-  if (hz !== null) {
+  const drop = dropOf(g, G, bx, bz);
+  if (hz !== null && drop < 1) {
     const look = clamp(hz + 35, 45, Math.max(45, dm));
     lo = { ex: -a[0] * 12 + rt[0] * off, ey: 14, ez: -a[2] * 12 + rt[2] * off, tx: a[0] * look, ty: 0, tz: a[2] * look, F: F0 * 1.1 };
   }
+  // over a big drop: the golfer's eye, a little behind, looking at the target itself
+  if (drop > 0) {
+    // (the eye starts above the golfer's and rises until the line to the target clears the ground in between: the ledge's lip)
+    const ex = -a[0] * 7 + rt[0] * off, ez = -a[2] * 7 + rt[2] * off, tx = a[0] * dm, tz = a[2] * dm;
+    const tyAbs = G(bx + tx, bz + tz) - gb + 1;
+    let ey = 8.5;
+    for (; ey < 18; ey += 0.5) {
+      let clear = true;
+      for (let d = 3; d < dm - 6 && clear; d += 2) {
+        const u = d / Math.hypot(tx - ex, tz - ez), x = bx + ex + (tx - ex) * u, z = bz + ez + (tz - ez) * u;
+        if (G(x, z) - gb + 0.8 > ey + (tyAbs - ey) * u) clear = false;
+      }
+      if (clear) break;
+    }
+    // looking 10 degrees down: the green and the tarn in the middle of the picture and the lip low in it
+    const aim = ey - Math.hypot(tx, tz) * 0.176 - (G(bx + tx, bz + tz) - gb);
+    const ledge = { ex, ey, ez, tx, ty: Math.max(1, aim), tz, F: F0 * 1.1 };
+    lo = { ex: lo.ex + (ledge.ex - lo.ex) * drop, ey: lo.ey + (ledge.ey - lo.ey) * drop, ez: lo.ez + (ledge.ez - lo.ez) * drop, tx: lo.tx + (ledge.tx - lo.tx) * drop, ty: lo.ty + (ledge.ty - lo.ty) * drop, tz: lo.tz + (ledge.tz - lo.tz) * drop, F: lo.F + (ledge.F - lo.F) * drop };
+  }
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
-  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
+  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd) * (1 - drop);
   if (k <= 0) return { dx: bx + lo.ex, dy: gb + lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lookY(G, gb, bx + lo.tx, bz + lo.tz, lo.ty), tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
@@ -147,7 +177,7 @@ function updateCamera(g: CourseGame, dt: number, w: number, h: number, G: Ground
   if (g.phase === "fly" && sh) {
     const [tx0, tz0] = g.target();
     const yd0 = Math.hypot(tx0 - sh.ox, tz0 - sh.oz) / YD;
-    if (liftFor(yd0) > 0.5) {
+    if (liftFor(yd0) * (1 - dropOf(g, G, sh.ox, sh.oz)) > 0.5) {
       // a short shot is watched from the raised camera, which stays where it was
       rig = addressRig(g, sh.ox, sh.oz, yd0, w, h, G);
     } else {

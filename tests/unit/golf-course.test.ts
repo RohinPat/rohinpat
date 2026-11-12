@@ -5,11 +5,13 @@ import { GH, GW, zone } from "@/components/offhours/golf/green";
 import { DROP_BACK_MAX, DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
 import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound, shouldPickUp, toPar } from "@/components/offhours/golf/score";
+import { OLD_H2 } from "./golf-old-h2";
 
 // The course's data, the lie table and the scoring: no screen, no clock.
 
 /** a point on a hazard that is inside it, yd */
-const inside = (w: Water): [number, number] => ("path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? w.shore[0] : [w.x, w.z]);
+const inside = (w: Water): [number, number] =>
+  "path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? [w.shore.reduce((a, p) => a + p[0], 0) / w.shore.length, w.shore.reduce((a, p) => a + p[1], 0) / w.shore.length] : [w.x, w.z];
 /** where along the line (yd) the nearest point to (x, z) is, and how far off it (yd) */
 function along(def: HoleDef, x: number, z: number) {
   const L = def.line;
@@ -35,7 +37,7 @@ function pointAt(def: HoleDef, s: number): [number, number] {
 }
 const MARKERS: Record<number, string[]> = {
   1: ["100", "150", "150", "200", "200"],
-  2: ["100", "100"],
+  2: ["100"],
   3: ["100", "100", "150", "200", "200"],
   4: ["100", "100", "200"],
   5: ["100", "100", "150", "150"],
@@ -69,10 +71,14 @@ describe("course data", () => {
       });
       it("the tee is mown, with no sand or water near it", () => {
         expect(b.surfaceAt(0, 0)).toBe("fairway");
-        for (const blob of def.bunkers) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(60);
-        for (const w of def.water) for (const [x, z] of "path" in w ? w.path : "shore" in w ? w.shore : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(60);
+        // (hole 2's tarn lies at the foot of the cliff the tee stands on, 35 yd out)
+        const clear = def.n === 2 ? 30 : 60;
+        for (const blob of def.bunkers) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(clear);
+        for (const w of def.water) for (const [x, z] of "path" in w ? w.path : "shore" in w ? w.shore : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(clear);
       });
       it("the line from tee to green is fairway all the way, but for a creek across it and the sand round a green (no pond across it)", () => {
+        // (hole 2 is all carry: its line is the ledge, the rock face and the tarn, then the green: see its own test below)
+        if (def.n === 2) return;
         const end = along(def, def.pin[0], def.pin[1]).s - 30;
         let wet = 0;
         for (let d = 0; d < end; d += 2) {
@@ -144,10 +150,10 @@ describe("course data", () => {
     });
   }
 
-  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,015 yd", () => {
+  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,030 yd", () => {
     expect(HOLE_DEFS.map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [1, "Open Door", 4, 340],
-      [2, "Short Straw", 3, 135],
+      [2, "Short Straw", 3, 150],
       [3, "The Elbow", 4, 365],
       [4, "Reed Creek", 5, 470],
       [5, "The Collar", 3, 175],
@@ -164,13 +170,27 @@ describe("course data", () => {
     expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);
     expect(NINE_DEFS.slice(0, 6)).toEqual(HOLE_DEFS);
   });
-  it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {
+  it("hole 2 is all carry: the ledge, a rock face, then the tarn to a green on a peninsula, with sand and a drop zone to the right and a crosswind", () => {
     const d = HOLE_DEFS[1];
-    const pond = d.water[0] as Blob;
-    expect(pond.x).toBeLessThan(0);
-    expect(pond.z).toBeLessThan(d.pin[1]);
-    expect(d.bunkers[0].x).toBeGreaterThan(0);
     const b = buildHole(d);
+    const at = (z: number) => b.surfaceAt(0, z * YD);
+    // from the tee: the ledge, then rock, then scree, then water the whole way to the green's apron
+    expect(at(10)).toBe("fairway");
+    expect(at(21)).toBe("out");
+    let wet = 0;
+    for (let z = 40; z < 135; z += 1) if (at(z) === "water") wet++;
+    expect(wet).toBeGreaterThanOrEqual(88);
+    expect(["fairway", "fringe", "green"]).toContain(at(142));
+    expect(b.surfaceAt(d.pin[0] * YD, d.pin[1] * YD)).toBe("green");
+    // the safe side: a bench of fairway on the right of the tarn, the sand beyond the green, and the drop zone on the bench
+    expect(d.bunkers[0].x).toBeGreaterThan(0);
+    expect(b.drops).toHaveLength(1);
+    const [dx, dz] = b.drops[0];
+    expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
+    expect(waterWithin(b.surfaceAt, dx, dz, DROP_CLEAR)).toBeNull();
+    expect(dz / YD).toBeLessThan(d.pin[1] - 5);
+    expect(dx).toBeGreaterThan(0);
+    expect(["fairway", "rough"]).toContain(b.surfaceAt(24 * YD, 100 * YD));
     expect(Math.abs(b.wind[0])).toBeGreaterThan(Math.abs(b.wind[1]) * 5);
   });
 });
@@ -219,9 +239,10 @@ describe("the lie table", () => {
       expect(d.z).toBeGreaterThan(80);
     });
     it("the drop is on dry ground, fairway or rough, at least 2 m from the water, back along the flight line (or beside where it went in, when the line has nothing close)", () => {
-      const b = buildHole(HOLE_DEFS[1]);
+      // (hole 2 as it was, a short par 3 over a pond: the general rule, away from the new hole's drop zone)
+      const b = buildHole(OLD_H2);
       const sw = (x: number, z: number) => b.surfaceAt(x, z);
-      const d = HOLE_DEFS[1].water[0] as Blob;
+      const d = OLD_H2.water[0] as Blob;
       let seen = 0, beside = 0;
       for (const club of [3, 4]) {
         for (const aimX of [-24, -17, -12]) {

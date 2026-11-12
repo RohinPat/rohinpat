@@ -127,7 +127,7 @@ test("play hole 1 with the keyboard, and the page stays clean on the tee card, i
   // a press moves on to the next hole
   await page.waitForTimeout(600);
   await page.keyboard.press("Space");
-  await expect(live(page)).toHaveText(/^Hole 2, 135 yards, par 3\. /, SLOW);
+  await expect(live(page)).toHaveText(/^Hole 2, 150 yards, par 3\. /, SLOW);
   expect(errors).toEqual([]);
 });
 
