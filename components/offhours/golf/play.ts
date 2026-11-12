@@ -174,8 +174,12 @@ const yards = (n: number) => `${n} ${n === 1 ? "yard" : "yards"}`;
 const smooth = (u: number) => u * u * (3 - 2 * u);
 export const swingLen = (h: number) => clamp(h * 0.3, 110, 230);
 
-const LIE_WORDS: Partial<Record<Surface, string>> = { fairway: "in the fairway", rough: "in the rough", bunker: "in the bunker", fringe: "on the fringe", green: "on the green" };
-const LIE_CAPS: Partial<Record<Surface, string>> = { fairway: "FAIRWAY", rough: "ROUGH", bunker: "BUNKER", fringe: "FRINGE", green: "GREEN" };
+const LIE_WORDS: Partial<Record<Surface, string>> = { fairway: "in the fairway", rough: "in the rough", bunker: "in the bunker", fringe: "on the fringe", green: "on the green", fescue: "in the long fescue", waste: "in the waste area" };
+const LIE_CAPS: Partial<Record<Surface, string>> = { fairway: "FAIRWAY", rough: "ROUGH", bunker: "BUNKER", fringe: "FRINGE", green: "GREEN", fescue: "FESCUE", waste: "WASTE AREA" };
+/** the HUD's line for a penalty drop */
+const DROP_CAPS: Record<"water" | "out" | "gorse" | "oob", string> = { water: "WATER · +1", out: "TREES · +1", gorse: "IN THE GORSE · +1", oob: "OUT OF BOUNDS · +1" };
+/** a lie the driver cannot be played from (it is too thick round the club) */
+const NO_DRIVER = new Set<Surface>(["rough", "fescue"]);
 
 export class CourseGame {
   readonly defs: HoleDef[];
@@ -459,7 +463,7 @@ export class CourseGame {
   /** a pin out of reach: the furthest point down the middle of the fairway that the longest club carries, or null */
   private downTheFairway(): [number, number] | null {
     let reach = 0;
-    for (let c = this.lie === "rough" ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    for (let c = NO_DRIVER.has(this.lie) ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
     const [bx, bz] = this.ball;
     const R = (reach + REACH_ROLL) * YD;
     if (this.hole.toPin(bx, bz) <= R) return null;
@@ -502,7 +506,7 @@ export class CourseGame {
       let sg = suggestCourse(carry, k);
       for (let i = 0; i < 2; i++) sg = suggestCourse(carry * plays.ratio(sg.club, sfOf(sg.power)), k);
       // no driver out of the rough
-      if (sg.club === 0 && this.lie === "rough") sg = { club: 1, power: 1 };
+      if (sg.club === 0 && NO_DRIVER.has(this.lie)) sg = { club: 1, power: 1 };
       return sg;
     };
     let sg = pick(yd);
@@ -577,7 +581,7 @@ export class CourseGame {
     }
     if (near < 0) return null;
     let reach = 0;
-    for (let c = this.lie === "rough" ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
+    for (let c = NO_DRIVER.has(this.lie) ? 1 : 0; c < CLUBS.length; c++) reach = Math.max(reach, fullCarry(c) * this.carryK(c));
     if (reach >= far / YD + LAY_OVER) return null;
     return Math.max(10, near / YD - LAY_SHORT);
   }
@@ -1000,7 +1004,7 @@ export class CourseGame {
     while (this.bounceIdx < sh.bounces.length && this.shotT >= sh.bounces[this.bounceIdx].t) {
       const b = sh.bounces[this.bounceIdx++];
       if (b.surface === "water") this.splash = { x: sh.ox + b.x, z: sh.oz + b.z, t: this.t };
-      if (this.opts.sound) sfx(b.surface === "water" ? "splash" : b.surface === "bunker" ? "sand" : b.surface === "green" || b.surface === "fringe" ? "land" : "thud", Math.min(1, b.vy / 12 + 0.3));
+      if (this.opts.sound) sfx(b.surface === "water" ? "splash" : b.surface === "bunker" || b.surface === "waste" ? "sand" : b.surface === "green" || b.surface === "fringe" ? "land" : "thud", Math.min(1, b.vy / 12 + 0.3));
     }
     if (this.shotT >= sh.restT) this.finishShot();
   }
@@ -1010,7 +1014,7 @@ export class CourseGame {
     const club = CLUBS[this.club];
     const e = at(sh, sh.restT);
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
-    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt);
+    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin);
     const def = this.hole.def;
     const fromYd = this.hole.toPin(sh.ox, sh.oz) / YD;
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);
@@ -1028,7 +1032,7 @@ export class CourseGame {
       this.ball = [drop.x, drop.z];
       this.strokes += drop.penalty;
       this.lie = this.hole.surfaceAt(drop.x, drop.z);
-      this.result = drop.why === "water" ? "WATER · +1" : "TREES · +1";
+      this.result = DROP_CAPS[drop.why];
       msg = `${club.name}: ${Math.round(sh.carry)} yards carry. ${drop.say}`;
     } else if (sh.holed) {
       this.ball = [...this.hole.pin];

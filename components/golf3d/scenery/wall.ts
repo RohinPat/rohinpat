@@ -67,7 +67,7 @@ const c3 = (hex: string): [number, number, number] => {
   return [c.r, c.g, c.b];
 };
 
-type Wall = {
+export type Wall = {
   spine: P[];
   face: 1 | -1;
   /** the foot and the height of the face at a station */
@@ -83,9 +83,10 @@ type Wall = {
   flare?: number;
 };
 
-export function ribbonData(spec: WallSpec, heightAt: (x: number, z: number) => number, tier: Tier, spine: P[]): { positions: Float32Array; colors: Float32Array; tris: number } {
-  const empty = { positions: new Float32Array(0), colors: new Float32Array(0), tris: 0 };
-  if (tier === "soft") return empty;
+export type Station = { x: number; z: number; nx: number; nz: number; f: number; H: number };
+
+/** the stations a ribbon is built on: a position along the spine, the normal toward the face, the foot and the height */
+export function wallStations(spec: WallSpec, heightAt: (x: number, z: number) => number, tier: Tier, spine: P[]): { wall: Wall; st: Station[]; R: number } {
   const step = STEP[tier];
   const wall: Wall = {
     spine,
@@ -104,10 +105,7 @@ export function ribbonData(spec: WallSpec, heightAt: (x: number, z: number) => n
     seed: spec.seed ?? 1,
   };
   const pts = resample(wall.spine, step);
-  const R = wall.rows;
-  const rock = wall.rock.map(c3), cap = c3(wall.cap), footC = c3(wall.footColor);
   const N = pts.length;
-  // stations: position, normal toward the face, foot, height
   const st = pts.map(([x, z], i) => {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N - 1, i + 1)];
     const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
@@ -118,6 +116,24 @@ export function ribbonData(spec: WallSpec, heightAt: (x: number, z: number) => n
     const top = Math.max(f + 4, wall.top(i, x, z, f));
     return { x, z, nx, nz, f, H: top - f };
   });
+  return { wall, st, R: wall.rows };
+}
+
+/** where a row of a station lies, relative to its foot: `out` m toward the face and the height above the foot */
+export function wallRow(wall: Wall, s: Station, i: number, r: number, R: number): [number, number, number] {
+  const t = r / R;
+  const flare = (wall.flare ?? flareOf(s.H)) * (1 - t) * (1 - t);
+  const bench = (r % 2 ? -1.6 : 0) + (hash2(i, r, wall.seed) - 0.5) * 0.06 * s.H;
+  const out = flare + bench - 0.04 * s.H * t;
+  return [s.x + s.nx * out, s.f + s.H * Math.pow(t, 0.9), s.z + s.nz * out];
+}
+
+export function ribbonData(spec: WallSpec, heightAt: (x: number, z: number) => number, tier: Tier, spine: P[]): { positions: Float32Array; colors: Float32Array; tris: number } {
+  const empty = { positions: new Float32Array(0), colors: new Float32Array(0), tris: 0 };
+  if (tier === "soft") return empty;
+  const { wall, st, R } = wallStations(spec, heightAt, tier, spine);
+  const rock = wall.rock.map(c3), cap = c3(wall.cap), footC = c3(wall.footColor);
+  const N = st.length;
   const quads = (N - 1) * (R + 1);
   const positions = new Float32Array(quads * 18), colors = new Float32Array(quads * 18);
   let k = 0;
@@ -126,13 +142,7 @@ export function ribbonData(spec: WallSpec, heightAt: (x: number, z: number) => n
     colors[k * 3] = c[0]; colors[k * 3 + 1] = c[1]; colors[k * 3 + 2] = c[2];
     k++;
   };
-  const rowPos = (i: number, r: number): [number, number, number] => {
-    const s = st[i], t = r / R;
-    const flare = (wall.flare ?? flareOf(s.H)) * (1 - t) * (1 - t);
-    const bench = (r % 2 ? -1.6 : 0) + (hash2(i, r, wall.seed) - 0.5) * 0.06 * s.H;
-    const out = flare + bench - 0.04 * s.H * t;
-    return [s.x + s.nx * out, s.f + s.H * Math.pow(t, 0.9), s.z + s.nz * out];
-  };
+  const rowPos = (i: number, r: number) => wallRow(wall, st[i], i, r, R);
   for (let i = 0; i < N - 1; i++) {
     const mix = noise1((i + 0.5) * 0.5, wall.seed + 7);
     for (let r = 0; r < R; r++) {

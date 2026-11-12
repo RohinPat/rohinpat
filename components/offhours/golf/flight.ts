@@ -11,7 +11,11 @@
 
 import { collide, type Solid } from "./solids";
 
-export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "water" | "out";
+/**
+ * What the ball lies on. "out" is the woods; "oob" is out of bounds (stroke and distance), "gorse" an unplayable bush (a
+ * drop and a stroke), "fescue" long rough, "waste" firm sandy scrub (see lie.ts for what each costs).
+ */
+export type Surface = "green" | "fringe" | "fairway" | "rough" | "bunker" | "water" | "out" | "fescue" | "gorse" | "waste" | "oob";
 
 export type Club = {
   id: string;
@@ -56,7 +60,17 @@ const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; k
   // never used to bounce: water ends the shot where it lands
   water: { e: 0, et: 0, mu: 1, roll: 40, keep: 0 },
   out: { e: 0.05, et: 0, mu: 0.9, roll: 14, keep: 0.1 },
+  // long, wispy grass: grabs the ball more than the rough
+  fescue: { e: 0.1, et: 0, mu: 0.85, roll: 8, keep: 0.35 },
+  // a bush: the ball stops dead in it
+  gorse: { e: 0.04, et: 0, mu: 0.95, roll: 22, keep: 0.05 },
+  // firm sand and scrub: between the fairway and a bunker, it takes a little bounce and rolls out less than the rough
+  waste: { e: 0.14, et: 0, mu: 0.85, roll: 5, keep: 0.3 },
+  // over the stakes: it rolls like the woods (the shot is played again anyway)
+  oob: { e: 0.05, et: 0, mu: 0.9, roll: 14, keep: 0.1 },
 };
+/** surfaces a ball does not bounce off: it plugs, and rolls from there */
+const DEAD: ReadonlySet<Surface> = new Set<Surface>(["bunker", "out", "gorse", "oob"]);
 
 /** how the ball lies changes the strike: multipliers on what the swing gives (see golf/lie.ts) */
 export type Lie = {
@@ -321,7 +335,7 @@ export function simulate(inp: ShotIn): Shot {
           vy = ty * k + ny * up;
           vz = tz * k + nz * up;
         }
-        if (up < 1.1 || surf === "bunker" || surf === "out") {
+        if (up < 1.1 || DEAD.has(surf)) {
           vy = 0;
           rolling = true;
         }
