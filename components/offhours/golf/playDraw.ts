@@ -112,7 +112,8 @@ function aimSight(lo: LoRig, G: Ground, bx: number, bz: number, gb: number, dm: 
   const floor = gb + lo.ey;
   const rise = clamp(eyeFor(G, ex, ez, ax, gA + AIM_UP, az, floor) - floor, 0, PEEK_CAP);
   const drop = gb - gA;
-  const lift = Math.max(rise, clamp((drop - DROP_MIN) * 0.35, 0, 5));
+  // (a drop does not raise the eye: it looks down the slope from where the golfer stands; only a crest does)
+  const lift = rise;
   const wt = Math.max(smooth(clamp(rise / 1.5, 0, 1)), smooth(clamp((drop - DROP_MIN + 2) / 4, 0, 1)));
   if (wt <= 0) return lo;
   const m = (p: number, q: number) => p + (q - p) * wt;
@@ -154,13 +155,17 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   // a crest in the way or a long drop to the aim: the eye rises to see it (not under water's raised eye)
   if (hz === null) lo = aimSight(lo, G, bx, bz, gb, dm, a, back);
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
-  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
+  // (a shot down a long drop is played from a golfer's eye looking down the slope, not from above it; water ahead still lifts)
+  const down = hz === null ? smooth(clamp((gb - G(bx + a[0] * dm, bz + a[2] * dm) - 5) / 7, 0, 1)) : 0;
+  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd) * (1 - down);
   if (k <= 0) return { dx: bx + lo.ex, dy: gb + lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lookY(G, gb, bx + lo.tx, bz + lo.tz, lo.ty), tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
-  const rng = Math.hypot(HIGH, D);
-  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 4400);
-  const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
+  // (no higher than the shot is long: a short pitch is looked at from low, a long approach from up high)
+  const HH = Math.min(HIGH, 8 + 0.4 * dm);
+  const rng = Math.hypot(HH, D);
+  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HH / rng)), (w * D) / SPAN_M), F0, 4400);
+  const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
   const m = (p: number, q: number) => p + (q - p) * k;
   const tx = bx + m(lo.tx, hi.tx), tz = bz + m(lo.tz, hi.tz);
   return { dx: bx + m(lo.ex, hi.ex), dy: gb + m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx, ty: lookY(G, gb, tx, tz, m(lo.ty, hi.ty)), tz, F: m(lo.F, hi.F) };

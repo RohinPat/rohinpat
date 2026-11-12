@@ -215,11 +215,16 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // a rectilinear grid: 2.5 m cells over the hole (coarser on a phone), 25 m cells out to the hills. Cells round a pot, a
   // bank, a ravine or a shaped green are cut finer (`sub` x `sub`), as part of the same mesh
   const cell = tier.cell;
+  // (not on the cheapest tier)
+  const SKIRT = cell >= 6 ? 0 : 100;
   const axis = (a0: number, a1: number, far: number) => {
     const out: number[] = [];
-    for (let v = a0 - far; v < a0; v += 25) out.push(v);
+    // (a skirt of 10 m cells round the hole, so a long slope past it is not banded by the far, 25 m ones)
+    for (let v = a0 - far; v < a0 - SKIRT; v += 25) out.push(v);
+    for (let v = a0 - SKIRT; v < a0; v += 10) out.push(v);
     for (let v = a0; v < a1; v += cell) out.push(v);
-    for (let v = a1; v <= a1 + far; v += 25) out.push(v);
+    for (let v = a1; v < a1 + SKIRT; v += 10) out.push(v);
+    for (let v = a1 + SKIRT; v <= a1 + far; v += 25) out.push(v);
     return out;
   };
   const xs = axis(X0, X1, 900), zs = axis(Z0, Z1, 900);
