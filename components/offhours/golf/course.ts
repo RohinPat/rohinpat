@@ -294,27 +294,65 @@ export const HOLE_DEFS: HoleDef[] = [
     areas: [{ kind: "waste", poly: [[13, 98], [22, 95], [32, 104], [37, 122], [35, 145], [28, 160], [18, 158], [14, 138], [15, 116]] }],
   },
   {
-    // a long dogleg left with water along the inside of the bend and the wind in your face
+    // a cape hole at golden hour: the tee is a dune edge 22 m over the estuary flats, and an arm of the tide cuts across
+    // the line, a short carry on the right (about 145 yd) and a long one on the left (about 245), where it opens into the
+    // estuary. The green is on the far bank, round to the left: the more of the arm a drive carries, the shorter the approach
     n: 6,
     name: "Last Light",
     par: 4,
     yards: 395,
-    line: [[0, 0], [0, 175], [-110, 370.5]],
-    half: [15, 22, 19],
-    rough: 14,
+    line: [[0, 0], [1, 105], [4, 160], [-60, 272], [-110, 370.5]],
+    half: [15, 48, 46, 38, 20],
+    rough: 18,
     pin: [-107, 366.5],
     green: { c: [-109, 369], seed: 4606, severity: 1.0 },
     bunkers: [
-      { x: -19, z: 263, rx: 4.5, rz: 8, rot: 0.515 },
+      { x: -19, z: 296, rx: 4.5, rz: 8, rot: 0.5 },
       { x: -91, z: 355, rx: 5, rz: 4.5 },
     ],
-    water: [{ path: [[-54, 189], [-64, 213], [-88, 238], [-92, 259], [-116, 282], [-119, 306], [-138, 330], [-146, 346]], w: 11, ws: [8, 9, 12, 13, 9, 11, 14, 9] }],
-    trees: { seed: 67, edge: 6, spacing: 6 },
-    copse: [[-47, 128, 18], [-53, 139, 20], [-45, 150, 16], [-58, 154, 19], [-50, 165, 17], [-60, 172, 18], [-52, 180, 20]],
+    // the arm: from the dune's foot on the right, across the line, into the estuary on the left, which runs down the
+    // left of the far bank to the green (its level is the flats': the water lies in them)
+    water: [
+      {
+        shore: [
+          [82, 150], [56, 144], [30, 140], [8, 142], [-14, 160], [-40, 192], [-66, 236], [-92, 258], [-112, 268],
+          [-125, 285], [-136, 316], [-148, 353], [-154, 375], [-159, 400], [-164, 430],
+          [-190, 442], [-210, 420], [-212, 330], [-210, 260], [-205, 218],
+          [-165, 213], [-132, 203], [-104, 190], [-78, 172], [-52, 142], [-26, 116], [0, 98], [28, 91], [56, 92], [82, 96],
+        ],
+        level: -20.6,
+      },
+    ],
+    trees: {
+      seed: 67,
+      edge: 6,
+      spacing: 6,
+      // the left of the far bank and the arm are open to the estuary; the right keeps its dune trees
+      clear: [[[-20, 100], [-300, 100], [-300, 470], [-118, 470], [-110, 372], [-60, 272], [4, 160]]],
+      sides: [0.45, 0.55],
+      behind: 0,
+    },
     wind: { speed: 2.8, dir: 3.4 },
-    landing: [-26, 225],
-    // downhill off the tee; the ground at the bend leans left, toward the water, then rises to the green
-    ground: { rise: [[0, 0], [170, -4], [260, -5], [330, -3], [372, -1]], tilt: [[150, 0], [210, 0.03], [280, 0.02], [340, 0]] },
+    // the safe line: a 3 wood over the arm's narrow end (151 yd of water at 2 degrees left), which leaves a 7 iron
+    landing: [-14, 236],
+    // the long fall: off the dune edge down to the flats, which then ease on down to the green
+    ground: { rise: [[0, 0], [12, 0], [62, -9], [112, -18], [150, -20.4], [250, -20.8], [330, -21.5], [372, -22]], swell: 0.35 },
+    props: [
+      { kind: "bench", at: [-9, -3], yaw: Math.PI / 2 },
+      { kind: "sign", at: [8, 3], yaw: -0.3 },
+      { kind: "reeds", at: [2, 95], r: 5, n: 30, seed: 1 },
+      { kind: "reeds", at: [-26, 112], r: 4, n: 26, seed: 2 },
+      { kind: "reeds", at: [-52, 138], r: 4, n: 26, seed: 3 },
+      { kind: "reeds", at: [24, 146], r: 4, n: 26, seed: 4 },
+      { kind: "reeds", at: [-14, 165], r: 3, n: 22, seed: 5 },
+      { kind: "reeds", at: [-40, 197], r: 3, n: 22, seed: 6 },
+      { kind: "reeds", at: [-118, 281], r: 4, n: 26, seed: 7 },
+    ],
+    // tidal sand: two bars on the far bank, where the arm shoals (a ball that only just carries lands in them: firm, no penalty)
+    areas: [
+      { kind: "waste", poly: [[37, 139], [27, 137], [19, 137], [10, 139], [1, 143], [-7, 150], [-16, 158], [-25, 169], [-35, 181], [-30, 185], [-19, 174], [-7, 166], [0, 158], [7, 152], [14, 151], [19, 147], [26, 146], [35, 146]] },
+      { kind: "waste", poly: [[-71, 238], [-81, 247], [-90, 254], [-99, 259], [-107, 263], [-105, 269], [-95, 267], [-84, 263], [-75, 255], [-67, 242]] },
+    ],
   },
 ];
 
@@ -551,7 +589,8 @@ export const ringSd = (ring: [number, number][], x: number, z: number) => {
 };
 const lakeCache = new WeakMap<Lake, [number, number][]>();
 export const lakeOf = (l: Lake) => { let r = lakeCache.get(l); if (!r) { r = lakeRing(l); lakeCache.set(l, r); } return r; };
-const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? creekSd(polyOf(w), x, z) < 0 : isLake(w) ? ringSd(lakeOf(w), x, z) < 0 : blobHit(w, x, z));
+// (a lake is hit by a point-in-polygon test, not a distance to every edge: surfaceAt asks this for every step of every ball)
+const waterHit = (w: Water, x: number, z: number) => (isCreek(w) ? creekSd(polyOf(w), x, z) < 0 : isLake(w) ? inPoly(lakeOf(w), x, z) : blobHit(w, x, z));
 const creekRing = (c: Creek): [number, number][] => {
   const P = polyOf(c);
   const left: [number, number][] = [], right: [number, number][] = [];

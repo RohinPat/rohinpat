@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
 import { HOLE_DEFS, NINE_DEFS, buildHole, polyOf, type Creek } from "@/components/offhours/golf/course";
 import { MAP_WIDE, fit, mapRect } from "@/components/offhours/golf/map";
+import { terrainOf } from "@/components/offhours/golf/terrain";
 import { CourseGame, NEAR_GREEN, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { carryRing, paint } from "@/components/offhours/golf/playDraw";
 import { YD, project } from "@/components/offhours/golf/scene";
@@ -214,28 +215,82 @@ describe("hole 5, The Collar", () => {
 describe("hole 6, Last Light", () => {
   const d = HOLE_DEFS[5];
   const b = buildHole(d);
-  it("a long dogleg left, with water down the inside of the bend and the wind in your face", () => {
-    expect(d.line[2][0]).toBeLessThan(-80);
-    const wp = (d.water[0] as { path: [number, number][] }).path;
-    // the water is left of the line all the way, and runs the length of the bend
-    for (const [x, z] of wp) expect(x, `z ${z}`).toBeLessThan(buildHole(d).surfaceAt(0, 0) === "fairway" ? -40 : 0);
-    expect(wp[wp.length - 1][1] - wp[0][1]).toBeGreaterThan(120);
+  /** a tee shot at full power, no wind: where it came down, and what that was */
+  const drive = (club: number, deg: number) => {
+    const s = simulate({ club: CLUBS[club], speed: 1, yaw: rad(deg), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, trees: b.blockers, ground: terrainOf(b) });
+    const x = s.pts[(s.n - 1) * 4 + 1], z = s.pts[(s.n - 1) * 4 + 3];
+    return { carry: s.carry, surface: s.surface, left: Math.hypot(b.pin[0] - x, b.pin[1] - z) / YD };
+  };
+  /** the carry (yd) from the tee that clears the arm on a line `deg` degrees from straight down the hole */
+  const carryToClear = (deg: number) => {
+    let far = -1;
+    for (let m = 5; m < 330 * YD; m++) {
+      if (b.surfaceAt(Math.sin(rad(deg)) * m, Math.cos(rad(deg)) * m) === "water") far = m;
+      else if (far > 0 && m - far > 4) break;
+    }
+    return far / YD;
+  };
+  it("a cape hole: a dogleg left, with an arm of the tide across the line and the wind in your face", () => {
+    expect(d.line[d.line.length - 1][0]).toBeLessThan(-80);
+    const arm = d.water[0] as { shore: [number, number][]; level: number };
+    expect(arm.shore.length).toBeGreaterThan(10);
+    // the arm runs from the right of the line, across it, to the left (the estuary): the line crosses it, a long way on the left
+    expect(b.surfaceAt(2 * YD, 120 * YD)).toBe("water");
+    expect(b.surfaceAt(-60 * YD, 215 * YD)).toBe("water");
     expect(b.wind[1]).toBeLessThan(-2);
-    expect(d.copse!.length).toBeGreaterThanOrEqual(5);
-    for (const [x] of d.copse!) expect(x).toBeLessThan(0);
+    // no woods inside the bend: the view to the estuary is open
+    expect(d.copse ?? []).toEqual([]);
+    expect(d.trees.sides![0]).toBeLessThan(0.6);
+    expect(d.trees.behind).toBe(0);
   });
-  it("a drive down the line stays dry; one cut at the water is wet", () => {
-    const tee = (deg: number) => simulate({ club: CLUBS[0], speed: 1, yaw: -rad(deg), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, trees: b.blockers });
-    for (const deg of [8, 12]) expect(tee(deg).surface).toBe("fairway");
-    expect(tee(20).surface).toBe("water");
+  it("the more of the arm a drive carries, the shorter the approach: the carry to clear it grows as the aim goes left, from about 150 yd to about 250", () => {
+    const aims = [-2, -6, -10, -14, -16];
+    const need = aims.map(carryToClear);
+    for (let i = 1; i < need.length; i++) expect(need[i], `${aims[i]} deg`).toBeGreaterThan(need[i - 1] + 8);
+    expect(need[0]).toBeGreaterThan(140);
+    expect(need[0]).toBeLessThan(165);
+    expect(need[4]).toBeGreaterThan(235);
+    expect(need[4]).toBeLessThan(262);
   });
-  it("the default aim is the fairway round the bend, and the tee shot's camera looks down it", () => {
+  it("the safe line is a 3 wood over the narrow end that leaves a mid iron; the brave line is a driver across the corner that leaves a wedge; each club that is a few yards short is wet", () => {
+    const safe = drive(1, -2);
+    expect(["fairway", "rough"]).toContain(safe.surface);
+    expect(safe.left).toBeGreaterThan(135);
+    expect(safe.left).toBeLessThan(165);
+    const brave = drive(0, -14);
+    expect(["fairway", "rough", "waste"]).toContain(brave.surface);
+    expect(brave.left).toBeLessThan(125);
+    expect(brave.left).toBeGreaterThan(80);
+    // bite off more than the club carries: wet
+    expect(drive(1, -18).surface).toBe("water");
+    expect(drive(2, -14).surface).toBe("water");
+    expect(drive(0, -20).surface).toBe("water");
+    // and the safe club on the safe line is dry
+    expect(["fairway", "rough"]).toContain(drive(2, -8).surface);
+  });
+  it("the tee is 22 m over the green, and the arm lies in the flats at the foot of the fall", () => {
+    const T = terrainOf(b);
+    expect(T.y(0, 0) - T.y(b.pin[0], b.pin[1])).toBeGreaterThanOrEqual(21);
+    // the arm's water sits level in the flats, 20 m or more under the tee
+    expect(T.waterY(2 * YD, 120 * YD)).toBeLessThan(-20);
+    expect(T.waterY(-60 * YD, 215 * YD)).toBeLessThan(-20);
+  });
+  it("the default aim is the safe line, and the tee shot's camera looks down it", () => {
     const g = onHole(6);
     expect(g.yawT).toBeCloseTo(Math.atan2(b.landing[0], b.landing[1]), 9);
     expect(g.yawT).toBeLessThan(0);
     expect(["fairway"]).toContain(b.surfaceAt(b.landing[0], b.landing[1]));
-    // the line to it is clear: no woods, no water
-    for (let u = 0; u <= 1; u += 0.02) expect(["fairway", "rough"]).toContain(b.surfaceAt(b.landing[0] * u, b.landing[1] * u));
+    // the line to it is the carry over the arm, nothing else: fairway and rough but for the water, and the suggested club clears it
+    let wet = 0;
+    for (let u = 0; u <= 1; u += 0.01) {
+      const sf = b.surfaceAt(b.landing[0] * u, b.landing[1] * u);
+      if (sf === "water") wet++;
+      else expect(["fairway", "rough", "waste"]).toContain(sf);
+    }
+    expect(wet).toBeGreaterThan(10);
+    const sg = g.suggested();
+    const s = simulate({ club: CLUBS[sg.club], speed: sfOf(sg.power), yaw: g.yawT, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, trees: b.blockers, ground: terrainOf(b) });
+    expect(s.surface).not.toBe("water");
     g.w = 1440;
     g.h = 900;
     paint(fakeCtx(), g, 1440, 900, 1 / 60, ptr);
@@ -715,29 +770,33 @@ describe("found in play", () => {
     look("round card");
     expect(drawn.map(([s]) => s)).toContain("TAP TO PLAY AGAIN");
   });
-  it("a drive into the creek in the woods on hole 6 is dropped beside it, not back near the tee, and is no better off than the trees", () => {
-    const tee = (deg: number) => {
+  it("a drive into the arm on hole 6 costs a stroke and is dropped on the near bank, on the way back to the tee and never behind it", () => {
+    const tee = (deg: number, club = 0) => {
       const g = onHole(6);
-      g.aim(rad(deg));
+      g.aim(rad(deg) - g.yawT);
       g.yaw = g.yawT;
-      g.setClub(0);
+      g.setClub(club);
       g.remoteSwing(PURE);
       expect(run(g, () => g.phase === "rest")).toBe(true);
       return g;
     };
-    const wet = tee(-12);
-    expect(wet.result).toBe("WATER · +1");
-    expect(["fairway", "rough"]).toContain(wet.lie);
-    expect(waterWithin(wet.hole.surfaceAt, wet.ball[0], wet.ball[1], DROP_CLEAR)).toBeNull();
-    // it went in about 230 yd out: the drop is within 40 yd of that, not 50 yd off the tee
-    const s = wet.shot!;
-    const inAt = s.bounces[s.bounces.length - 1];
-    expect(Math.hypot(wet.ball[0] - inAt.x, wet.ball[1] - inAt.z) / YD).toBeLessThan(40);
-    expect(wet.yardsToPin()).toBeLessThan(200);
-    // a little further left is the trees: the water costs about the same, not 200 yd more
-    const dry = tee(-16);
-    expect(dry.result).toBe("TREES · +1");
-    expect(wet.yardsToPin() - dry.yardsToPin()).toBeLessThan(50);
+    for (const [deg, club] of [[-20, 0], [-16, 1], [-12, 2], [-4, 3]] as const) {
+      const wet = tee(deg, club);
+      expect(wet.result, `${deg} deg`).toBe("WATER · +1");
+      expect(wet.strokes).toBe(2);
+      expect(["fairway", "rough"]).toContain(wet.lie);
+      expect(waterWithin(wet.hole.surfaceAt, wet.ball[0], wet.ball[1], DROP_CLEAR)).toBeNull();
+      // it is dropped short of the water, on the tee's side: between the tee and where the ball went in
+      const s = wet.shot!;
+      const inAt = s.bounces[s.bounces.length - 1];
+      expect(wet.ball[1]).toBeGreaterThan(30 * YD);
+      expect(wet.ball[1]).toBeLessThan(inAt.z);
+      // right by the water it crossed: within the 23 m the drop is walked back
+      expect(waterWithin(wet.hole.surfaceAt, wet.ball[0], wet.ball[1], 27)).not.toBeNull();
+      // and from there a laid-up shot to the narrow end is a normal shot, not a carry that cannot be made
+      expect(wet.yardsToPin()).toBeLessThan(395);
+      expect(wet.yardsToPin()).toBeGreaterThan(240);
+    }
   });
   it("a keyboard swing a little off the line still finds the fairway on the first hole", () => {
     // 40 ms either way is two frames: it was the trees, it is the fairway now
