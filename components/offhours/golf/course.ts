@@ -158,8 +158,12 @@ export type HoleDef = {
   drops?: [number, number][];
 };
 
-/** hole 2's rock knoll: the brink of the cliff round the tee, walked clockwise on the plan so the drop is outside (yd) */
-const KNOLL_2: [number, number][] = [[-0.6, 19.5], [7.9, 19.8], [16.7, 16.1], [22.8, 6.5], [26, 3.4], [24.2, -4.6], [23.9, -11.9], [22.4, -17.9], [13.1, -21.8], [8.2, -27.3], [1, -24.2], [-6.4, -23.5], [-14, -20.8], [-25.3, -17.4], [-24.1, -10.9], [-29.5, -7.7], [-28.4, 3.2], [-23, 8.6], [-16.5, 16.4], [-10.2, 19.3]];
+/**
+ * hole 2's escarpment: the brink of the cliff, a pit walked counter-clockwise so the basin (the low side) is inside: along the
+ * front of the tee, then up both sides like the rim of a cirque, closing behind the waterfall wall (yd). Outside it the
+ * ground stays high: the mountainside goes on up behind the tee
+ */
+const RIM_2: [number, number][] = [[-95, 42], [-55, 23], [-22, 17], [0, 16], [22, 17], [55, 23], [95, 42], [118, 75], [126, 120], [122, 170], [105, 205], [0, 208], [-105, 205], [-122, 170], [-126, 120], [-118, 75]];
 
 export const HOLE_DEFS: HoleDef[] = [
   {
@@ -183,55 +187,81 @@ export const HOLE_DEFS: HoleDef[] = [
     areas: [{ kind: "fescue", poly: [[28, 140], [30, 185], [31.5, 230], [31, 275], [38, 275], [39, 230], [36, 185], [35.5, 140]] }],
   },
   {
-    // off a rock ledge 30 m over a mountain tarn, 150 yd to a green on a peninsula under the falls. All carry: the tee is a
-    // knoll with a cliff all round it (a face of 30 m in 3 yd), the tarn fills the valley floor, and the green is a tongue of
-    // land out into it. Short, left and long-left are the tarn; the safe line is the bench on the right, 100 yd out, with
-    // a pitch to the green. A ball in the tarn, or one that goes off the ledge and lands on the rock, is dropped on the bench.
+    // off the brink of an escarpment 30 m over a mountain tarn, 150 yd to a green on a peninsula under the falls. All carry.
+    // The tee is the edge of high ground (the mountainside goes on up behind it); the cliff is a long open wall curving round the
+    // basin like a cirque; the tarn fills the basin, wraps the green on its west, south and east, and takes the fall. Short, left
+    // and long-left are the tarn; the safe line is the bench on the right, 100 yd out, with a pitch to the green. A ball in the tarn
+    // or unplayable on the rock is dropped on the bench. The basin is open heather and scree (a fescue field with the ribbon under
+    // it); the trees stand on the high ground round it
     n: 2,
     name: "Short Straw",
     par: 3,
     yards: 150,
-    line: [[0, 0], [0, 152]],
-    half: [10, 30],
-    rough: 12,
+    line: [[0, 0], [0, 16], [0, 26], [0, 152]],
+    half: [12, 12, 85, 85],
+    rough: 10,
     pin: [-3, 150],
     green: { c: [0, 152], seed: 4202, severity: 0.75 },
-    bunkers: [{ x: 31, z: 152, rx: 5, rz: 6.5, rot: 0.2 }],
+    bunkers: [{ x: 38, z: 163, rx: 5, rz: 6.5, rot: 0.2 }],
     water: [
       {
-        shore: [[-46, 40], [-12, 35], [14, 40], [17, 62], [15, 92], [18, 114], [21, 125], [14, 129], [0, 130], [-14, 130], [-21, 138], [-22, 158], [-21, 172], [-30, 178], [-48, 172], [-52, 120], [-50, 75]],
+        shore: [[-56, 46], [-26, 41], [4, 39], [22, 42], [30, 60], [28, 92], [29, 116], [32, 134], [31, 146], [25, 146], [22, 137], [11, 130], [-12, 130], [-22, 138], [-24, 156], [-23, 174], [-36, 197], [-64, 193], [-84, 156], [-86, 104], [-76, 66]],
         // a deep tarn (4 m under its waterline), its surface on the shore
-        level: -30.3,
+        level: -30.15,
         depth: 2.6,
       },
     ],
     trees: {
       seed: 23,
       edge: 6,
-      spacing: 6,
-      // the valley is open: a stand of pines at its far sides and none between the ledge and the falls
-      clear: [[[-62, -34], [62, -34], [62, 200], [-62, 200]]],
-      sides: [0.3, 0.3],
+      spacing: 7,
+      // none in front of the tee or over the basin; stunted ones on its rim
+      clear: [[[-60, -4], [60, -4], [60, 30], [-60, 30]]],
+      sides: [0.4, 0.4],
       behind: 0,
     },
+    // pines on the high ground behind the tee and along the brink (they are far from every line of play)
+    copse: [[-6, -29, 17], [-6, -19, 13], [-39, -31, 13], [-50, -38, 11], [5, -18, 11], [12, -35, 17], [19, -27, 13], [15, -20, 11], [-55, -42, 13], [12, -22, 15], [-7, -19, 13], [17, -31, 11], [-5, -39, 11], [26, -37, 13], [2, -47, 11], [-12, -19, 17], [-54, -47, 11], [-36, -16, 11], [-4, -15, 17], [-10, -29, 13], [35, -39, 11], [-23, -47, 17], [32, -44, 13], [26, -48, 17], [37, -42, 13], [-7, -42, 13], [-36, -5, 10], [-36, 5, 10], [40, -4, 10], [30, 3, 10]],
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 150],
-    // the ledge is level, the valley floor 30 m under it (the cliff below does that), and the green's tongue stands
-    // most of a metre over the tarn
-    ground: { rise: [[0, 0], [118, 0], [146, 0.8], [152, 0.8]], swell: 0.15, sigma: 9, teeFlat: 9, teeEase: 4, greenEase: 4, cell: 0.75, baseY: 52 },
+    // the ledge is level, the basin floor 30 m under it (the cliff does that), and the green's tongue stands most of a metre
+    // over the tarn
+    ground: { rise: [[0, 0], [130, 0], [148, 0.8], [152, 0.8]], swell: 0.25, sigma: 9, teeFlat: 8, teeEase: 4, greenEase: 4, cell: 0.75, baseY: 52 },
     features: [
-      { k: "cliff", path: KNOLL_2, closed: true, drop: 30, run: 3, talus: 10, scree: 0.1, ledges: 6, seed: 7 },
+      { k: "cliff", path: RIM_2, closed: true, drop: 30, run: 3, talus: 10, scree: 0.1, ledges: 6, seed: 7 },
+      // the mountainside goes on up behind the tee
+      { k: "ridge", path: [[-70, -46], [0, -60], [70, -46]], w: 40, h: 10 },
+      // knolls on the bench and the shore
+      { k: "mound", x: 46, z: 82, r: 13, rz: 9, h: 2.6 },
+      { k: "mound", x: 58, z: 124, r: 12, h: 2.4 },
+      { k: "mound", x: 44, z: 176, r: 11, h: 2 },
     ],
-    // drop zone: on the bench, a short pitch to the green
-    drops: [[28, 137]],
+    // the basin floor round the tarn is heather and fescue, mown only round the green
+    areas: [
+      {
+        kind: "fescue",
+        poly: [[-96, 22], [0, 22], [96, 22], [96, 204], [22, 204], [22, 178], [19, 160], [16, 144], [8, 135], [0, 134], [-8, 135], [-16, 144], [-19, 160], [-22, 178], [-22, 204], [-96, 204]],
+      },
+    ],
+    // drop zone: east of the green's inlet, a pitch of 37 yd across land
+    drops: [[34, 152]],
     props: [
-      { kind: "boulder", at: [-14, 34], size: 2.1, seed: 3 },
-      { kind: "boulder", at: [15, 33], size: 1.6, seed: 5 },
-      { kind: "rocks", at: [4, 33.5], r: 3, n: 9, seed: 2 },
-      { kind: "rocks", at: [-23, 26], r: 3, n: 8, seed: 11 },
-      { kind: "rocks", at: [-30, 176], r: 3, n: 8, seed: 6 },
-      { kind: "reeds", at: [17.5, 100], r: 4, n: 30, seed: 4 },
-      { kind: "reeds", at: [-17.5, 165], r: 4, n: 22, seed: 9 },
+      { kind: "boulder", at: [-14, 33], size: 2.1, seed: 3 },
+      { kind: "boulder", at: [15, 32], size: 1.6, seed: 5 },
+      { kind: "rocks", at: [4, 33], r: 3, n: 9, seed: 2 },
+      { kind: "rocks", at: [-40, 33], r: 3, n: 8, seed: 11 },
+      { kind: "rocks", at: [32, 34], r: 3, n: 8, seed: 12 },
+      { kind: "boulder", at: [31, 74], size: 2.4, seed: 13 },
+      { kind: "rocks", at: [31, 100], r: 3, n: 9, seed: 14 },
+      { kind: "boulder", at: [33, 124], size: 1.8, seed: 15 },
+      { kind: "rocks", at: [-26, 150], r: 3, n: 8, seed: 16 },
+      { kind: "boulder", at: [-30, 182], size: 2.2, seed: 17 },
+      { kind: "rocks", at: [-88, 110], r: 3, n: 8, seed: 18 },
+      { kind: "rocks", at: [-60, 188], r: 3, n: 8, seed: 19 },
+      { kind: "tuft", at: [40, 100], r: 8, n: 30, seed: 1 },
+      { kind: "tuft", at: [-90, 130], r: 6, n: 24, seed: 2 },
+      { kind: "reeds", at: [29, 104], r: 4, n: 26, seed: 4 },
+      { kind: "reeds", at: [-24, 166], r: 4, n: 22, seed: 9 },
     ],
   },
   {

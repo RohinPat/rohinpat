@@ -130,10 +130,10 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   }
   // over a big drop: the golfer's eye, a little behind, looking at the target itself
   if (drop > 0) {
-    // (the eye starts above the golfer's and rises until the line to the target clears the ground in between: the ledge's lip)
-    const ex = -a[0] * 7 + rt[0] * off, ez = -a[2] * 7 + rt[2] * off, tx = a[0] * dm, tz = a[2] * dm;
+    // (the eye is 8 m behind the golfer and rises until the line to the target clears the ground in between: the ledge's lip)
+    const ex = -a[0] * 8 + rt[0] * off, ez = -a[2] * 8 + rt[2] * off, tx = a[0] * dm, tz = a[2] * dm;
     const tyAbs = G(bx + tx, bz + tz) - gb + 1;
-    let ey = 8.5;
+    let ey = 3.5;
     for (; ey < 18; ey += 0.5) {
       let clear = true;
       for (let d = 3; d < dm - 6 && clear; d += 2) {
@@ -142,9 +142,10 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
       }
       if (clear) break;
     }
-    // looking 10 degrees down: the green and the tarn in the middle of the picture and the lip low in it
-    const aim = ey - Math.hypot(tx, tz) * 0.176 - (G(bx + tx, bz + tz) - gb);
-    const ledge = { ex, ey, ez, tx, ty: Math.max(1, aim), tz, F: F0 * 1.1 };
+    // looking 20 degrees down, at the tarn half way over: the golfer, the lip, the tarn and the green (above the middle) in one picture
+    const hx = a[0] * dm * 0.5, hz2 = a[2] * dm * 0.5;
+    const aim = ey - Math.hypot(hx - ex, hz2 - ez) * 0.364 - (G(bx + hx, bz + hz2) - gb);
+    const ledge = { ex, ey, ez, tx: hx, ty: Math.max(1, aim), tz: hz2, F: F0 * 0.95 };
     lo = { ex: lo.ex + (ledge.ex - lo.ex) * drop, ey: lo.ey + (ledge.ey - lo.ey) * drop, ez: lo.ez + (ledge.ez - lo.ez) * drop, tx: lo.tx + (ledge.tx - lo.tx) * drop, ty: lo.ty + (ledge.ty - lo.ty) * drop, tz: lo.tz + (ledge.tz - lo.tz) * drop, F: lo.F + (ledge.F - lo.F) * drop };
   }
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
+import { NINE_DEFS, RANGE_DEF, buildHole, ringSd } from "@/components/offhours/golf/course";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { nearest } from "@/components/golf3d/scenery/geo";
 import { makeHeight } from "@/components/golf3d/scenery/height";
@@ -93,8 +93,9 @@ describe("the waterfall", () => {
       for (let k = 0; k < d.positions.length; k += 3) if (d.marks[k + 2] === 0) top = Math.max(top, d.positions[k + 1]);
       expect(top).toBeCloseTo(st[i].f + st[i].H, 3);
       expect(d.drop).toBeGreaterThan(30);
-      // the pool is clear of the pond (plan: 85 m or more) and sits at the wall's foot
-      for (const ring of hole2.world.water) for (const [x, z] of ring) expect(Math.hypot(x - d.pool.x, z - d.pool.z) - d.pool.r).toBeGreaterThanOrEqual(85);
+      // the fall pours into the tarn (wave 2): its pool is in the tarn's far corner, and the pool is no higher than a metre over it
+      expect(ringSd(hole2.world.water[0], d.pool.x, d.pool.z)).toBeLessThan(0);
+      expect(d.pool.y - terrainOf(hole2).waterY(d.pool.x, d.pool.z)).toBeLessThan(1);
       expect(nearest(wallSpine(hole2, wall), d.pool.x, d.pool.z).d).toBeLessThan(60);
     }
   });
