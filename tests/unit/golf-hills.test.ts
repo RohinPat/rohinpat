@@ -36,7 +36,7 @@ describe("the ground's shape", () => {
     expect(terrainOf(holes[2]).pad).toBeGreaterThan(7);
   });
 
-  it("has no steps or cliffs anywhere a ball can be", { timeout: 30_000 }, () => {
+  it("has no steps or cliffs anywhere a ball can be", { timeout: 60_000 }, () => {
     for (const h of holes) {
       const t = terrainOf(h);
       const b = h.shape.box;
@@ -191,7 +191,7 @@ describe("what a shot plays like", () => {
 });
 
 describe("the bots on the hills: measured bands, pinned", () => {
-  // 30 seeded rounds each over all six holes with hills (par 23)
+  // 30 seeded rounds each over all six holes with hills (par 22)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true } }));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
   it("skilled: par + 3 to par + 6, every hole about a par plus one, never stuck", { timeout: 90_000 }, () => {

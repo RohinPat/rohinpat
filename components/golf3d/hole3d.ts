@@ -4,6 +4,7 @@ import { seeded } from "@/components/offhours/useCanvas";
 import { treeClear, type BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
+import { withDecks } from "@/components/offhours/golf/solids";
 import { buildGreen, buildPin, greenSink } from "./green3d";
 import { buildProps3D } from "./props3d";
 import { prepareScenery, type Skin } from "./scenery";
@@ -448,7 +449,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     group,
     targetFlags,
     heightAt,
-    surfaceY: ground.y,
+    surfaceY: withDecks(ground, hole.def.props).y,
     waterY: ground.waterY,
     flag,
     cloth,

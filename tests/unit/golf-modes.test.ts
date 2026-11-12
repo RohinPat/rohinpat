@@ -65,7 +65,8 @@ describe("modes", () => {
       const r = playRound(BOTS.skilled, s.seed, { game: { holes: s.defs } });
       expect(r.finished, day).toBe(true);
       expect(r.pickedUp, day).toBe(0);
-      expect(r.total - r.par, day).toBeLessThan(10);
+      // (par 35 since hole 4 became a par 4 with two crossings to carry: a skilled bot plays it at about par + 1.6, so the worst of ten days is a stroke or two higher)
+      expect(r.total - r.par, day).toBeLessThan(12);
     }
   });
 });
