@@ -10,6 +10,8 @@ import { makeTint } from "./tint";
 import type { P, SceneryRecord, Skin, Tier } from "./types";
 import { buildWalls } from "./wall";
 import { buildProps } from "./props";
+import { buildMist } from "./mist";
+import { buildWaterfall } from "./waterfall";
 
 export { applySkin } from "./skin";
 export type { Skin, Tier } from "./types";
@@ -78,6 +80,20 @@ export function prepareScenery(hole: BuiltHole, ground: (x: number, z: number) =
         disposables.push({ dispose: pr.dispose });
         stats.tris += pr.tris;
         stats.calls += pr.calls;
+      }
+      const wf = buildWaterfall(hole, rec, heightAt, tier, !!opts.reduce);
+      if (wf) {
+        group.add(wf.group);
+        disposables.push({ dispose: wf.dispose });
+        stats.tris += wf.tris;
+        stats.calls += wf.calls;
+      }
+      const ms = buildMist(hole, rec.mist, heightAt, tier, !!opts.reduce);
+      if (ms) {
+        group.add(ms.mesh);
+        disposables.push({ dispose: ms.dispose });
+        stats.tris += ms.tris;
+        stats.calls++;
       }
       return { group, dispose: () => disposables.forEach((d) => d.dispose()) };
     },

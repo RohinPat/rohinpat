@@ -1,8 +1,11 @@
 import type { SceneryRecord, WallSpec } from "./types";
+import { HOLE2 } from "./hole2";
+import { HOLE4 } from "./hole4";
 import { HOLE5 } from "./hole5";
 import { HOLE6 } from "./hole6";
 import { HOLE7 } from "./hole7";
 import { HOLE8 } from "./hole8";
+import { RANGE } from "./range";
 
 // One record per hole that has a backdrop. A hole without one is drawn exactly as it always was. The nine sit on one
 // stretch of coast (see the plan's map), so what lies beyond one hole is the same country seen from another.
@@ -124,7 +127,7 @@ const HOLE9: SceneryRecord = {
   props: { stacks: { count: 7, seed: 9, sd: [30, 150], height: [24, 46] }, lighthouse: { bearing: -48, distance: 450 } },
 };
 
-const PHASE2: Record<number, SceneryRecord | null> = { 5: HOLE5, 6: HOLE6, 7: HOLE7, 8: HOLE8 };
+const PHASE2: Record<number, SceneryRecord | null> = { 2: HOLE2, 4: HOLE4, 5: HOLE5, 6: HOLE6, 7: HOLE7, 8: HOLE8, 10: RANGE };
 const SCENES: Record<number, SceneryRecord> = { 1: HOLE1, 3: HOLE3, 9: HOLE9 };
 for (const [n, r] of Object.entries(PHASE2)) if (r) SCENES[Number(n)] = r;
 
