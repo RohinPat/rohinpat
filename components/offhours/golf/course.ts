@@ -321,8 +321,10 @@ export const HOLE_DEFS: HoleDef[] = [
 /** the back three, which make the six a nine (the 3D course plays all nine; the dialog's flat course the six) */
 export const BACK_DEFS: HoleDef[] = [
   {
-    // uphill to a ridge at 235 yd: a drive that clears its top runs down the far side and leaves a pitch; one short of it
-    // stops on the climb and leaves a long, uphill second
+    // The hero shot. A long climb to a crest 11.5 m over the tee: the drive is blind, aimed at the striped post on the top.
+    // Over it the ridge opens to the sea and falls 15 m in steps to a green on a shelf on the cliff top, the sea behind
+    // it. A drive that clears the crest runs down the far face and leaves a pitch; one that stops on the climb leaves a
+    // long blind second over the top; past the green is over the cliff
     n: 7,
     name: "The Ridge",
     par: 4,
@@ -338,24 +340,57 @@ export const BACK_DEFS: HoleDef[] = [
       { x: 0, z: 374, rx: 5, rz: 4, rot: -0.4 },
     ],
     water: [],
-    trees: { seed: 71, edge: 6, spacing: 6 },
+    // the sea side is opened from the climb on and behind the green, the left stays wooded but for a gap at the crest
+    trees: {
+      seed: 71,
+      edge: 6,
+      spacing: 6,
+      sides: [0.6, 0.35],
+      behind: 0,
+      clear: [
+        [[34, 150], [200, 150], [200, 520], [-130, 520], [-130, 396], [34, 396]],
+        [[-130, 230], [-34, 230], [-34, 340], [-130, 340]],
+      ],
+    },
     wind: { speed: 2.2, dir: 2.6 },
     landing: [0, 235],
-    ground: { rise: [[0, 0], [120, 4], [225, 9], [245, 9.5], [275, 7], [387, 3]], tilt: [[200, 0], [240, 0.02], [300, 0]] },
-    // a field wall down the right of the climb with a gated gap, and a striped post on the crest to aim by
+    // the plan's profile, held by a small `sigma`: the crest and the far face stay sharp. Tee 22 m above the sea
+    ground: {
+      rise: [[0, 0], [60, 1], [150, 6], [212, 10.5], [236, 11.8], [262, 7.5], [300, 3.5], [345, 0], [387, -1]],
+      tilt: [[200, 0], [240, 0.02], [300, 0]],
+      sigma: 9,
+      greenEase: 8,
+      baseY: 22,
+    },
+    features: [
+      // hollows either side of the spine: a drive that leaves the ridge goes down into them
+      { k: "hollow", x: -46, z: 190, r: 16, rz: 56, d: 2.8 },
+      { k: "hollow", x: 48, z: 215, r: 16, rz: 48, d: 2.8 },
+      // the far side falls in steps, each a face and a tread: the drop reads from above and from the crest
+      { k: "terrace", path: [[-50, 292], [84, 292]], h: -4, n: 2, tread: 20, riser: 14, reach: 150 },
+      // the green on its shelf, and the cliff edge behind it
+      { k: "shelf", x: -14, z: 386, r: 19, rz: 16, h: 1.2, edge: 8 },
+      { k: "face", path: [[-60, 410], [84, 410]], h: -22, w: 8, reach: 120 },
+    ],
+    // a field wall down the right of the climb, over the crest and down the far side, with a gated gap; a striped post on
+    // the crest to aim by
     props: [
-      { kind: "wall", path: [[29, 100], [30, 205], [31, 262], [29, 308]], h: 1.2, gaps: [[95, 103]], seed: 7 },
+      { kind: "wall", path: [[29, 100], [30, 205], [31, 262], [29, 308], [27, 346]], h: 1.2, gaps: [[95, 103]], seed: 7 },
       { kind: "gatepost", at: [30, 199], yaw: 0, gap: 8 * YD },
-      { kind: "post", at: [0, 246], h: 6.5, r: 0.14 },
+      { kind: "post", at: [0, 239], h: 7.5, r: 0.2 },
       { kind: "tuft", at: [31, 150], r: 4, n: 22, seed: 2 },
       { kind: "tuft", at: [31, 240], r: 4, n: 22, seed: 3 },
       { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
       { kind: "sign", at: [6, 4], yaw: -0.3 },
     ],
-    // gorse on the left of the climb and the right of the crest: a ball in it is unplayable
+    // gorse on the left of the climb, the right of the far face and the left of the green: a ball in it is unplayable.
+    // Behind the green the cliff: out of bounds
     areas: [
       { kind: "gorse", poly: [[-28, 160], [-34, 168], [-38, 184], [-34, 202], [-28, 198], [-26, 178]] },
       { kind: "gorse", poly: [[28, 262], [35, 268], [37, 284], [32, 298], [26, 290], [25, 274]] },
+      { kind: "gorse", poly: [[-42, 366], [-34, 362], [-32, 376], [-36, 392], [-44, 386]] },
+      { kind: "fescue", poly: [[34, 150], [78, 150], [78, 405], [34, 405]] },
+      { kind: "oob", poly: [[-70, 407], [90, 407], [90, 440], [-70, 440]], stakes: [[-45, 407], [-30, 407], [-15, 407], [0, 407], [15, 407], [30, 407], [45, 407]] },
     ],
   },
   {

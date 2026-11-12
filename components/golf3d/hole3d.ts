@@ -6,6 +6,7 @@ import { YD } from "@/components/offhours/golf/scene";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { buildGreen, buildPin, greenSink } from "./green3d";
 import { buildProps3D } from "./props3d";
+import { buildGorse } from "./gorse3d";
 import { prepareScenery, type Skin } from "./scenery";
 import { buildWater } from "./water3d";
 import { paintAreas } from "./areas3d";
@@ -381,6 +382,12 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   {
     const pr = buildProps3D(hole, ground, opts.tier ?? "high", disposables);
     if (pr) group.add(pr.group);
+  }
+
+  // ---------------------------------------------------------------- gorse (bushes on the painted ground)
+  {
+    const gs = buildGorse(hole, ground, opts.tier ?? "high", disposables);
+    if (gs) group.add(gs);
   }
 
   // ---------------------------------------------------------------- the backdrop: far mountains, sea, rock
