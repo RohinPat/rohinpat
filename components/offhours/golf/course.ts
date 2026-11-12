@@ -1,5 +1,6 @@
 import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
+import { stakesAround, type Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
 import type { Feature } from "./features";
 import type { Ground } from "./terrain";
@@ -45,6 +46,45 @@ export type Creek = { path: [number, number][]; w: number };
 export type Water = Blob | Creek;
 const isCreek = (w: Water): w is Creek => "path" in w;
 
+/**
+ * A course yard of one kind of ground, an outline in yd (a closed polygon, three points or more). Where it lies:
+ * - "fescue": long wispy rough, a harsher lie than the rough, playable;
+ * - "gorse": a bush, unplayable: a ball that stops in it is dropped beside it, no nearer the hole, for a stroke;
+ * - "waste": firm sandy scrub, plays between the fairway and a bunker, no penalty;
+ * - "oob": out of bounds: a ball that stops in it is played again from where it was struck, for a stroke.
+ * `stakes` (oob): the boundary line in yd, where the white stakes stand and the line is painted.
+ */
+export type AreaKind = "fescue" | "gorse" | "waste" | "oob";
+export type Area = { kind: AreaKind; poly: [number, number][]; stakes?: [number, number][] };
+/** an Area in metres, as buildHole hands it on: its outline, and the points along its boundary line the stakes stand at */
+export type AreaM = { kind: AreaKind; ring: [number, number][]; stakes: [number, number][] };
+/** the stakes stand this far apart along the boundary line, m */
+export const STAKE_GAP = 6;
+/** which kind wins where areas overlap (first in the list wins) */
+const AREA_ORDER: AreaKind[] = ["oob", "gorse", "waste", "fescue"];
+const inPoly = (ring: [number, number][], x: number, z: number) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, zi] = ring[i], [xj, zj] = ring[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+};
+/** points every `gap` m along a path (metres), the first and last included */
+const along = (path: [number, number][], gap: number): [number, number][] => {
+  const out: [number, number][] = [];
+  if (!path.length) return out;
+  out.push(path[0]);
+  let carry = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const [ax, az] = path[i], [bx, bz] = path[i + 1];
+    const len = Math.hypot(bx - ax, bz - az);
+    for (let d = gap - carry; d <= len; d += gap) out.push([ax + ((bx - ax) * d) / len, az + ((bz - az) * d) / len]);
+    carry = (carry + len) % gap;
+  }
+  return out;
+};
+
 export type HoleDef = {
   n: number;
   name: string;
@@ -74,7 +114,19 @@ export type HoleDef = {
   targets?: boolean;
   /** landforms on top of the ground (features.ts): ridges, mounds, bowls, pot bunkers, channels, shelves, faces, terraces */
   features?: Feature[];
+  /** placed props, in yd like the rest of the hole (solids.ts): boulders, walls, posts, stakes, a bridge, reeds. The solid ones stop and turn a ball; components/golf3d/props3d.ts draws them all. */
+  props?: Prop[];
+  /**
+   * Yards of fescue, gorse, waste or out of bounds (see Area). surfaceAt reads them in this order: water, then out of
+   * bounds, then the green and its fringe, then the bunkers (those four are authored objects and always win over a field
+   * they sit in), then gorse, waste, fescue (that order where they overlap), then the fairway, the rough and the woods,
+   * which a field replaces where it lies. The 3D ground paints them; wave 2 holes author their own.
+   */
+  areas?: Area[];
 };
+
+/** the pond on hole 2, which its boulders and stakes sit around */
+const POND_2 = { x: -17, z: 108, rx: 11, rz: 9, rot: 0.3 };
 
 export const HOLE_DEFS: HoleDef[] = [
   {
@@ -94,6 +146,8 @@ export const HOLE_DEFS: HoleDef[] = [
     landing: [0, 252],
     // off a raised tee, down into a wide landing area that leans right, then up a little to the green
     ground: { rise: [[0, 0], [40, -1], [150, -5], [250, -6], [342, -4]], tilt: [[150, -0.02], [260, -0.03], [330, 0]], mounds: [[-30, 180, 9, 1.4], [32, 300, 10, 1.6]] },
+    // a band of long fescue down the outside of the right rough: a drive that leaks right does not just find the rough
+    areas: [{ kind: "fescue", poly: [[28, 140], [30, 185], [31.5, 230], [31, 275], [38, 275], [39, 230], [36, 185], [35.5, 140]] }],
   },
   {
     n: 2,
@@ -106,13 +160,25 @@ export const HOLE_DEFS: HoleDef[] = [
     pin: [-3, 135],
     green: { c: [0, 137], seed: 4202, severity: 0.75 },
     bunkers: [{ x: 17, z: 134, rx: 6, rz: 8 }],
-    water: [{ x: -17, z: 108, rx: 11, rz: 9, rot: 0.3 }],
+    water: [POND_2],
     trees: { seed: 23, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
     // a long way down to the green: it plays shorter than it reads. The drop is the plan's 13.5 m, in a short slope
     // (a small `sigma` keeps the lip of the tee and the foot of the drop)
     ground: { rise: [[0, 0], [24, 0], [55, -8], [95, -13], [137, -13.5]], swell: 0.3, sigma: 9 },
+    // granite in the rough behind and beside the pond, and red stakes down the fairway side of it (a lateral hazard)
+    props: [
+      { kind: "boulder", at: [-30.5, 112], size: 2.1, seed: 3 },
+      { kind: "boulder", at: [-26, 122], size: 1.5, seed: 5 },
+      { kind: "boulder", at: [-24.5, 96.5], size: 1.2, seed: 8 },
+      { kind: "boulder", at: [-11.5, 121.5], size: 0.9, seed: 12 },
+      { kind: "rocks", at: [-27.5, 118], r: 3, n: 9, seed: 2 },
+      { kind: "rocks", at: [-29, 104], r: 2.5, n: 7, seed: 6 },
+      { kind: "tuft", at: [-28, 120], r: 5, n: 24, seed: 1 },
+      { kind: "reeds", at: [-9, 108], r: 4, n: 30, seed: 4 },
+      ...stakesAround(POND_2, -1.1, 1.1, 5, "red"),
+    ],
   },
   {
     // a dogleg right at 205 yd. The inside of the bend is a bunker and a stand of trees: a driver aimed over them gets home,
@@ -161,6 +227,21 @@ export const HOLE_DEFS: HoleDef[] = [
     landing: [0, 255],
     // the fairway runs down to the creek, so a lay-up keeps rolling toward it; then up again to a raised green
     ground: { rise: [[0, 0], [110, 2], [230, 0], [300, -2], [327, -3.5], [370, -1.5], [430, 2], [474, 3.5]], tilt: [[200, 0.02], [300, 0], [420, -0.015]] },
+    // a footbridge over the creek on the right, past the fairway's edge, yellow stakes on both banks, reeds, rocks
+    props: [
+      { kind: "bridge", a: [30, 316], b: [30, 339], w: 2.6 },
+      ...[-24, -10, 12, 22].flatMap((x): Prop[] => [
+        { kind: "stake", at: [x, 318.5], color: "yellow" },
+        { kind: "stake", at: [x, 336.5], color: "yellow" },
+      ]),
+      { kind: "reeds", at: [14, 320.5], r: 4, n: 34, seed: 1 },
+      { kind: "reeds", at: [-34, 321], r: 5, n: 34, seed: 2 },
+      { kind: "reeds", at: [24, 335], r: 4, n: 30, seed: 3 },
+      { kind: "reeds", at: [-4, 335], r: 5, n: 34, seed: 7 },
+      { kind: "rocks", at: [27.5, 317], r: 2, n: 8, seed: 3 },
+      { kind: "rocks", at: [32.5, 338.5], r: 2, n: 8, seed: 4 },
+      { kind: "tuft", at: [34, 322], r: 4, n: 20, seed: 5 },
+    ],
   },
   {
     // the green ringed with sand, a pond on its left edge, the strongest wind of the six blowing toward the pond
@@ -188,6 +269,8 @@ export const HOLE_DEFS: HoleDef[] = [
     landing: [3, 174],
     // uphill to the green: it plays longer than it reads
     ground: { rise: [[0, 0], [80, 0.5], [150, 3], [177, 5]], swell: 0.3 },
+    // a sandy waste off the right of the line, short of the bunkers: any club plays from it, but it is not the fairway
+    areas: [{ kind: "waste", poly: [[13, 98], [22, 95], [32, 104], [37, 122], [35, 145], [28, 160], [18, 158], [14, 138], [15, 116]] }],
   },
   {
     // a long dogleg left with water along the inside of the bend and the wind in your face
@@ -238,6 +321,21 @@ export const BACK_DEFS: HoleDef[] = [
     wind: { speed: 2.2, dir: 2.6 },
     landing: [0, 235],
     ground: { rise: [[0, 0], [120, 4], [225, 9], [245, 9.5], [275, 7], [387, 3]], tilt: [[200, 0], [240, 0.02], [300, 0]] },
+    // a field wall down the right of the climb with a gated gap, and a striped post on the crest to aim by
+    props: [
+      { kind: "wall", path: [[29, 100], [30, 205], [31, 262], [29, 308]], h: 1.2, gaps: [[95, 103]], seed: 7 },
+      { kind: "gatepost", at: [30, 199], yaw: 0, gap: 8 * YD },
+      { kind: "post", at: [0, 246], h: 6.5, r: 0.14 },
+      { kind: "tuft", at: [31, 150], r: 4, n: 22, seed: 2 },
+      { kind: "tuft", at: [31, 240], r: 4, n: 22, seed: 3 },
+      { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
+      { kind: "sign", at: [6, 4], yaw: -0.3 },
+    ],
+    // gorse on the left of the climb and the right of the crest: a ball in it is unplayable
+    areas: [
+      { kind: "gorse", poly: [[-28, 160], [-34, 168], [-38, 184], [-34, 202], [-28, 198], [-26, 178]] },
+      { kind: "gorse", poly: [[28, 262], [35, 268], [37, 284], [32, 298], [26, 290], [25, 274]] },
+    ],
   },
   {
     // a long right-hander with a lake down the right of the second shot and a pond off the front right of the green; the
@@ -287,6 +385,14 @@ export const BACK_DEFS: HoleDef[] = [
     wind: { speed: 3, dir: -2.2 },
     landing: [-5, 215],
     ground: { rise: [[0, 0], [60, -2], [200, -7], [300, -8], [415, -6]], tilt: [[160, 0], [210, -0.03], [290, 0]] },
+    // out of bounds down the left, past the rough and the copse: white stakes on the line, stroke and distance beyond
+    areas: [
+      {
+        kind: "oob",
+        poly: [[-34, 40], [-40, 100], [-60, 150], [-62, 190], [-68, 240], [-82, 300], [-96, 360], [-112, 360], [-98, 300], [-84, 240], [-80, 190], [-76, 150], [-56, 100], [-50, 40]],
+        stakes: [[-34, 40], [-40, 100], [-60, 150], [-62, 190], [-68, 240], [-82, 300], [-96, 360]],
+      },
+    ],
   },
 ];
 
@@ -397,6 +503,8 @@ export type BuiltHole = {
   blockers: { x: number; z: number; r: number; h: number }[];
   /** the middle of the fairway from the tee to past the green, every 5 yd, metres */
   line: [number, number][];
+  /** the hole's areas (fescue, gorse, waste, out of bounds) in metres, with the points the oob stakes stand at */
+  areas: AreaM[];
   /** the hole drawn flat, metres: the rough and the fairway as outlines, and the box that holds all of it */
   shape: { rough: [number, number][]; fairway: [number, number][]; box: { x0: number; x1: number; z0: number; z1: number } };
 };
@@ -440,8 +548,23 @@ export function buildHole(def: HoleDef): BuiltHole {
   green.cup = toGreen(pin[0], pin[1]);
   green.tee = toGreen(0, 0);
 
+  const areas: AreaM[] = (def.areas ?? [])
+    .map((a) => ({ kind: a.kind, ring: a.poly.map(([x, z]) => [x * YD, z * YD] as [number, number]), stakes: along((a.stakes ?? []).map(([x, z]) => [x * YD, z * YD] as [number, number]), STAKE_GAP) }))
+    .sort((a, b) => AREA_ORDER.indexOf(a.kind) - AREA_ORDER.indexOf(b.kind));
+  const areaBox = areas.map((a) => ({ x0: Math.min(...a.ring.map((p) => p[0])), x1: Math.max(...a.ring.map((p) => p[0])), z0: Math.min(...a.ring.map((p) => p[1])), z1: Math.max(...a.ring.map((p) => p[1])) }));
+  /** the kind of area at a point, if any (the earlier kind wins) */
+  const areaAt = (x: number, z: number, kinds: AreaKind[]): AreaKind | null => {
+    for (let i = 0; i < areas.length; i++) {
+      const b = areaBox[i];
+      if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1 || !kinds.includes(areas[i].kind)) continue;
+      if (inPoly(areas[i].ring, x, z)) return areas[i].kind;
+    }
+    return null;
+  };
+
   const surfaceAt = (x: number, z: number): Surface => {
     for (const b of def.water) if (waterHit(b, x, z)) return "water";
+    if (areas.length && areaAt(x, z, ["oob"])) return "oob";
     if (def.targets)
       for (const t of TARGETS) {
         const d = Math.hypot(x - t.gx, z - t.gz);
@@ -456,6 +579,10 @@ export function buildHole(def: HoleDef): BuiltHole {
       if (zn === 1) return "fringe";
     }
     for (const b of def.bunkers) if (blobHit(b, x, z)) return "bunker";
+    if (areas.length) {
+      const k = areaAt(x, z, ["gorse", "waste", "fescue"]);
+      if (k) return k;
+    }
     const m = margin(x, z);
     if (m <= 0) return "fairway";
     if (m <= rough) return "rough";
@@ -627,7 +754,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     for (let d = 0; d <= l; d += 0.5) {
       const px = x + (dx / l) * d, pz = z + (dz / l) * d;
       const sf = surfaceAt(px, pz);
-      if (sf !== "out" && sf !== "water") {
+      if (sf !== "out" && sf !== "water" && sf !== "oob" && sf !== "gorse") {
         let q = Math.min(l, d + 1.5);
         // dropped behind the copse there would be no way out: further in, until the way to the pin is open
         while (q < l && blocked(x + (dx / l) * q, z + (dz / l) * q)) q = Math.min(l, q + 1);
@@ -648,7 +775,7 @@ export function buildHole(def: HoleDef): BuiltHole {
   const shape = { rough: edge(rough), fairway: edge(0), box: { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity } };
   {
     const bx = shape.box;
-    const all: [number, number][] = [...shape.rough, ...world.water.flat(), ...(world.sand ?? []).flat(), ...greenRing(GH / 2 + 1).map(([x, , z]) => [x, z] as [number, number])];
+    const all: [number, number][] = [...shape.rough, ...world.water.flat(), ...(world.sand ?? []).flat(), ...areas.flatMap((a) => a.ring), ...greenRing(GH / 2 + 1).map(([x, , z]) => [x, z] as [number, number])];
     for (const [x, z] of all) {
       bx.x0 = Math.min(bx.x0, x);
       bx.x1 = Math.max(bx.x1, x);
@@ -673,6 +800,7 @@ export function buildHole(def: HoleDef): BuiltHole {
     margin,
     blockers,
     line: samples.map((s) => [s.x, s.z] as [number, number]),
+    areas,
     shape,
   };
   built.set(def.n, b);

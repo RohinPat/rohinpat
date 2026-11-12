@@ -62,6 +62,8 @@ const ring = (ctx: CanvasRenderingContext2D, pts: [number, number][], px: (x: nu
   ctx.closePath();
 };
 
+const AREA_FILL = { fescue: "#8c9a4c", gorse: "#2a5a2a", waste: "#d8c58f", oob: "#1c2a30" } as const;
+
 /** the ground, with the rect's own corner at (r.x, r.y) */
 function ground(ctx: CanvasRenderingContext2D, hole: BuiltHole, r: Rect) {
   const f = fit(hole, r);
@@ -83,6 +85,12 @@ function ground(ctx: CanvasRenderingContext2D, hole: BuiltHole, r: Rect) {
   ring(ctx, hole.shape.fairway, f.px, f.py);
   ctx.fill();
   ctx.lineWidth = 1;
+  // fescue, gorse, waste and out of bounds
+  for (const a of hole.areas) {
+    ctx.fillStyle = AREA_FILL[a.kind];
+    ring(ctx, a.ring, f.px, f.py);
+    ctx.fill();
+  }
   for (const o of w.sand ?? []) {
     ctx.fillStyle = SAND;
     ctx.strokeStyle = SAND_EDGE;

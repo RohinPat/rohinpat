@@ -39,6 +39,9 @@ const COLORS: Partial<Record<Surface, string[]>> = {
   bunker: ["#f3e6c4", "#e2cc98", "#fff4dc", "#d2b783"],
   water: ["#ffffff", "#eef8fc", "#d8eef6"],
   out: ["#c9dca8", "#7a5c3a"],
+  fescue: ["#e8d9a0", "#c9b878", "#8a7a48"],
+  waste: ["#efe0b4", "#d9c58f", "#b9a470"],
+  gorse: ["#8fb04a", "#f2d63a", "#4c6f2c"],
 };
 
 export function createFx3D(reduce = false): Fx3D {
@@ -127,8 +130,8 @@ export function createFx3D(reduce = false): Fx3D {
         puff(x, z, "#f4fbfd", 1.1, 0.9, 0.7);
         ring(x, z, 2.6, 1.3);
         ring(x, z, 1.8, 1.1, 0.18);
-      } else if (surface === "bunker") {
-        burst(x, z, "bunker", Math.round(26 * s * k + 4), 3.2 * s + 0.6, 2.2 * s + 0.4, 0.07, { life: 1.2, drag: 1.6 });
+      } else if (surface === "bunker" || surface === "waste") {
+        burst(x, z, surface, Math.round(26 * s * k + 4), 3.2 * s + 0.6, 2.2 * s + 0.4, 0.07, { life: 1.2, drag: 1.6 });
         puff(x, z, "#efdcae", 1.4, 1.4, 0.75);
       } else {
         const n = surface === "green" || surface === "fringe" ? 6 : 12;
@@ -142,7 +145,7 @@ export function createFx3D(reduce = false): Fx3D {
         burst(x, z, "bunker", Math.round(34 * k), 3.6, 2.6, 0.06, { dir: yaw, life: 1.3, drag: 1.4 });
         puff(x + Math.sin(yaw) * 0.6, z + Math.cos(yaw) * 0.6, "#efdcae", 1.2, 1.3, 0.7);
       }
-      else if (surface === "fairway" || surface === "rough") burst(x, z, surface, Math.round(9 * k), 2.4, 3, 0.055, { dir: yaw, life: 0.9, drag: 1.6 });
+      else if (surface === "fairway" || surface === "rough" || surface === "fescue" || surface === "waste") burst(x, z, surface, Math.round(9 * k), 2.4, 3, 0.055, { dir: yaw, life: 0.9, drag: 1.6 });
     },
     step(dt, cam, F) {
       for (let i = parts.length - 1; i >= 0; i--) {
