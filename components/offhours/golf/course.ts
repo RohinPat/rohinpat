@@ -2,6 +2,7 @@ import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
 import { stakesAround, type Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
+import type { Feature } from "./features";
 import type { Ground } from "./terrain";
 import { RANGE_WORLD, TARGETS, YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
@@ -31,7 +32,15 @@ const LOW_M = 100;
 /** the flag is at least this tall on screen, px */
 const FLAG_MIN_PX = 34;
 
-export type Blob = { x: number; z: number; rx: number; rz: number; rot?: number };
+export type Blob = {
+  x: number;
+  z: number;
+  rx: number;
+  rz: number;
+  rot?: number;
+  /** how deep a bunker is dug, m (default 0.35); a `pot` feature shapes its own */
+  depth?: number;
+};
 /** a creek: water along a path (yd), `w` yd wide */
 export type Creek = { path: [number, number][]; w: number };
 export type Water = Blob | Creek;
@@ -103,6 +112,8 @@ export type HoleDef = {
   ground?: Ground;
   /** the range's target greens (scene.ts TARGETS) stand on it: flat rounds of green in a fringe, each with a flag */
   targets?: boolean;
+  /** landforms on top of the ground (features.ts): ridges, mounds, bowls, pot bunkers, channels, shelves, faces, terraces */
+  features?: Feature[];
   /** placed props, in yd like the rest of the hole (solids.ts): boulders, walls, posts, stakes, a bridge, reeds. The solid ones stop and turn a ball; components/golf3d/props3d.ts draws them all. */
   props?: Prop[];
   /**
@@ -153,8 +164,9 @@ export const HOLE_DEFS: HoleDef[] = [
     trees: { seed: 23, edge: 6, spacing: 6 },
     wind: { speed: 2, dir: Math.PI / 2 },
     landing: [-3, 135],
-    // a long way down to the green: it plays shorter than it reads
-    ground: { rise: [[0, 0], [35, -1], [110, -7], [137, -8]], swell: 0.3 },
+    // a long way down to the green: it plays shorter than it reads. The drop is the plan's 13.5 m, in a short slope
+    // (a small `sigma` keeps the lip of the tee and the foot of the drop)
+    ground: { rise: [[0, 0], [24, 0], [55, -8], [95, -13], [137, -13.5]], swell: 0.3, sigma: 9 },
     // granite in the rough behind and beside the pond, and red stakes down the fairway side of it (a lateral hazard)
     props: [
       { kind: "boulder", at: [-30.5, 112], size: 2.1, seed: 3 },
@@ -191,6 +203,8 @@ export const HOLE_DEFS: HoleDef[] = [
     landing: [0, 180],
     // the bend banks to the right, toward the corner, and the green sits up on a hill
     ground: { rise: [[0, 0], [150, 1], [215, 2], [290, 6], [345, 9]], tilt: [[160, 0], [205, -0.04], [250, -0.02], [300, 0]], mounds: [[-26, 120, 10, 1.5]] },
+    // the corner bunker is a pot: a sod face round a floor 1.7 m down, and a lip toward the green
+    features: [{ k: "pot", b: 0, d: 1.7 }],
   },
   {
     // a creek across the fairway, 320 to 334 yd from the tee, and the green 136 yd past it

@@ -44,6 +44,8 @@ describe("the ground's shape", () => {
         for (let x = b.x0; x <= b.x1; x += 2.3) {
           // (the banks of a pond or a creek are steep: a ball there is in the water a moment later)
           if (h.surfaceAt(x, z) === "out" || waterWithin(h.surfaceAt, x, z, 2.5) !== null) continue;
+          // (a pot's face, a bank and a ravine's wall are steep on purpose: features.ts, with their own tests)
+          if (t.fx.fine(x, z, 0) > 0) continue;
           const [sx, sz] = t.slope(x, z);
           expect(Math.hypot(sx, sz), `hole ${h.def.n} at ${x.toFixed(0)}, ${z.toFixed(0)}`).toBeLessThan(0.6);
           expect(Math.abs(t.y(x + 0.3, z) - t.y(x, z))).toBeLessThan(0.15);
