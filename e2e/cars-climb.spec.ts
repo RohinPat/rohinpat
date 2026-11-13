@@ -143,10 +143,12 @@ test.describe("Night run: the climb", () => {
     await expect(live(page)).toContainText(/checkpoint 6 of 7/i, SLOW);
     // the summit
     await nightEval(page, (g, s) => ((g.car.s = s - 25), (g.car.u = 26), (g.car.lat = 0), (g.car.w = 0), (g.car.r = 0), (g.car.psi = 0), (g.timeLeft = 90), 0), road.finish);
+    // let go of the gas while the canvas still has the focus: once the end card takes it, a late key-up never reaches the
+    // game, the gas stays held, and the next road counts itself down and starts (the car coasts the last 25 m)
+    await page.keyboard.up("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "done", { timeout: 20_000 });
     await expect(live(page)).toContainText(/you reached the summit/i, SLOW);
     expect(await nightEval(page, (g) => g.result?.finished)).toBe(true);
-    await page.keyboard.up("ArrowUp");
     // the end card has the picker too: the canyon from here, and it has no best run to race
     await expect(pick(page, "canyon")).toBeVisible();
     await pick(page, "canyon").click();
