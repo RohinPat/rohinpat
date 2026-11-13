@@ -186,19 +186,23 @@ export function terrainOf(hole: BuiltHole): Terrain {
 
   /** the line's height and tilt carried out across the hole, blended between samples so a bend has no seam */
   const line = (x: number, z: number) => {
-    let sw = 0, sv = 0, near = Infinity, nearV = 0;
+    // (the weights are taken from the nearest sample, so the blend is the same as before but its window moves with the
+    // point: past about 4 sigma of every sample the old fall-back to the single nearest sample stepped every 5 yd, on the
+    // wide plateau of hole 3)
+    let near = Infinity;
+    for (const p of S) near = Math.min(near, (x - p.x) * (x - p.x) + (z - p.z) * (z - p.z));
     const R2 = 16 * SIG * SIG;
+    let sw = 0, sv = 0;
     for (const p of S) {
       const dx = x - p.x, dz = z - p.z, d2 = dx * dx + dz * dz;
+      if (d2 - near > R2) continue;
       const lat = Math.max(-TILT_REACH, Math.min(TILT_REACH, dx * p.nx + dz * p.nz));
       const v = p.h + p.t * lat;
-      if (d2 < near) [near, nearV] = [d2, v];
-      if (d2 > R2) continue;
-      const w = Math.exp(-d2 / (SIG * SIG));
+      const w = Math.exp(-(d2 - near) / (SIG * SIG));
       sw += w;
       sv += w * v;
     }
-    return sw > 1e-9 ? sv / sw : nearV;
+    return sv / sw;
   };
   // swells: a few long, low waves with this hole's own phases
   const ph = [def.n * 1.37, def.n * 2.11 + 0.5, def.n * 0.73 + 1.9];

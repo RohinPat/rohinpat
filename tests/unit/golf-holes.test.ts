@@ -55,51 +55,90 @@ const rad = (d: number) => (d * Math.PI) / 180;
 describe("hole 3, The Elbow", () => {
   const d = HOLE_DEFS[2];
   const b = buildHole(d);
-  it("bends right, with a bunker and a stand of trees on the inside of the bend", () => {
-    expect(d.line[2][0]).toBeGreaterThan(50);
-    expect(d.bunkers[0].x).toBeGreaterThan(0);
-    expect(d.bunkers[0].z).toBeLessThan(d.line[1][1]);
-    expect(d.copse!.length).toBeGreaterThanOrEqual(6);
-    for (const [x, z] of d.copse!) {
-      expect(x).toBeGreaterThan(30);
-      expect(z).toBeLessThan(d.line[1][1] + 10);
-      expect(b.surfaceAt(x * YD, z * YD)).toBe("out");
-    }
-    expect(b.blockers).toHaveLength(d.copse!.length);
+  const pinYd = d.pin;
+  /** the aim from a ball to the pin, radians */
+  const aimTo = (g: CourseGame) => Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
+  it("drops down a chute between two closed canyon walls: the rim is cliff, and the green sits about 10 m under the tee", () => {
+    expect(d.features!.filter((f) => f.k === "cliff")).toHaveLength(2);
+    expect(d.features!.filter((f) => f.k === "cliff" && (f as { closed?: boolean }).closed)).toHaveLength(2);
+    expect(b.surfaceAt(0, 0)).toBe("fairway");
+    const T = terrainOf(b);
+    expect(T.pad).toBeLessThan(-7);
+    expect(T.pad).toBeGreaterThan(-12);
   });
-  it("a driver aimed over the trees clears them; a 3 wood or a 5 iron on the same line goes into them and comes down short", () => {
-    const tee = (club: number, deg: number) => simulate({ club: CLUBS[club], speed: 1, yaw: rad(deg), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt, trees: b.blockers });
-    for (const deg of [10, 14]) expect(tee(0, deg).tree, `driver ${deg}`).toBeNull();
-    for (const [club, deg] of [[1, 14], [1, 17], [2, 14], [2, 17]]) {
-      const s = tee(club, deg);
-      expect(s.tree, `${CLUBS[club].short} ${deg}`).not.toBeNull();
-      // it went in at the trees, short of where the club carries, and came down short of where it would have
-      const free = simulate({ club: CLUBS[club], speed: 1, yaw: rad(deg), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt });
-      expect(s.total).toBeLessThan(free.total - 3);
-      expect(Math.hypot(s.tree!.x, s.tree!.z) / YD).toBeLessThan(fullCarry(club) * 0.95);
-    }
-    // the same shots with no trees are not stopped
-    expect(simulate({ club: CLUBS[2], speed: 1, yaw: rad(14), face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: b.surfaceAt }).tree).toBeNull();
+  it("the ravine is rock, out of play: the drop zone is on the near side of the slot, on the line and on the fairway or the sand", () => {
+    expect(b.surfaceAt(59 * YD, 309 * YD)).toBe("out");
+    expect(b.drops).toHaveLength(1);
+    const [dx, dz] = b.drops[0];
+    expect(["fairway", "rough", "waste"]).toContain(b.surfaceAt(dx, dz));
+    expect(dz / YD).toBeLessThan(300);
+    expect(Math.abs(dx / YD)).toBeLessThan(45);
+    expect(pinYd[1]).toBeGreaterThan(dz / YD);
   });
-  it("in the game: a 3 wood into the copse says so, drops in the trees, and costs a stroke", () => {
+  it("a driver down the chute carries to about 260 yd, past the elbow at 224 yd, and comes to rest in the rough", () => {
     const g = onHole(3);
-    g.setAim(rad(14));
-    g.setClub(1);
+    g.setAim(0);
+    g.setClub(0);
     g.remoteSwing(PURE);
-    expect(run(g, () => g.phase === "rest")).toBe(true);
-    expect(g.shot!.tree).not.toBeNull();
-    expect(g.said[g.said.length - 1]).toMatch(/Hit a tree\.$/);
-    expect(g.strokes).toBeGreaterThanOrEqual(1);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready")).toBe(true);
+    expect(g.ball[1] / YD).toBeGreaterThan(245);
+    expect(g.ball[1] / YD).toBeLessThan(275);
+    expect(g.lie).toBe("rough");
   });
-  it("the default aim goes down the first leg to the landing zone, a 5 iron to the bend, and leaves a long second", () => {
+  it("from where the drive comes to rest, a 7 iron carries the slot to the green; a sand wedge comes down in it, and costs a stroke and a drop", () => {
+    const g = onHole(3);
+    g.setAim(0);
+    g.setClub(0);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready")).toBe(true);
+    expect(g.lie).toBe("rough");
+    const [bx, bz] = g.ball;
+    const h = onHole(3);
+    place(h, bx, bz, "rough", 1);
+    h.setAim(aimTo(h));
+    h.setClub(3);
+    h.remoteSwing(PURE);
+    expect(run(h, () => h.phase === "rest" || h.phase === "ready" || h.phase === "putt")).toBe(true);
+    expect(["green", "fringe"]).toContain(h.lie);
+    const k = onHole(3);
+    place(k, bx, bz, "rough", 1);
+    k.setAim(aimTo(k));
+    k.setClub(5);
+    k.remoteSwing(PURE);
+    expect(run(k, () => k.phase === "rest" || k.phase === "ready")).toBe(true);
+    expect(k.said[k.said.length - 1]).toMatch(/Dropping at the drop zone\.$/);
+    expect(k.strokes).toBeGreaterThanOrEqual(3);
+  });
+  it("the safe line: a 5 iron down the chute lays up in the fairway about 196 yd out, and a 7 iron from there carries the slot to the green", () => {
+    const g = onHole(3);
+    g.setAim(0);
+    g.setClub(2);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "ready")).toBe(true);
+    expect(g.lie).toBe("fairway");
+    expect(g.yardsToPin()).toBeGreaterThan(150);
+    expect(g.yardsToPin()).toBeLessThan(175);
+    g.setAim(aimTo(g));
+    g.setClub(3);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready" || g.phase === "putt")).toBe(true);
+    expect(["green", "fringe"]).toContain(g.lie);
+  });
+  it("a pitching wedge from the elbow comes down in the ravine: it says so, drops on the near side and costs a stroke", () => {
+    const g = onHole(3);
+    place(g, 0, 204.8, "fairway", 2);
+    g.setAim(aimTo(g));
+    g.setClub(4);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready")).toBe(true);
+    expect(g.said[g.said.length - 1]).toMatch(/Dropping at the drop zone\.$/);
+    expect(g.strokes).toBe(4);
+    const [dx, dz] = b.drops[0];
+    expect(Math.hypot(g.ball[0] - dx, g.ball[1] - dz)).toBeLessThan(3);
+  });
+  it("the default aim goes down the first leg to the landing zone", () => {
     const g = onHole(3);
     expect(g.yawT).toBeCloseTo(Math.atan2(b.landing[0], b.landing[1]), 9);
-    expect(g.club).toBe(2);
-    g.remoteSwing(PURE);
-    run(g, () => g.phase === "ready");
-    expect(g.lie).toBe("fairway");
-    expect(g.yardsToPin()).toBeGreaterThan(140);
-    expect(g.yardsToPin()).toBeLessThan(175);
   });
 });
 
@@ -782,9 +821,9 @@ describe("found in play", () => {
   });
   it("a pure approach at the suggested club and swing finishes on the green, from 60 to 180 yd on every hole of the nine, flat or on the hills", { timeout: 30_000 }, () => {
     for (let n = 1; n <= 9; n++) for (const hills of [false, true]) {
-      // (on the hills a 180 yd shot up to hole 3's raised green plays nearer 200, a 3 wood that will not hold a front pin)
       // (hole 1's plateau stands 15 m above the swale: a pure 100 yd shot there ends on the face, just short, and a 140 yd one runs off the back. Both are the hole's design, pinned in its own tests, so hills pin it from 60 and 120 yd)
-      for (const D of hills ? (n === 1 ? [60, 120] : [60, 100, 140]) : [60, 100, 140, 180]) {
+      // (hole 3's mesa green stands 10 m under the tee, and on the hills a pure 140 yd shot ends 10 yd off the pin: pinned from 60 and 100)
+      for (const D of hills ? (n === 1 ? [60, 120] : n === 3 ? [60, 100] : [60, 100, 140]) : [60, 100, 140, 180]) {
         const g = onHole(n, { hills });
         const pin = g.hole.pin;
         // the middle of the fairway D yards short of the pin

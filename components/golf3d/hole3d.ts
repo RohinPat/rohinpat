@@ -96,6 +96,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // (scenery/ decides the hills and their colours; the same as ever for a hole without a scene)
   const scn = prepareScenery(hole, ground.y, opts.tier ?? "high", { reduce: !!opts.reduce, sun: opts.sun });
   const heightAt = scn.heightAt;
+  // the ground outside the rough: the course's dark green, or the scene's own earth (hole 3's canyon floor)
+  const deep = scn.rec.palette?.deep ?? COL.deep;
 
   // ---------------------------------------------------------------- the painted surfaces
   const maxTex = tier.tex;
@@ -112,8 +114,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     pts.forEach(([x, z], i) => (i ? c.lineTo(tx(x), tz(z)) : c.moveTo(tx(x), tz(z))));
     c.closePath();
   };
-  // (a scene can paint the ground beyond the rough in its own colour: dune country, with no woods to stand in)
-  const out = scn.rec.palette?.paintOut ? scn.rec.palette.base : COL.deep;
+  // (a scene can paint the ground beyond the rough in its own colour: dune country, with no woods to stand in; else its deep colour)
+  const out = scn.rec.palette?.paintOut ? scn.rec.palette.base : deep;
   c.fillStyle = out;
   c.fillRect(0, 0, cw, ch);
   // the rough, with a soft darker band where it meets the woods

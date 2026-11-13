@@ -57,6 +57,8 @@ export type Palette = {
   reach?: number;
   /** metres beyond the playing area where it fades in, default [30, 90] */
   ramp?: [number, number];
+  /** wave 2: the colour of the ground outside the rough, in the painted box and past it (default the course's dark green). The hills' own colour is `base`, from 30 m past the rough on */
+  deep?: string;
   /** phase 3: blotches of a second colour over the ground (gold aspen, willow): the share of ground they cover, their size in m */
   patches?: { color: string; share: number; scale?: number; seed?: number };
   /** the ground between the rough and the hills is painted in `base` instead of woodland green, so a hole whose trees are cleared has no dark band (dune country) */

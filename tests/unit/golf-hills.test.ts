@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLUBS, simulate, type ShotIn } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, NINE_DEFS, buildHole, type HoleDef } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole, type BuiltHole, type HoleDef } from "@/components/offhours/golf/course";
 import { GH, GW } from "@/components/offhours/golf/green";
 import { bothLies, lieFor, slopeLie, slopeWords, waterWithin } from "@/components/offhours/golf/lie";
 import { CourseGame } from "@/components/offhours/golf/play";
@@ -20,6 +20,14 @@ const shot = (over: Partial<ShotIn> = {}): ShotIn => ({ club: CLUBS[3], speed: 1
 /** a plane through the origin rising `sx` per metre to +x and `sz` to +z */
 const plane = (sx: number, sz: number) => ({ y: (x: number, z: number) => sx * x + sz * z, slope: () => [sx, sz] as [number, number] });
 
+/** a point in or round a dug pot on the hole (its bunker, and the apron of sod round it, 6 yd out) */
+const inPot = (h: BuiltHole, x: number, z: number) =>
+  (h.def.features ?? []).some((f) => {
+    if (f.k !== "pot") return false;
+    const bl = h.def.bunkers[(f as { b: number }).b];
+    return Math.hypot(x - bl.x * YD, z - bl.z * YD) < (Math.max(bl.rx, bl.rz) + 6) * YD;
+  });
+
 describe("the ground's shape", () => {
   it("the tee is at 0, and every hole rises and falls as it says", () => {
     for (const h of holes) {
@@ -33,9 +41,9 @@ describe("the ground's shape", () => {
       expect(Math.abs(t.pad - want), `hole ${h.def.n}`).toBeLessThan(1.5);
       void s;
     }
-    // a long way down on 2 (30 m, off the cliff), up on 3
+    // a long way down on 2 (30 m, off the cliff), and down on 3 too: its mesa green sits under the canyon's tee
     expect(terrainOf(holes[1]).pad).toBeLessThan(-27);
-    expect(terrainOf(holes[2]).pad).toBeGreaterThan(7);
+    expect(terrainOf(holes[2]).pad).toBeLessThan(-7);
   });
 
   it("has no steps or cliffs anywhere a ball can be", { timeout: 60_000 }, () => {
@@ -62,7 +70,8 @@ describe("the ground's shape", () => {
       const b = h.shape.box;
       for (let z = b.z0; z <= b.z1; z += 1.1)
         for (let x = b.x0; x <= b.x1; x += 1.1) {
-          if (Math.hypot(...t.slope(x, z)) > 0.6 && waterWithin(h.surfaceAt, x, z, 2.5) === null) expect(t.fx.rock(x, z), `hole ${h.def.n} at ${x.toFixed(1)}, ${z.toFixed(1)}`).toBe(true);
+          // (a dug pot, a sand bunker with its sod apron, is sand and not rock: the rule is for the cliffs)
+          if (Math.hypot(...t.slope(x, z)) > 0.6 && waterWithin(h.surfaceAt, x, z, 2.5) === null && !inPot(h, x, z)) expect(t.fx.rock(x, z), `hole ${h.def.n} at ${x.toFixed(1)}, ${z.toFixed(1)}`).toBe(true);
         }
     }
   });
@@ -235,11 +244,12 @@ describe("the nine on the hills (the 3D course's round): measured bands, pinned"
   // 30 seeded rounds over all nine holes (par 37)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true, holes: NINE_DEFS }, maxSeconds: 1400 }));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
-  it("skilled: par + 2 to par + 7, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
+  it("skilled: par + 2 to par + 8, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(39);
-    expect(total(rs)).toBeLessThanOrEqual(44);
+    // (re-pinned from 44 with hole 8's island green: the skilled player averages 5.8 there, a par 5, so the round moves to about 44.3)
+    expect(total(rs)).toBeLessThanOrEqual(45);
     rs[0].pars.forEach((par, h) => {
       const m = mean(rs.map((r) => r.holes[h]));
       expect(m, `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.6);

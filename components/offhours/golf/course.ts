@@ -173,6 +173,15 @@ export type HoleDef = {
  */
 const RIM_2: [number, number][] = [[-95, 42], [-55, 23], [-22, 17], [0, 16], [22, 17], [55, 23], [95, 42], [118, 75], [126, 120], [122, 170], [105, 205], [0, 208], [-105, 205], [-122, 170], [-126, 120], [-118, 75]];
 
+/** hole 3's canyon: the brink round the red canyon's floor, walked counterclockwise on the plan so the drop is inside (yd) */
+const CANYON_3: [number, number][] = [[-50, -34], [50, -34], [48, 40], [45, 100], [47, 160], [46, 216.5], [63.5, 241], [86.5, 273.5], [109.5, 306.5], [124.5, 320.5], [131, 347.5], [105, 373.5], [70.5, 390.5], [47.5, 375], [17.5, 325], [-5.5, 292.5], [-28.5, 259.5], [-46, 235], [-48, 190], [-45, 130], [-47, 70], [-49, 10]];
+/** and the ravine across it, 24 yd lip to lip (yd) */
+const RAVINE_3: [number, number][] = [[8, 332.5], [36, 310], [53.5, 300], [68.5, 286.5], [97.5, 269], [110.5, 287], [84, 308.5], [66, 318], [51, 331], [20.5, 350.5]];
+
+/** the strips of sand and scrub down both sides of the floor, 34 to 43 yd from the line (yd) */
+const WASTE_L_3: [number, number][] = [[-34, -30], [-34, 30], [-34, 90], [-34, 150], [-34, 224], [-33.5, 231], [-31, 237.5], [-28, 243.5], [-5, 276.5], [18.5, 309], [41.5, 341.5], [53, 358.5], [69.5, 381.5], [62, 386.5], [46, 364], [34, 347], [11, 314], [-12, 281.5], [-35, 249], [-39.5, 241], [-42, 232.5], [-43, 224], [-43, 150], [-43, 90], [-43, 30], [-43, -30]];
+const WASTE_R_3: [number, number][] = [[34, -30], [34, 30], [34, 90], [34, 150], [34, 213], [51, 237], [74, 270], [97, 302.5], [109, 319.5], [125, 342.5], [132.5, 337], [116, 314], [104.5, 297.5], [81, 264.5], [58, 232], [43, 210.5], [43, 150], [43, 90], [43, 30], [43, -30]];
+
 export const HOLE_DEFS: HoleDef[] = [
   {
     // a raised tee by the clubhouse looks down a wide fairway that turns gently right, round a lone oak on the inside of the
@@ -308,30 +317,72 @@ export const HOLE_DEFS: HoleDef[] = [
     ],
   },
   {
-    // a dogleg right at 205 yd. The inside of the bend is a bunker and a stand of trees: a driver aimed over them gets home,
-    // a 5 iron to the bend leaves about 165 in
+    // down a chute into a red canyon, round an elbow at 224 yd, and across a dry ravine, 24 yd of air and 12 m deep, to a
+    // green on the canyon's floor beyond. The canyon is one pit in the plateau (a closed cliff, 16 m deep); the ravine is
+    // a slot across it, all rock (a ball that comes down in it is a drop, short of it); the floor falls 15 m by the
+    // elbow. A drive to the elbow leaves a wedge or a short iron over the slot (116 yd to clear it); a lay-up with a 5 iron
+    // leaves a long carry (163). The pot at the inside of the bend takes a ball that leaks right.
     n: 3,
     name: "The Elbow",
     par: 4,
     yards: 365,
-    line: [[0, 0], [0, 205], [100, 333]],
+    line: [[0, 0], [0, 224], [81, 339]],
     half: [15, 21, 19],
     rough: 14,
-    pin: [98, 331],
-    green: { c: [99.5, 334], seed: 4303, severity: 0.8 },
+    pin: [80, 337.5],
+    green: { c: [81.5, 340.5], seed: 4303, severity: 0.8 },
     bunkers: [
-      { x: 31, z: 196, rx: 5, rz: 9, rot: -0.15 },
-      { x: 117, z: 341, rx: 5, rz: 5, rot: -0.8 },
+      { x: 30, z: 212, rx: 5, rz: 9, rot: -0.15 },
+      { x: 98, z: 337, rx: 5, rz: 5, rot: -0.8 },
+      // across the outside of the bend, where a full driver comes down (265 yd)
+      { x: -4, z: 270, rx: 8, rz: 4.5, rot: 0.25 },
     ],
     water: [],
-    trees: { seed: 37, edge: 6, spacing: 6 },
-    copse: [[44, 150, 17], [50, 160, 19], [42, 170, 16], [54, 176, 20], [46, 186, 18], [58, 192, 17], [47, 199, 19], [60, 206, 16]],
+    // the canyon floor is open: no wall of pines, only what stands on the plateau above the rim
+    trees: { seed: 37, edge: 6, spacing: 6, clear: [CANYON_3], sides: [0.45, 0.45], behind: 0 },
     wind: { speed: 2.5, dir: 0.9 },
-    landing: [0, 180],
-    // the bend banks to the right, toward the corner, and the green sits up on a hill
-    ground: { rise: [[0, 0], [150, 1], [215, 2], [290, 6], [345, 9]], tilt: [[160, 0], [205, -0.04], [250, -0.02], [300, 0]], mounds: [[-26, 120, 10, 1.5]] },
-    // the corner bunker is a pot: a sod face round a floor 1.7 m down, and a lip toward the green
-    features: [{ k: "pot", b: 0, d: 1.7 }],
+    landing: [0, 208],
+    // the plateau is the line's height; the canyon is 16 m under it, so the floor starts at the tee's level and falls
+    // down the chute, flat round the elbow, and climbs a little to the green
+    ground: {
+      rise: [[0, 16], [40, 12], [90, 7], [140, 3.5], [190, 1.5], [224, 0.5], [262, 0.5], [296, 1.5], [316, 3], [340, 5], [365, 6.5]],
+      tilt: [[170, 0], [224, -0.03], [262, -0.015], [290, 0]],
+      sigma: 14,
+      swell: 0.25,
+      teeFlat: 9,
+      teeEase: 4,
+      greenEase: 8,
+      cell: 0.75,
+      baseY: 58,
+    },
+    features: [
+      // the corner bunker is a pot: a sod face round a floor 1.7 m down, and a lip toward the green
+      { k: "pot", b: 0, d: 1.7 },
+      { k: "cliff", path: CANYON_3, closed: true, drop: 16, run: 3.5, talus: 10, scree: 0.1, ledges: 7, seed: 31, rock: "canyon" },
+      // the ravine: a slot of rock across the floor and out through both walls, its two faces meeting in the middle (run 12:
+      // there is no floor to stand on), so a ball in it is on rock
+      { k: "cliff", path: RAVINE_3, closed: true, drop: 12, run: 12, talus: 1, scree: 0, ledges: 6, seed: 5, rock: "canyon" },
+    ],
+    // the canyon floor past the rough, to the foot of the walls, is sand and scrub
+    areas: [{ kind: "waste", poly: WASTE_L_3 }, { kind: "waste", poly: WASTE_R_3 }],
+    // a ball in the ravine is dropped on the near side, on the line, 27 yd short of the slot's edge
+    drops: [[38.5, 278.5]],
+    props: [
+      { kind: "boulder", at: [-40, 60], size: 2.2, seed: 3 },
+      { kind: "boulder", at: [41, 118], size: 1.8, seed: 5 },
+      { kind: "boulder", at: [-41, 170], size: 2.6, seed: 8 },
+      { kind: "boulder", at: [-24, 262], size: 2.2, seed: 12 },
+      { kind: "boulder", at: [-3, 282], size: 2.8, seed: 13 },
+      { kind: "boulder", at: [108, 322], size: 2.4, seed: 14 },
+      { kind: "boulder", at: [52, 352], size: 2.2, seed: 15 },
+      { kind: "rocks", at: [-36, 120], r: 4, n: 9, seed: 2 },
+      { kind: "rocks", at: [-12, 270], r: 5, n: 10, seed: 6 },
+      { kind: "rocks", at: [42, 291], r: 4, n: 8, seed: 11 },
+      { kind: "rocks", at: [90, 300], r: 4, n: 8, seed: 16 },
+      { kind: "tuft", at: [-38, 30], r: 5, n: 14, seed: 5 },
+      { kind: "tuft", at: [38, 150], r: 5, n: 14, seed: 6 },
+      { kind: "tuft", at: [-30, 235], r: 6, n: 16, seed: 7 },
+    ],
   },
   {
     // one burn crosses the hole twice: over the fairway at 200 to 260 yd, down the right between, and back across in front of the green
@@ -608,29 +659,52 @@ export const BACK_DEFS: HoleDef[] = [
     ],
   },
   {
-    // a long right-hander with a lake down the right of the second shot and a pond off the front right of the green; the
-    // ground and the wind both lean toward the water. Get home in two over the pond, or lay up left
+    // a climb up the bay's shore to a green on an island in a lake that lies on the bluff beside the bay, 17 m over the tee.
+    // The drive carries about 240 yd to the foot of the plateau. From there the island is 235 yd across the water: the brave
+    // line is a driver at 95 to 100% on a true line (a 3 wood is 15 yd short, in the lake). Or lay up left, to the lake's
+    // near bank 390 yd out, and pitch 105 yd over the water to the island (a footbridge crosses the channel behind it, for
+    // show). Short, long and wide of the island are the lake, and the ball is dropped on the lay-up bank for a stroke
     n: 8,
     name: "Long Water",
     par: 5,
-    yards: 520,
-    line: [[0, 0], [0, 280], [45, 522]],
-    half: [15, 21, 19],
+    yards: 492,
+    line: [[0, 0], [0, 245], [-14, 380], [-4, 447], [30, 482]],
+    half: [15, 21, 20, 18, 17],
     rough: 14,
-    pin: [44, 518],
-    green: { c: [45, 521], seed: 4808, severity: 0.7 },
+    pin: [30, 480],
+    green: { c: [30, 481], seed: 4808, severity: 0.7 },
     bunkers: [
-      { x: -20, z: 262, rx: 5, rz: 10 },
-      { x: 29, z: 514, rx: 4, rz: 6 },
+      { x: -24, z: 250, rx: 5, rz: 10 },
+      { x: -36, z: 376, rx: 5, rz: 9, rot: 0.2 },
     ],
     water: [
-      { x: 64, z: 400, rx: 15, rz: 34, rot: -0.18, lobe: 2.3 },
-      { x: 67, z: 499, rx: 8, rz: 10, lobe: 1.1 },
+      // the lake: a bay of the sea loch lifted onto the plateau, wrapped round the island on three sides (open to the west)
+      {
+        shore: [[8, 332], [22, 322], [45, 318], [70, 324], [96, 336], [116, 356], [128, 384], [132, 418], [129, 454], [124, 488], [112, 518], [92, 538], [64, 548], [36, 544], [14, 532], [8, 516], [12, 506], [26, 503], [42, 499], [52, 491], [55, 480], [51, 470], [41, 463], [26, 461], [12, 462], [6, 452], [5, 438], [3, 412], [4, 382], [6, 354]],
+        level: 16.8,
+        depth: 2.2,
+      },
+      // the channel on the island's west side, which the footbridge crosses
+      {
+        shore: [[2, 438], [10, 446], [15, 458], [15, 472], [14, 488], [13, 504], [12, 516], [10, 526], [1, 530], [-7, 522], [-8, 496], [-8, 472], [-4, 454], [-2, 443]],
+        level: 16.8,
+        depth: 2.2,
+      },
     ],
-    trees: { seed: 83, edge: 6, spacing: 6 },
+    trees: { seed: 83, edge: 6, spacing: 6, clear: [[[24, -60], [220, -60], [220, 700], [24, 700]], [[-80, 530], [220, 530], [220, 700], [-80, 700]]], sides: [0.4, 0.15], behind: 0 },
     wind: { speed: 2, dir: 1.2 },
-    landing: [0, 262],
-    ground: { rise: [[0, 0], [150, -2], [280, -3], [420, -5], [522, -4]], tilt: [[300, 0], [400, -0.025], [480, 0]], swell: 0.7 },
+    landing: [0, 245],
+    ground: { rise: [[0, 0], [60, 2], [150, 6], [235, 11], [290, 15], [325, 17], [405, 17.4], [495, 17.8]], swell: 0.5 },
+    // drop zones: along the fairway for the trees; at the lake, the lay-up bank on the left, a short pitch from the island
+    drops: [[0, 70], [0, 150], [0, 225], [-14, 390]],
+    props: [
+      { kind: "bridge", a: [-12, 484], b: [19, 480], w: 2.6 },
+      { kind: "reeds", at: [-12, 442], r: 4, n: 14, seed: 4 },
+      { kind: "reeds", at: [3, 520], r: 3, n: 9, seed: 6 },
+      { kind: "rocks", at: [112, 524], r: 5, n: 9, seed: 3 },
+      { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
+      { kind: "sign", at: [6, 4], yaw: -0.3 },
+    ],
   },
   {
     // home along the sea cliff: a tee 34 m over the sea and a cove cut into the cliffs across the line. The neck of the cove is

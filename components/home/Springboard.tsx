@@ -650,6 +650,9 @@ function LockScreen({
     if (!el || !locked) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      // the open pairing card (data-no-swipe) is not the lock layer's: a scroll over it never unlocks. Checked here,
+      // not only by the card's own listener, which is attached in an effect and so can miss the first wheel.
+      if ((e.target as Element | null)?.closest?.("[data-no-swipe]")) return;
       if (Math.abs(e.deltaY) > 18) onUnlock();
     };
     el.addEventListener("wheel", onWheel, { passive: false });
