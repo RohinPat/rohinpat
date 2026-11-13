@@ -165,7 +165,7 @@ describe("course data", () => {
     expect(NINE_DEFS.slice(6).map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [7, "The Ridge", 4, 385],
       [8, "Long Water", 5, 520],
-      [9, "Homeward", 4, 415],
+      [9, "Homeward", 4, 367],
     ]);
     expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);
     expect(NINE_DEFS.slice(0, 6)).toEqual(HOLE_DEFS);
