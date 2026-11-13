@@ -171,7 +171,8 @@ describe("the hole card says how the hole was played", () => {
         if (st.holed?.by === "putt") expect(st.holed.ft).toBeGreaterThanOrEqual(1);
       }
     });
-  });
+    // (a whole round of nine with hills: about a second alone, several on a loaded CI box, like the other round tests)
+  }, 20_000);
 
   it("a chip in: the card lists the shot and says where it went in from, with paper over it", () => {
     const p = holingPower(20)!;
