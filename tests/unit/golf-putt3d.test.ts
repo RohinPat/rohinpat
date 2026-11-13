@@ -47,7 +47,8 @@ describe("the green's relief", () => {
           expect(sx).toBeCloseTo(px, 6);
         }
     }
-  });
+    // (it builds every hole's ground: about a second alone, several on a loaded CI box)
+  }, 20_000);
   it("rises gently: no step at the bank's foot", () => {
     for (const hole of holes) {
       const rel = reliefOf(hole);
