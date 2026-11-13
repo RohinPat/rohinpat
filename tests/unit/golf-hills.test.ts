@@ -244,11 +244,12 @@ describe("the nine on the hills (the 3D course's round): measured bands, pinned"
   // 30 seeded rounds over all nine holes (par 37)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true, holes: NINE_DEFS }, maxSeconds: 1400 }));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
-  it("skilled: par + 2 to par + 7, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
+  it("skilled: par + 2 to par + 8, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(39);
-    expect(total(rs)).toBeLessThanOrEqual(44);
+    // (re-pinned from 44 with hole 8's island green: the skilled player averages 5.8 there, a par 5, so the round moves to about 44.3)
+    expect(total(rs)).toBeLessThanOrEqual(45);
     rs[0].pars.forEach((par, h) => {
       const m = mean(rs.map((r) => r.holes[h]));
       expect(m, `hole ${h + 1}`).toBeGreaterThanOrEqual(par - 0.6);

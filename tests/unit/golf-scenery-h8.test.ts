@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { YD } from "@/components/offhours/golf/scene";
 import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { signedDist } from "@/components/golf3d/scenery/geo";
@@ -16,13 +17,15 @@ const rec = sceneryFor(8);
 const ground = terrainOf(hole).y;
 
 describe("hole 8: Long Water", () => {
-  it("has a record that is valid against its hole, sea on the right, beyond the lake", () => {
+  it("has a record that is valid against its hole, sea on the right, with the lake on its bluff beside it", () => {
     expect(rec.id).toBe("long-water");
     expect(validateScenery(hole, rec)).toEqual([]);
     expect(rec.coast!.sea).toBe("right");
-    // the bay is not joined to the lake: the lip is 70 m or more from the lake and the rough
-    expect(clearanceOf(hole, rec.coast!.line)).toBeGreaterThanOrEqual(70);
-    for (const w of hole.world.water) for (const [x, z] of w) expect(signedDist(rec.coast!, x, z)).toBeLessThan(-60);
+    // the lake lies right beside the bay, on the plateau above it: a strip of land 8 m or more between, never water into water
+    const gap = clearanceOf(hole, rec.coast!.line);
+    expect(gap).toBeGreaterThanOrEqual(8);
+    expect(gap).toBeLessThanOrEqual(30);
+    for (const w of hole.world.water) for (const [x, z] of w) expect(signedDist(rec.coast!, x, z)).toBeLessThan(-7);
     // beach tones from the plan
     expect(rec.coast!.tones).toMatchObject({ shallow: "#9fd6cf", mid: "#5aa7b5", deep: "#2f6f8f" });
   });
@@ -43,15 +46,15 @@ describe("hole 8: Long Water", () => {
     }
   });
 
-  it("clears the right-hand trees from the lake on, and never the copse", () => {
+  it("the hole's own clearing leaves no tree on the right from the tee on, and the backdrop never drops the copse", () => {
     const { beyond } = makeHeight(hole, ground, rec);
     const keep = makeTreeKeep(hole, rec, beyond)!;
     for (const b of hole.blockers) expect(keep(b.x, b.z, b.h)).toBe(true);
-    const dropped = hole.world.trees.filter((t) => !keep(t.x, t.z, t.h));
-    expect(dropped.length).toBeGreaterThan(5);
-    for (const t of dropped) expect(beyond(t.x, t.z)).toBeGreaterThanOrEqual(5);
-    // a drop on the right only
-    for (const t of dropped) expect(t.x).toBeGreaterThan(0);
+    // (trees.clear opens the whole right side to the bay; the backdrop's opening has nothing left to drop there)
+    expect(hole.world.trees.filter((t) => t.x > 24 * YD && t.z > -60 * YD)).toHaveLength(0);
+    for (const t of hole.world.trees.filter((u) => !keep(u.x, u.z, u.h))) expect(beyond(t.x, t.z)).toBeGreaterThanOrEqual(5);
+    // and none in the lake (the base keeps trees out of water)
+    for (const t of hole.world.trees) expect(hole.surfaceAt(t.x, t.z)).not.toBe("water");
   });
 
   it("declares a lighthouse on land, outside the gate and out of the sea", () => {
