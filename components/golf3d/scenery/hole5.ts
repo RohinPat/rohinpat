@@ -13,7 +13,7 @@ export const HOLE5: SceneryRecord | null = {
   // low rolling sand with dune ridges on top; the ridges fall away inside a window toward the sea
   hills: { base: 1.5, amp: 5, reach: 140, ridged: { amp: 8, freq: 0.02, seed: 5, window: { bearing: (SEA.from + SEA.to) / 2, half: 26, k: 0.2 } } },
   // marram green in the hollows, pale sand on the crests
-  palette: { base: "#8e9a55", high: "#dccb97", reach: 11, ramp: [30, 100] },
+  palette: { base: "#8e9a55", high: "#dccb97", reach: 11, ramp: [30, 100], paintOut: true },
   rings: [
     {
       radius: 2300,

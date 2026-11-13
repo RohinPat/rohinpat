@@ -89,9 +89,10 @@ describe("a hole with features", () => {
     const g = base.green.c;
     const t = terrainOf(buildHole(def({}, { padTilt: [0, -0.04] })));
     expect(t.y(g[0] * YD, g[1] * YD - 3)).toBeGreaterThan(t.y(g[0] * YD, g[1] * YD + 3) + 0.15);
-    const bk = base.bunkers[0];
-    const deep = terrainOf(buildHole(def({ bunkers: [{ ...bk, depth: 1.2 }, ...base.bunkers.slice(1)] })));
-    const shallow = terrainOf(buildHole(def({})));
+    // (hole 5 has no bunkers of its own now: the waste and the bowl are its hazards)
+    const bk = { x: 0, z: 150, rx: 6, rz: 3.6 };
+    const deep = terrainOf(buildHole(def({ bunkers: [{ ...bk, depth: 1.2 }] })));
+    const shallow = terrainOf(buildHole(def({ bunkers: [bk] })));
     expect(deep.y(bk.x * YD, bk.z * YD)).toBeLessThan(shallow.y(bk.x * YD, bk.z * YD) - 0.7);
   });
   it("hole 2 drops 13 m to its green, hole 3 has a pot at its corner", () => {

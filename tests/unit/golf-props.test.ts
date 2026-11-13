@@ -86,7 +86,7 @@ describe("a ball meets a solid", () => {
 
 describe("holes without props", () => {
   it("empty or no solids give the very same shot, bit for bit", () => {
-    const hole = buildHole(NINE_DEFS.find((d) => d.n === 5)!);
+    const hole = buildHole(NINE_DEFS.find((d) => d.n === 6)!);
     const ter = terrainOf(hole);
     const mk = (solids?: Solid[]) => simulate({ ...base({ club: CLUBS[0], speed: 1, yaw: 0.1, curve: 0.3 }), ground: ter, surfaceAt: hole.surfaceAt, solids });
     const a = mk(), b = mk([]);
@@ -95,7 +95,7 @@ describe("holes without props", () => {
     expect("prop" in b).toBe(false);
     expect(solidsOf(hole.def.props, ter)).toEqual([]);
   });
-  it("only holes 2, 4, 6 and 7 have props", () => {
-    expect(NINE_DEFS.filter((d) => d.props?.length).map((d) => d.n)).toEqual([2, 4, 6, 7]);
+  it("only holes 2, 4, 5, 6 and 7 have props", () => {
+    expect(NINE_DEFS.filter((d) => d.props?.length).map((d) => d.n)).toEqual([2, 4, 5, 6, 7]);
   });
 });
