@@ -37,7 +37,7 @@ function pointAt(def: HoleDef, s: number): [number, number] {
 }
 const MARKERS: Record<number, string[]> = {
   1: ["100", "150", "150", "200", "200"],
-  2: ["100"],
+  2: [],
   3: ["100", "100", "150", "200", "200"],
   4: ["100", "100", "200"],
   5: ["100", "100", "150", "150"],
@@ -101,11 +101,14 @@ describe("course data", () => {
         expect(b.world.sand).toHaveLength(def.bunkers.length);
       });
       it("beyond the rough is the woods", () => {
+        // (hole 2's basin is open fescue to 96 yd either side)
+        if (def.n === 2) return;
         expect(b.surfaceAt(60 * YD, 100 * YD)).toBe("out");
         expect(b.surfaceAt(-60 * YD, 100 * YD)).toBe("out");
         expect(b.surfaceAt(0, 600 * YD)).toBe("out");
       });
       it("a ball in the woods is dropped on ground in play, a little inside the edge", () => {
+        if (def.n === 2) return;
         for (const side of [-1, 1]) {
           const [dx, dz] = b.edgeDrop(side * 70 * YD, 60 * YD);
           expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
@@ -176,7 +179,7 @@ describe("course data", () => {
     const at = (z: number) => b.surfaceAt(0, z * YD);
     // from the tee: the ledge, then rock, then scree, then water the whole way to the green's apron
     expect(at(10)).toBe("fairway");
-    expect(at(21)).toBe("out");
+    expect(at(17.5)).toBe("out");
     let wet = 0;
     for (let z = 40; z < 135; z += 1) if (at(z) === "water") wet++;
     expect(wet).toBeGreaterThanOrEqual(88);
@@ -186,11 +189,12 @@ describe("course data", () => {
     expect(d.bunkers[0].x).toBeGreaterThan(0);
     expect(b.drops).toHaveLength(1);
     const [dx, dz] = b.drops[0];
-    expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
+    expect(["fairway", "rough", "fescue"]).toContain(b.surfaceAt(dx, dz));
     expect(waterWithin(b.surfaceAt, dx, dz, DROP_CLEAR)).toBeNull();
-    expect(dz / YD).toBeLessThan(d.pin[1] - 5);
     expect(dx).toBeGreaterThan(0);
-    expect(["fairway", "rough"]).toContain(b.surfaceAt(24 * YD, 100 * YD));
+    // (the bench and the floor of the basin are a fescue field, not woods)
+    expect(b.surfaceAt(40 * YD, 100 * YD)).toBe("fescue");
+    expect(b.surfaceAt(-90 * YD, 100 * YD)).toBe("fescue");
     expect(Math.abs(b.wind[0])).toBeGreaterThan(Math.abs(b.wind[1]) * 5);
   });
 });

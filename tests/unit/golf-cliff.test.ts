@@ -85,7 +85,7 @@ describe("hole 2's ground", () => {
   });
   it("a ball dropped off the brink falls to the foot", () => {
     // a putter-speed ball over the front brink (hole 2: 19.5 yd out)
-    const s = simulate({ club: CLUBS[5], speed: 0.3, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: h.surfaceAt, ground: t, origin: [0, 18.5 * YD] });
+    const s = simulate({ club: CLUBS[5], speed: 0.3, yaw: 0, face: 0, curve: 0, contact: 1, wind: [0, 0], surfaceAt: h.surfaceAt, ground: t, origin: [0, 14.5 * YD] });
     expect(s.pts[(s.n - 1) * 4 + 2] + s.oy).toBeLessThan(-20);
     expect(s.restT).toBeLessThan(28);
   });

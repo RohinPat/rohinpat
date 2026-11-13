@@ -120,6 +120,8 @@ export type WallSpec = {
   foot: string;
   capDepth?: number;
   seed?: number;
+  /** the least distance (m) the wall's spine may stand from play (default WALL_KEEP, 60): a wall a waterfall pours from into the tarn comes close, so it says 0 */
+  keep?: number;
 };
 
 /** phase 3 (waterfall.ts): a fall down one of the scene's walls into a pool of its own at the foot */
