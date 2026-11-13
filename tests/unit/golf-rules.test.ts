@@ -6,6 +6,7 @@ import { LIE_ORDER, dropFor, gorseDrop, lieFor } from "@/components/offhours/gol
 import { YD } from "@/components/offhours/golf/scene";
 import { forgetBest } from "@/components/offhours/golf/score";
 import { stubScratchCanvas } from "./golf-headless";
+import { OLD_H2 } from "./golf-old-h2";
 
 // The area surfaces: fescue, gorse, waste and out of bounds. Their lies, what each costs, and that surfaceAt reads the
 // areas of a hole in the order the HoleDef documents.
@@ -172,7 +173,7 @@ describe("the lie order and surfaceAt", () => {
     }
   });
   it("precedence: water, out of bounds, the green and bunkers, then gorse, waste, fescue, then the fairway", () => {
-    const base = NINE_DEFS[1]; // hole 2: a green, a bunker and a pond
+    const base = OLD_H2; // the old hole 2: a green, a bunker and a pond (today's is a carry over a tarn)
     const all = (k: Area["kind"]): Area => ({ kind: k, poly: box(-80, 0, 80, 260) });
     const b = buildHole({ ...base, areas: [all("fescue"), all("waste"), all("gorse")] });
     expect(b.surfaceAt(0, 40 * YD)).toBe("gorse");

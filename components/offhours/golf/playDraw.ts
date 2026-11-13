@@ -2,12 +2,13 @@ import { display, mono } from "../font";
 import { CLUBS, at, type Shot } from "./flight";
 import { golferDrawable } from "./golfer";
 import { puttLayout, puttPaint } from "./green";
-import { CourseGame, swingLen, type HoleStat } from "./play";
+import { CourseGame, PROP_WORDS, swingLen, type HoleStat } from "./play";
 import { YD, drawWorld, prepare, project, type Cam, type Drawable, type P2 } from "./scene";
 import { MAP_WIDE, mapDraw, mapPlayed } from "./map";
 import { carryAtChip, carryAtPower, chipCarry, fullCarry } from "./swing";
 import { bestRound, overUnder, toPar } from "./score";
 import { trace } from "./tracer";
+import { eyeFor } from "./sightline";
 
 // What the course looks like: the shot view (the range's golfer, flight line and
 // world, from behind the ball and turned to the aim), the HUD, the tee card, the
@@ -79,6 +80,16 @@ const HIGH = 44, HIGH_BACK = 16;
 /** the raised camera is zoomed until the green is this tall on screen, px, as far as the width allows (about 52 m across) */
 const GREEN_PX = 72, SPAN_M = 52, GREEN_DEPTH_M = 12.5;
 
+/**
+ * 0..1: how big the drop is from the ball to the shot's target: none under 10 m, all of it from 16 m (hole 2's ledge is 30 m over
+ * its green). A shot over such a drop is not taken from the raised camera, which stands straight over the ledge and looks at the
+ * green as a map: it is taken from the golfer's eye, so the brink, the cliff's lip and the whole drop to the green are in the picture.
+ */
+const dropOf = (g: CourseGame, G: Ground, bx: number, bz: number) => {
+  const [tx, tz] = g.target();
+  return smooth(clamp((G(bx, bz) - G(tx, tz) - 10) / 6, 0, 1));
+};
+
 /** the far bank (m from the ball) of the first water the aim line crosses within 140 yd, or null */
 function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: number): number | null {
   const sf = g.hole.surfaceAt;
@@ -92,6 +103,40 @@ function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: numb
   }
   return far;
 }
+
+/** the most the eye rises to see the aim over a crest, m, and the least drop to the aim, m, that the camera looks down to */
+const PEEK_CAP = 12, DROP_MIN = 6;
+/** the point the eye must see over the ground at the aim: this high over it, m (the flag, the top of a post, a ball flying in) */
+const AIM_UP = 2;
+
+/**
+ * A crest between the eye and the aim hides it: the eye rises until it clears the crest and looks at the aim (the marker
+ * post, the landing, the flag). A long way down to the aim does the same, rising a little so the landing area is in the
+ * picture and not the slope under the tee. The change is blended in, so it does not jump as the ball or the aim moves.
+ */
+function aimSight(lo: LoRig, G: Ground, bx: number, bz: number, gb: number, dm: number, a: V, back: number): LoRig {
+  if (dm < 45) return lo;
+  const ax = bx + a[0] * dm, az = bz + a[2] * dm;
+  const gA = G(ax, az);
+  const ex = bx + lo.ex, ez = bz + lo.ez;
+  const floor = gb + lo.ey;
+  const rise = clamp(eyeFor(G, ex, ez, ax, gA + AIM_UP, az, floor) - floor, 0, PEEK_CAP);
+  const drop = gb - gA;
+  // (a drop does not raise the eye: it looks down the slope from where the golfer stands; only a crest does)
+  const lift = rise;
+  const wt = Math.max(smooth(clamp(rise / 1.5, 0, 1)), smooth(clamp((drop - DROP_MIN + 2) / 4, 0, 1)));
+  if (wt <= 0) return lo;
+  const m = (p: number, q: number) => p + (q - p) * wt;
+  // looking at the aim, the golfer stays in the picture while the eye is low enough for both (their feet no more than
+  // 15 degrees under the middle, the aim no more than 13 over it); higher than that the aim is what the picture is of
+  const eyeY = floor + lift * wt, Dh = Math.hypot(ax - ex, az - ez);
+  let p = Math.atan2(eyeY - (gA + AIM_UP), Dh);
+  const feet = Math.atan2(eyeY - gb, back) - (15 * Math.PI) / 180;
+  if (feet > p && feet - p < (13 * Math.PI) / 180) p = feet;
+  const ty = eyeY - Math.tan(p) * Dh - gA;
+  return { ...lo, ey: lo.ey + lift * wt, tx: m(lo.tx, a[0] * dm), tz: m(lo.tz, a[2] * dm), ty: m(lo.ty, ty) };
+}
+type LoRig = { ex: number; ey: number; ez: number; tx: number; ty: number; tz: number; F: number };
 
 /**
  * Where the camera stands to take a shot from (bx, bz) at `yd` yards to the target. A long shot: behind the golfer at eye
@@ -113,18 +158,47 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   let lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
   // water across the line within reach: the eye rises so that it can be seen, and looks at it
   const hz = waterAhead(g, bx, bz, yaw, dm);
-  if (hz !== null) {
+  // (the ledge's own eye, below, is for a carry over water from high above it; a dry drop looks out at the landing)
+  const drop = hz === null ? 0 : dropOf(g, G, bx, bz);
+  if (hz !== null && drop < 1) {
     const look = clamp(hz + 35, 45, Math.max(45, dm));
     lo = { ex: -a[0] * 12 + rt[0] * off, ey: 14, ez: -a[2] * 12 + rt[2] * off, tx: a[0] * look, ty: 0, tz: a[2] * look, F: F0 * 1.1 };
   }
+  // a crest in the way or a long drop to the aim: the eye rises to see it (not under water's raised eye)
+  if (hz === null) lo = aimSight(lo, G, bx, bz, gb, dm, a, back);
+  // over a big drop: the golfer's eye, a little behind, looking at the target itself
+  if (drop > 0) {
+    // (the eye is 8 m behind the golfer and rises until the line to the target clears the ground in between: the ledge's lip)
+    const ex = -a[0] * 8 + rt[0] * off, ez = -a[2] * 8 + rt[2] * off, tx = a[0] * dm, tz = a[2] * dm;
+    const tyAbs = G(bx + tx, bz + tz) - gb + 1;
+    let ey = 3.5;
+    for (; ey < 18; ey += 0.5) {
+      let clear = true;
+      for (let d = 3; d < dm - 6 && clear; d += 2) {
+        const u = d / Math.hypot(tx - ex, tz - ez), x = bx + ex + (tx - ex) * u, z = bz + ez + (tz - ez) * u;
+        if (G(x, z) - gb + 0.8 > ey + (tyAbs - ey) * u) clear = false;
+      }
+      if (clear) break;
+    }
+    // looking 20 degrees down, at the tarn half way over: the golfer, the lip, the tarn and the green (above the middle) in one picture
+    const hx = a[0] * dm * 0.5, hz2 = a[2] * dm * 0.5;
+    const aim = ey - Math.hypot(hx - ex, hz2 - ez) * 0.364 - (G(bx + hx, bz + hz2) - gb);
+    const ledge = { ex, ey, ez, tx: hx, ty: Math.max(1, aim), tz: hz2, F: F0 * 0.95 };
+    lo = { ex: lo.ex + (ledge.ex - lo.ex) * drop, ey: lo.ey + (ledge.ey - lo.ey) * drop, ez: lo.ez + (ledge.ez - lo.ez) * drop, tx: lo.tx + (ledge.tx - lo.tx) * drop, ty: lo.ty + (ledge.ty - lo.ty) * drop, tz: lo.tz + (ledge.tz - lo.tz) * drop, F: lo.F + (ledge.F - lo.F) * drop };
+  }
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole
-  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd);
+  // (a shot down a long drop is played from a golfer's eye looking down the slope, not from above it; water ahead still lifts,
+  // except over a ledge, where the ledge's own eye takes over)
+  const down = hz === null ? smooth(clamp((gb - G(bx + a[0] * dm, bz + a[2] * dm) - 5) / 7, 0, 1)) : 0;
+  const k = g.strokes === 0 && g.hole.def.par > 3 ? 0 : liftFor(yd) * (1 - Math.max(drop, down));
   if (k <= 0) return { dx: bx + lo.ex, dy: gb + lo.ey, dz: bz + lo.ez, tx: bx + lo.tx, ty: lookY(G, gb, bx + lo.tx, bz + lo.tz, lo.ty), tz: bz + lo.tz, F: lo.F };
   // the raised one
   const D = dm + HIGH_BACK;
-  const rng = Math.hypot(HIGH, D);
-  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HIGH / rng)), (w * D) / SPAN_M), F0, 4400);
-  const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HIGH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
+  // (no higher than the shot is long: a short pitch is looked at from low, a long approach from up high)
+  const HH = Math.min(HIGH, 8 + 0.4 * dm);
+  const rng = Math.hypot(HH, D);
+  const F1 = clamp(Math.min((GREEN_PX * rng) / (GREEN_DEPTH_M * (HH / rng)), (w * D) / SPAN_M), F0, 4400);
+  const hi = { ex: -a[0] * HIGH_BACK + rt[0] * 0.7, ey: HH, ez: -a[2] * HIGH_BACK + rt[2] * 0.7, tx: a[0] * dm, ty: 0, tz: a[2] * dm, F: F1 };
   const m = (p: number, q: number) => p + (q - p) * k;
   const tx = bx + m(lo.tx, hi.tx), tz = bz + m(lo.tz, hi.tz);
   return { dx: bx + m(lo.ex, hi.ex), dy: gb + m(lo.ey, hi.ey), dz: bz + m(lo.ez, hi.ez), tx, ty: lookY(G, gb, tx, tz, m(lo.ty, hi.ty)), tz, F: m(lo.F, hi.F) };
@@ -147,7 +221,7 @@ function updateCamera(g: CourseGame, dt: number, w: number, h: number, G: Ground
   if (g.phase === "fly" && sh) {
     const [tx0, tz0] = g.target();
     const yd0 = Math.hypot(tx0 - sh.ox, tz0 - sh.oz) / YD;
-    if (liftFor(yd0) > 0.5) {
+    if (liftFor(yd0) * (1 - dropOf(g, G, sh.ox, sh.oz)) > 0.5) {
       // a short shot is watched from the raised camera, which stays where it was
       rig = addressRig(g, sh.ox, sh.oz, yd0, w, h, G);
     } else {
@@ -163,6 +237,8 @@ function updateCamera(g: CourseGame, dt: number, w: number, h: number, G: Ground
       const c1: V = [land[0] - a[0] * bk + rt[0] * sd, 0, land[2] - a[2] * bk + rt[2] * sd];
       // 6 m over the landing, or over the ground under the camera if that is higher
       c1[1] = Math.max(land[1], G(c1[0], c1[2])) + 6;
+      // and high enough to see where it lands over a crest in between
+      c1[1] = Math.min(Math.max(c1[1], eyeFor(G, c1[0], c1[2], land[0], land[1] + 0.8, land[2], c1[1])), G(c1[0], c1[2]) + 16);
       const c0: V = [rig.dx, rig.dy, rig.dz];
       const dx = c0[0] + (c1[0] - c0[0]) * e, dy = c0[1] + (c1[1] - c0[1]) * e, dz = c0[2] + (c1[2] - c0[2]) * e;
       const tx = bw[0], tz = bw[2];
@@ -290,6 +366,15 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       ctx.arc(pp.x, pp.y, rad, 0, 7);
       ctx.fill();
     }
+    // what it hit: a wall, a boulder or a post, called where it struck
+    const hit = sh.prop;
+    if (hit) {
+      const ht = hitTime(sh, hit.x, hit.z);
+      const age = g.phase === "rest" ? g.restT + (sh.restT - ht) : g.shotT - ht;
+      const fade = clamp(1 - (age - 1.6) / 0.8, 0, 1) * clamp(age / 0.12, 0, 1);
+      const hx = sh.ox + hit.x, hz = sh.oz + hit.z;
+      if (fade > 0 && project(cam, hx, G(hx, hz) + 0.8, hz, pp)) tag(ctx, pp.x, pp.y - 12, `HIT ${PROP_WORDS[hit.kind].toUpperCase()}`, fade, w);
+    }
     // where it came down
     const b0 = sh.bounces[0];
     if (b0 && (g.phase === "rest" || g.shotT >= b0.t)) {
@@ -298,6 +383,16 @@ function shotView(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: nu
       if (fade > 0 && project(cam, sh.ox + b0.x, G(sh.ox + b0.x, sh.oz + b0.z), sh.oz + b0.z, pp)) tag(ctx, pp.x, pp.y - Math.max(18, 4 * pp.s), `${Math.round(sh.carry)} YD CARRY`, fade, w);
     }
   }
+}
+
+/** the time a shot struck the thing it hit, s: when it passed nearest the point (relative to the origin) */
+function hitTime(sh: Shot, x: number, z: number) {
+  let best = Infinity, t = 0;
+  for (let i = 0; i < sh.n; i++) {
+    const d = Math.hypot(sh.pts[i * 4 + 1] - x, sh.pts[i * 4 + 3] - z);
+    if (d < best) [best, t] = [d, sh.pts[i * 4]];
+  }
+  return t;
 }
 
 /**
@@ -693,7 +788,8 @@ function backdrop(ctx: CanvasRenderingContext2D, w: number, h: number, a: number
 /** the hole's name and numbers; `low` puts it near the bottom, out of the flyover's way */
 function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: number, low = false) {
   const d = g.hole.def;
-  const bw = Math.min(420, w - 24), bh = 120;
+  const calls = g.callouts();
+  const bw = Math.min(420, w - 24), bh = calls.length ? 138 : 120;
   const x = w / 2 - bw / 2, y = low ? Math.max(8, h - bh - Math.min(48, h * 0.08)) : Math.max(h * 0.22, 80);
   panel(ctx, x, y, bw, bh);
   ctx.textAlign = "center";
@@ -704,8 +800,12 @@ function teeCard(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: num
   ctx.fillStyle = PAPER;
   ctx.fillText(`HOLE ${d.n} · PAR ${d.par} · ${d.yards} YD`, w / 2, y + 68);
   mono(ctx, 10);
+  if (calls.length) {
+    ctx.fillStyle = GOLD;
+    ctx.fillText(calls.join(" · ").toUpperCase(), w / 2, y + 92);
+  }
   ctx.fillStyle = DIM;
-  ctx.fillText(g.phaseT < 0.6 ? "" : g.touch || w < 560 ? "TAP TO START" : "ANY KEY TO START", w / 2, y + 98);
+  ctx.fillText(g.phaseT < 0.6 ? "" : g.touch || w < 560 ? "TAP TO START" : "ANY KEY TO START", w / 2, y + (calls.length ? 120 : 98));
   ctx.textAlign = "left";
 }
 

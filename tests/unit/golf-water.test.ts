@@ -4,6 +4,7 @@ import { YD } from "@/components/offhours/golf/scene";
 import { onDeck } from "@/components/offhours/golf/solids";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { riffles, waterStakes } from "@/components/golf3d/water3d";
+import { OLD_H2 } from "./golf-old-h2";
 
 // Water in play: a creek dug into the ground, ponds with natural shores, lakes drawn from a polygon. The hit test, the
 // drawn outline and the dig all share one shape.
@@ -54,7 +55,7 @@ describe("a creek", () => {
 });
 
 describe("a pond with a natural shore", () => {
-  const d = HOLE_DEFS[1], pond = d.water[0] as { x: number; z: number; lobe?: number };
+  const d = OLD_H2, pond = d.water[0] as { x: number; z: number; lobe?: number };
   const b = buildHole(d);
   const t = terrainOf(b);
   it("is lobed, and its drawn shore is where the ball is lost", () => {

@@ -207,8 +207,9 @@ export function buildProps3D(hole: BuiltHole, ground: PropGround, tier: Tier, di
         for (const side of [-1, 1]) {
           const x = p.at[0] * YD + side * sx, z = p.at[1] * YD + side * sz;
           const y0 = low(x, z, 0.3) - 0.1;
-          box(x, y0, z, 0.55, 1.6, 0.55, p.yaw + 0.05 * side, "#a39f94", { jit: 0.05, seed: pi, vary: 0.16 });
-          box(x, y0 + 1.6, z, 0.76, 0.14, 0.76, p.yaw + 0.05 * side, "#b7b1a2", { jit: 0.03, seed: pi + 1, moss: 0.3 });
+          const ph = p.h ?? 1.6, pw = ph > 2.5 ? 0.9 : 0.55;
+          box(x, y0, z, pw, ph, pw, p.yaw + 0.05 * side, "#a39f94", { jit: 0.05, seed: pi, vary: 0.16 });
+          box(x, y0 + ph, z, pw * 1.38, 0.14 + (ph - 1.6) * 0.04, pw * 1.38, p.yaw + 0.05 * side, "#b7b1a2", { jit: 0.03, seed: pi + 1, moss: 0.3 });
         }
         break;
       }

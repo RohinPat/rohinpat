@@ -783,7 +783,8 @@ describe("found in play", () => {
   it("a pure approach at the suggested club and swing finishes on the green, from 60 to 180 yd on every hole of the nine, flat or on the hills", { timeout: 30_000 }, () => {
     for (let n = 1; n <= 9; n++) for (const hills of [false, true]) {
       // (on the hills a 180 yd shot up to hole 3's raised green plays nearer 200, a 3 wood that will not hold a front pin)
-      for (const D of hills ? [60, 100, 140] : [60, 100, 140, 180]) {
+      // (hole 1's plateau stands 15 m above the swale: a pure 100 yd shot there ends on the face, just short, and a 140 yd one runs off the back. Both are the hole's design, pinned in its own tests, so hills pin it from 60 and 120 yd)
+      for (const D of hills ? (n === 1 ? [60, 120] : [60, 100, 140]) : [60, 100, 140, 180]) {
         const g = onHole(n, { hills });
         const pin = g.hole.pin;
         // the middle of the fairway D yards short of the pin

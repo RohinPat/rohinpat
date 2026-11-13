@@ -43,8 +43,8 @@ describe("the scrub mesh", () => {
     expect(buildScrub(h5, ground, "low", sink)!.calls).toBe(2);
     expect(buildScrub(h5, ground, "soft", sink)).toBeNull();
     expect(buildScrub(h3, terrainOf(h3), "high", sink)).toBeNull();
-    // a hole with only fescue (hole 1's band) is one call
-    expect(buildScrub(h1, terrainOf(h1), "high", sink)!.calls).toBe(1);
+    // hole 1 has both too: fescue on the flanks of its face and a waste scrape in the right rough
+    expect(buildScrub(h1, terrainOf(h1), "high", sink)!.calls).toBe(2);
     sink.forEach((d) => d.dispose());
   });
   it("stays inside its budget: under 24k triangles on the best tier (hole 5 draws about 15k), fewer on the phone's", () => {

@@ -15,6 +15,7 @@ import { YD } from "./scene";
 //   shelf    a flat raised oval with a steep face: an elevated green's plateau
 //   face     a steep bank along a path: the ground steps up (or down) across it
 //   terrace  a run of faces and flat treads, one above the next
+//   cliff    a rock face, near vertical, with a scree apron at its foot: a drop of 15 to 40 m in a few yards
 //
 // Heights are metres above (below) the ground the line makes there. Everything
 // is a pure function of x and z (metres, the hole's frame), so a feature costs
@@ -23,6 +24,7 @@ import { YD } from "./scene";
 type Pt = [number, number];
 
 export type Feature =
+  | CliffFeature
   | {
       k: "ridge";
       path: Pt[];
@@ -103,6 +105,45 @@ export type Feature =
       fade?: number;
     };
 
+/**
+ * A cliff: the ground on one side of a line falls away by `drop` metres in a few yards, a rock face with a talus apron
+ * below it. Everything is in the hole's own units (yards for places and widths, metres for heights).
+ *
+ *   path     the brink, 2 or more points. The ground on its LEFT (looking along it, on the plan with +z up) is the low side:
+ *            walk the brink with the high ground on your right. A `closed` path joins its last point to its first: a knoll
+ *            or a pillar when the high ground is inside (walk it clockwise), a pit when it is outside.
+ *   drop     how far the low side lies under the high side, m. The low side stays that much lower for `reach` yd (default
+ *            400) past the face; along an open path the face fades out `fade` yd (default 14) past its ends, so an open
+ *            cliff should run off the hole's box or into rock
+ *   run      the face's horizontal run from brink to foot, yd (default 3: a 30 m drop is about 85 degrees)
+ *   talus    the scree apron under the face, yd (default 14), and `scree`, the share of the drop it takes (default 0.12)
+ *   ledges   how many bands of strata the face is carved with (default 5)
+ *
+ * What a cliff gives the rest of the engine:
+ * - terrain.ts adds its height like any feature, and a lake does not level the ground a cliff has dropped (`Compiled.held`).
+ *   Give the hole `ground.cell` of 0.75, so the 1.5 m grid the ground is baked on is not coarser than the face;
+ * - course.ts's surfaceAt calls the face rock (`Compiled.rock`): "out" for a ball that stops on it;
+ * - flight.ts treats a rolling ball on ground steeper than STEEP_FALL as falling, and a ball that stops on ground steeper
+ *   than STEEP_REST as unplayable (a drop zone, `HoleDef.drops`, or the nearest flat ground);
+ * - the 3D course (cliff3d.ts) draws the face as a mesh of its own with rock strata and sinks the ground mesh beneath it.
+ * Keep a cliff's face out of the tee's flat and ease (`teeFlat + teeEase` m) and out of the green's pad: they level the
+ * ground there. Holes 3 and 9 build their ravine wall and their sea cliff the same way.
+ */
+export type CliffFeature = {
+  k: "cliff";
+  path: Pt[];
+  closed?: boolean;
+  drop: number;
+  run?: number;
+  talus?: number;
+  scree?: number;
+  ledges?: number;
+  reach?: number;
+  fade?: number;
+  /** the crags' and strata's own random hand */
+  seed?: number;
+};
+
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 /** 1 at 0, falling to 0 at 1 along a cosine */
 export const bell = (u: number) => (u <= 0 ? 1 : u >= 1 ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * u));
@@ -159,9 +200,28 @@ export type Compiled = {
   bounds: { k: Feature["k"]; box: [number, number, number, number] }[];
   /** how near a feature's influence a point is: true inside any bounding box grown by `m` */
   near: (x: number, z: number, m: number) => boolean;
+  /** 0..1: how much of a cliff's drop the ground has taken at a point. A lake does not level ground that is held */
+  held: (x: number, z: number) => number;
+  /** true on a cliff's rock face (brink to the foot of the rock, not the scree below it) */
+  rock: (x: number, z: number) => boolean;
+  /** the cliffs, in metres, for the 3D course to build their faces from */
+  cliffs: CliffGeo[];
 };
 
-const none: Compiled = { y: () => 0, pot: () => null, fine: () => 0, bounds: [], near: () => false };
+/** a cliff in metres, as cliff3d.ts builds it: `c` is the distance out from the brink (+ on the low side), `frac` the share of the drop taken at c */
+export type CliffGeo = {
+  path: Pt[];
+  closed: boolean;
+  drop: number;
+  run: number;
+  talus: number;
+  ledges: number;
+  seed: number;
+  frac: (c: number) => number;
+  at: (x: number, z: number) => { c: number; along: number };
+};
+
+const none: Compiled = { y: () => 0, pot: () => null, fine: () => 0, bounds: [], near: () => false, held: () => 0, rock: () => false, cliffs: [] };
 
 export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker[]): Compiled {
   if (!features?.length) return none;
@@ -177,13 +237,49 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
     return [e.x - R, e.z - R, e.x + R, e.z + R];
   };
 
-  type Term = { k: Feature["k"]; box: [number, number, number, number]; fineBox?: [number, number, number, number]; y: (x: number, z: number) => number; zone?: (x: number, z: number, margin: number) => boolean };
+  type Term = { k: Feature["k"]; box: [number, number, number, number]; nearBox?: [number, number, number, number]; fineBox?: [number, number, number, number]; y: (x: number, z: number) => number; zone?: (x: number, z: number, margin: number) => boolean };
   const terms: Term[] = [];
   const pots = new Map<number, (x: number, z: number) => number>();
   const potTerms: Term[] = [];
+  const cliffs: CliffGeo[] = [];
 
   for (const f of features) {
     switch (f.k) {
+      case "cliff": {
+        const path = mp(f.path), closed = !!f.closed;
+        const run = m(f.run ?? 3), talus = m(f.talus ?? 14), scree = f.scree ?? 0.12, reach = m(f.reach ?? 400), fade = m(f.fade ?? 14);
+        // the share of the drop at c metres out from the brink: the face, then the talus
+        const frac = (c: number) => (1 - scree) * smooth(c / run) + scree * smooth((c - run * 0.7) / talus);
+        // (the low side is on the left of the path: + s)
+        const at = (x: number, z: number) => {
+          const i = pathInfo(path, x, z, closed);
+          // (the true distance to the brink, signed: round a corner it is longer than the distance to either segment's line; past the end of
+          // an open path the face runs straight on, fading, so there it is the lateral distance)
+          return { c: i.over !== 0 ? i.s : i.s >= 0 ? i.d : -i.d, along: closed ? 1 : 1 - smooth(i.over / fade) };
+        };
+        cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, frac, at });
+        // the zone the face and its apron cover, for the mesh and for "near": the path grown by the apron
+        const apron = run + talus + 4;
+        terms.push({
+          k: f.k,
+          // the low side reaches far (a closed cliff: everywhere), so its height is asked of every point
+          box: closed ? [-1e6, -1e6, 1e6, 1e6] : boxOf(path, reach + fade),
+          nearBox: boxOf(path, apron),
+          fineBox: boxOf(path, apron),
+          y: (x, z) => {
+            const a = at(x, z);
+            if (a.c <= -run * 4 || a.along <= 0) return 0;
+            // far out on the low side the drop holds, to `reach`, then it lifts again
+            const back = a.c < run + talus ? 1 : 1 - smooth((a.c - reach) / reach);
+            return -f.drop * frac(a.c) * a.along * back;
+          },
+          zone: (x, z, margin) => {
+            const a = at(x, z);
+            return a.along > 0 && a.c > -4 - margin && a.c < apron + margin;
+          },
+        });
+        break;
+      }
       case "ridge": {
         const path = mp(f.path), w = m(f.w), flat = f.flat ?? 0, closed = !!f.closed;
         terms.push({
@@ -327,7 +423,23 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
         }
       return lvl;
     },
-    bounds: all.map((t) => ({ k: t.k, box: t.box })),
-    near: (x, z, g) => all.some((t) => inBox(t.box, x, z, g)),
+    bounds: all.map((t) => ({ k: t.k, box: t.nearBox ?? t.box })),
+    near: (x, z, g) => all.some((t) => inBox(t.nearBox ?? t.box, x, z, g)),
+    held: (x, z) => {
+      let h = 0;
+      for (const g of cliffs) {
+        const a = g.at(x, z);
+        if (a.along > 0) h = Math.max(h, smooth(g.frac(a.c) / 0.02) * a.along);
+      }
+      return h;
+    },
+    rock: (x, z) => {
+      for (const g of cliffs) {
+        const a = g.at(x, z);
+        if (a.along > 0.03 && a.c > -1 && a.c < g.run + 0.6) return true;
+      }
+      return false;
+    },
+    cliffs,
   };
 }

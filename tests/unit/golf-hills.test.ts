@@ -26,13 +26,15 @@ describe("the ground's shape", () => {
       const t = terrainOf(h);
       expect(Math.abs(t.y(0, 0)), `hole ${h.def.n}`).toBeLessThan(0.5);
       const rise = h.def.ground!.rise;
-      const [s, want] = rise[rise.length - 1];
-      // the green's pad is near the height the line has there
+      const [s, line] = rise[rise.length - 1];
+      // the green's pad is near the height the line has there (and a cliff's drop, if the green is below one: hole 2's 30 m)
+      const [gx, gz] = h.fromGreen(GW / 2, GH / 2);
+      const want = line + t.fx.y(gx, gz);
       expect(Math.abs(t.pad - want), `hole ${h.def.n}`).toBeLessThan(1.5);
       void s;
     }
-    // a long way down on 2, up on 3
-    expect(terrainOf(holes[1]).pad).toBeLessThan(-6);
+    // a long way down on 2 (30 m, off the cliff), up on 3
+    expect(terrainOf(holes[1]).pad).toBeLessThan(-27);
     expect(terrainOf(holes[2]).pad).toBeGreaterThan(7);
   });
 
@@ -53,6 +55,18 @@ describe("the ground's shape", () => {
     }
   });
 
+  it("a cliff is the one place the ground may be steeper than 0.6, and it is rock there (E9)", { timeout: 30_000 }, () => {
+    for (const h of holes) {
+      const t = terrainOf(h);
+      if (!t.fx.cliffs.length) continue;
+      const b = h.shape.box;
+      for (let z = b.z0; z <= b.z1; z += 1.1)
+        for (let x = b.x0; x <= b.x1; x += 1.1) {
+          if (Math.hypot(...t.slope(x, z)) > 0.6 && waterWithin(h.surfaceAt, x, z, 2.5) === null) expect(t.fx.rock(x, z), `hole ${h.def.n} at ${x.toFixed(1)}, ${z.toFixed(1)}`).toBe(true);
+        }
+    }
+  });
+
   it("the tee and the green sit level; sand and water are dug in", () => {
     for (const h of holes) {
       const t = terrainOf(h);
@@ -68,9 +82,11 @@ describe("the ground's shape", () => {
         expect(t.y(x, z), `hole ${h.def.n} sand`).toBeLessThan((t.y(x + off, z) + t.y(x - off, z)) / 2 - 0.15);
       }
     }
-    const pond = holes[1].def.water[0] as { x: number; z: number };
+    // hole 2's tarn is dug 2.6 m under the ground at its shore
+    const ring = holes[1].world.water[0];
+    const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
     const t = terrainOf(holes[1]);
-    expect(t.waterY(pond.x * YD, pond.z * YD)).toBeGreaterThan(t.y(pond.x * YD, pond.z * YD));
+    expect(t.waterY(mx, mz) - t.y(mx, mz)).toBeGreaterThan(2);
   });
 });
 
@@ -163,7 +179,7 @@ describe("what a shot plays like", () => {
     const g2 = new CourseGame({ seed: 3, hills: true, holes: [HOLE_DEFS[1]] });
     g2.wind = [0, 0];
     expect(g2.playsLike()!).toBeLessThan(g2.yardsToPin() - 4);
-    const up: HoleDef = { ...HOLE_DEFS[1], n: 12, water: [], props: undefined, ground: { rise: [[0, 0], [24, 0], [55, 4], [95, 8], [137, 9]], swell: 0.3, sigma: 9 } };
+    const up: HoleDef = { ...HOLE_DEFS[1], n: 12, water: [], props: undefined, features: undefined, drops: undefined, ground: { rise: [[0, 0], [24, 0], [55, 4], [95, 8], [137, 9]], swell: 0.3, sigma: 9 } };
     const g5 = new CourseGame({ seed: 3, hills: true, holes: [up] });
     g5.wind = [0, 0];
     expect(g5.playsLike()!).toBeGreaterThan(g5.yardsToPin() + 3);
