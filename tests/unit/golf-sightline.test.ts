@@ -47,8 +47,10 @@ describe("the tee card's call-outs", () => {
     expect(calloutsOf(buildHole(def(7)))).toEqual(["climbs 11 m, drops 15 m"]);
     expect(calloutsOf(buildHole(def(2)))).toEqual(["drops 13 m"]);
     expect(calloutsOf(buildHole(def(3)))).toEqual(["climbs 9 m"]);
-    // flat enough: nothing is said
-    expect(calloutsOf(buildHole(def(6)))).toEqual([]);
+    // hole 6's cape: the tee stands over the flats, and the arm of the tide is carried on the line to the pin
+    expect(calloutsOf(buildHole(def(6)))).toEqual(["drops 21 m", "carry 155 to clear"]);
+    // flat enough, and nothing across the line: nothing is said
+    expect(calloutsOf(buildHole(def(8)))).toEqual([]);
   });
   it("follow the numbers: a taller crest says so, with no typed text", () => {
     const d7 = def(7);

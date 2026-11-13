@@ -5,7 +5,7 @@ import { blend, poseFor, type Pose } from "./golfer";
 import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, zone, type Putt, type PuttEnv } from "./green";
 import { bothLies, dropFor, lieFor, slopeLie, slopeWords } from "./lie";
 import { FLAT, terrainOf, type Terrain } from "./terrain";
-import { solidsOf, type Solid } from "./solids";
+import { solidsOf, withDecks, type Solid } from "./solids";
 import { calloutsOf } from "./sightline";
 import type { RemoteShot } from "./remoteSwing";
 import { TARGETS, YD, newCam, type Cam } from "./scene";
@@ -313,7 +313,7 @@ export class CourseGame {
   private startHole(i: number) {
     this.idx = i;
     this.hole = buildHole(this.defs[i]);
-    this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
+    this.terrain = this.opts.hills ? withDecks(terrainOf(this.hole), this.hole.def.props) : FLAT;
     this.ball = [0, 0];
     this.lie = "fairway";
     this.strokes = 0;
@@ -405,7 +405,7 @@ export class CourseGame {
     if (this.balls > 0 && this.balls % GREEN_BALLS === 0) {
       this.idx = (this.idx + 1) % this.defs.length;
       this.hole = buildHole(this.defs[this.idx]);
-      this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
+      this.terrain = this.opts.hills ? withDecks(terrainOf(this.hole), this.hole.def.props) : FLAT;
       this.camReady = false;
     }
     const H = this.hole.green;

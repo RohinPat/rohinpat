@@ -98,7 +98,16 @@ test("on the green a pull-back putts the ball, through the 3D camera when there 
   await expect(page.locator("[data-golf-phase]")).toHaveAttribute("data-golf-phase", "putt", SLOW);
   type P = { putt: { strokes: number; proj: object | null; ball: { moving: boolean } } };
   const gl = await page.evaluate(() => !!(window as unknown as { __golf3d: unknown }).__golf3d);
-  if (gl) await expect.poll(() => page.evaluate(() => !!((window as unknown as Win).__golf as unknown as P).putt.proj), SLOW).toBe(true);
+  if (gl) {
+    await expect.poll(() => page.evaluate(() => !!((window as unknown as Win).__golf as unknown as P).putt.proj), SLOW).toBe(true);
+    // the camera eases in from the tee: a pull measured on screen waits until the ball has come down the frame (the camera puts it about 70% of the way down)
+    await expect
+      .poll(() => page.evaluate(() => {
+        const g = (window as unknown as Win).__golf as unknown as { putt: { ball: { x: number; y: number }; proj: { toScreen: (x: number, y: number) => { y: number } } } };
+        return g.putt.proj.toScreen(g.putt.ball.x, g.putt.ball.y).y / window.innerHeight;
+      }), SLOW)
+      .toBeGreaterThan(0.6);
+  }
   const box = (await page.locator("canvas[data-autofocus]").boundingBox())!;
   const x = box.x + box.width / 2, y = box.y + box.height * 0.4;
   await page.mouse.move(x, y);

@@ -61,6 +61,8 @@ export type Prop =
       b: P;
       /** deck width, m, default 2.6 */
       w?: number;
+      /** a stone bridge: the deck is cambered this much above a flat run between the banks (m, default 0) and drawn in stone */
+      arch?: number;
     }
   | {
       /** a pair of stone gateposts with the gap between them (m) along `yaw` (0 runs down the course, positive to the right) */
@@ -68,6 +70,8 @@ export type Prop =
       at: P;
       yaw: number;
       gap: number;
+      /** the posts' height, m (default 1.6) */
+      h?: number;
     }
   | { kind: "reeds"; at: P; r: number; n: number; seed?: number }
   | { kind: "tuft"; at: P; r: number; n: number; seed?: number }
@@ -96,7 +100,12 @@ export type Solid = {
 };
 
 /** the ground a prop stands on: the height, and the water's surface where there is any */
-export type PropGround = { y: (x: number, z: number) => number; waterY?: (x: number, z: number) => number };
+export type PropGround = {
+  y: (x: number, z: number) => number;
+  waterY?: (x: number, z: number) => number;
+  /** the ground without any bridge decks on it (set by `withDecks`): a deck is measured from this */
+  base?: PropGround;
+};
 
 // ------------------------------------------------------------------ shared geometry
 
@@ -167,18 +176,122 @@ export type BridgeShape = {
   w: number;
   /** the deck's top, m: above both banks and above the water between them, however deep the channel is carved */
   deckY: number;
+  /** a cambered (stone) deck: the rise of its middle over the run between its ends, m; 0 for a flat footbridge */
+  arch: number;
+  /** the ground at each end, m (an arched deck starts and ends on it) */
+  yA: number;
+  yB: number;
 };
 export const DECK_THICK = 0.18;
 export const RAIL_H = 1.0;
 
 /** where a bridge's deck lies on a ground: clear of the higher bank by half a metre and of the water's surface by a metre */
-export function bridgeShape(p: Extract<Prop, { kind: "bridge" }>, g: PropGround): BridgeShape {
+export function bridgeShape(p: Extract<Prop, { kind: "bridge" }>, gr: PropGround): BridgeShape {
+  const g = gr.base ?? gr;
   const ax = p.a[0] * YD, az = p.a[1] * YD, bx = p.b[0] * YD, bz = p.b[1] * YD;
   const len = Math.hypot(bx - ax, bz - az) || 1;
   const ux = (bx - ax) / len, uz = (bz - az) / len;
-  let deckY = Math.max(g.y(ax, az), g.y(bx, bz)) + 0.5;
-  if (g.waterY) for (const k of [0.25, 0.4, 0.5, 0.6, 0.75]) deckY = Math.max(deckY, g.waterY(ax + (bx - ax) * k, az + (bz - az) * k) + 1);
-  return { ax, az, bx, bz, ux, uz, nx: uz, nz: -ux, len, w: p.w ?? 2.6, deckY };
+  const yA = g.y(ax, az), yB = g.y(bx, bz);
+  const marks = [0.25, 0.4, 0.5, 0.6, 0.75];
+  let deckY = Math.max(yA, yB) + 0.5;
+  let arch = 0;
+  if ((p.arch ?? 0) > 0) {
+    // a stone arch springs from the ground at both ends and rises to its crown; it clears the water by a metre
+    arch = p.arch!;
+    if (g.waterY)
+      for (const k of marks) {
+        const chord = yA + (yB - yA) * k;
+        arch = Math.max(arch, (g.waterY(ax + (bx - ax) * k, az + (bz - az) * k) + 1 - chord) / (4 * k * (1 - k)));
+      }
+    deckY = (yA + yB) / 2 + arch;
+  } else if (g.waterY) for (const k of marks) deckY = Math.max(deckY, g.waterY(ax + (bx - ax) * k, az + (bz - az) * k) + 1);
+  return { ax, az, bx, bz, ux, uz, nx: uz, nz: -ux, len, w: p.w ?? 2.6, deckY, arch, yA, yB };
+}
+
+/** the top of a bridge's deck, m, a share `u` (0..1) of the way from a to b: flat, or an arch rising from the ground at both ends */
+export function deckTop(b: BridgeShape, u: number) {
+  return b.arch > 0 ? b.yA + (b.yB - b.yA) * u + b.arch * 4 * u * (1 - u) : b.deckY;
+}
+
+/** a bridge's deck as the ball meets it: where it lies (between the rails), and how high its top is there */
+export type Deck = { shape: BridgeShape; top: (x: number, z: number) => number | null };
+
+const decksMemo = new WeakMap<object, WeakMap<object, Deck[]>>();
+/** the decks of a hole's bridges on a ground (the same array for the same props and ground) */
+export function decksOf(props: Prop[] | undefined, ground: PropGround): Deck[] {
+  if (!props) return [];
+  let byGround = decksMemo.get(props);
+  if (!byGround) decksMemo.set(props, (byGround = new WeakMap()));
+  const key = ground.base ?? ground;
+  const got = byGround.get(key);
+  if (got) return got;
+  const out: Deck[] = [];
+  for (const p of props)
+    if (p.kind === "bridge") {
+      const shape = bridgeShape(p, key);
+      const top = (x: number, z: number) => {
+        const dx = x - shape.ax, dz = z - shape.az;
+        const along = dx * shape.ux + dz * shape.uz, across = dx * shape.nx + dz * shape.nz;
+        if (along < 0 || along > shape.len || Math.abs(across) > shape.w / 2) return null;
+        return deckTop(shape, along / shape.len);
+      };
+      out.push({ shape, top });
+    }
+  byGround.set(key, out);
+  return out;
+}
+
+/** true if a point (metres) is on a bridge's deck: geometry only, no heights (course.ts reads the surface with it) */
+export function onDeck(props: Prop[] | undefined, x: number, z: number) {
+  if (!props) return false;
+  for (const p of props)
+    if (p.kind === "bridge") {
+      const ax = p.a[0] * YD, az = p.a[1] * YD, bx = p.b[0] * YD, bz = p.b[1] * YD;
+      const len = Math.hypot(bx - ax, bz - az) || 1;
+      const ux = (bx - ax) / len, uz = (bz - az) / len;
+      const dx = x - ax, dz = z - az;
+      const along = dx * ux + dz * uz, across = dx * uz - dz * ux;
+      if (along >= 0 && along <= len && Math.abs(across) <= (p.w ?? 2.6) / 2) return true;
+    }
+  return false;
+}
+
+type Grounded = PropGround & { slope: (x: number, z: number) => [number, number] };
+
+const deckedMemo = new WeakMap<object, WeakMap<object, Grounded>>();
+/**
+ * A ground with a hole's bridge decks on it: over a deck the height is the deck's top, so a ball that lands on the bridge
+ * bounces and rolls on it (flight.ts reads only y and slope), and a ball at rest there, and the golfer, stand on it. Everywhere
+ * else it is the ground itself. Only the ball and what stands on the bridge use it: the mesh, the creek's carve and the
+ * bridge's own measuring stay on the ground (`base`). A hole with no bridge gives the ground back.
+ */
+export function withDecks<G extends Grounded>(ground: G, props: Prop[] | undefined): G {
+  if (!props || !props.some((p) => p.kind === "bridge")) return ground;
+  let byProps = deckedMemo.get(ground);
+  if (!byProps) deckedMemo.set(ground, (byProps = new WeakMap()));
+  const got = byProps.get(props);
+  if (got) return got as G;
+  const decks = decksOf(props, ground);
+  const y = (x: number, z: number) => {
+    for (const d of decks) {
+      const t = d.top(x, z);
+      if (t !== null) return t;
+    }
+    return ground.y(x, z);
+  };
+  const E = 0.2;
+  const out = {
+    ...ground,
+    base: ground,
+    y,
+    deck: (x: number, z: number) => decks.some((d) => d.top(x, z) !== null),
+    slope: (x: number, z: number): [number, number] => {
+      for (const d of decks) if (d.top(x, z) !== null) return [(y(x + E, z) - y(x - E, z)) / (2 * E), (y(x, z + E) - y(x, z - E)) / (2 * E)];
+      return ground.slope(x, z);
+    },
+  };
+  byProps.set(props, out);
+  return out as G;
 }
 
 // ------------------------------------------------------------------ what the ball can hit
@@ -208,7 +321,7 @@ export function solidsOf(props: Prop[] | undefined, ground: PropGround): Solid[]
       const sx = Math.sin(p.yaw) * p.gap / 2, sz = Math.cos(p.yaw) * p.gap / 2;
       for (const s of [-1, 1]) {
         const x = p.at[0] * YD + s * sx, z = p.at[1] * YD + s * sz;
-        out.push({ kind: "gatepost", ax: x, az: z, bx: x, bz: z, r: 0.3, h: 1.6, e: 0.3 });
+        out.push({ kind: "gatepost", ax: x, az: z, bx: x, bz: z, r: 0.3, h: p.h ?? 1.6, e: 0.3 });
       }
     } else if (p.kind === "bridge") {
       const b = bridgeShape(p, ground);
@@ -222,7 +335,7 @@ export function solidsOf(props: Prop[] | undefined, ground: PropGround): Solid[]
           r: 0.14,
           h: RAIL_H,
           e: 0.35,
-          y0: b.deckY,
+          y0: b.arch > 0 ? Math.min(b.yA, b.yB) : b.deckY,
           y1: b.deckY + RAIL_H,
         });
     }

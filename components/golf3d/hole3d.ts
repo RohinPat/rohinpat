@@ -4,12 +4,14 @@ import { seeded } from "@/components/offhours/useCanvas";
 import { treeClear, type BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
+import { withDecks } from "@/components/offhours/golf/solids";
 import { buildGreen, buildPin, greenSink } from "./green3d";
 import { buildProps3D } from "./props3d";
 import { buildGorse } from "./gorse3d";
 import { prepareScenery, type Skin } from "./scenery";
 import { buildWater } from "./water3d";
 import { paintAreas } from "./areas3d";
+import { buildScrub } from "./scrub3d";
 
 // One hole as a three.js scene, built from what course.ts already knows about it.
 // The hole's surfaces (fairway stripes, rough, sand, water, the green) are painted
@@ -109,12 +111,14 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     pts.forEach(([x, z], i) => (i ? c.lineTo(tx(x), tz(z)) : c.moveTo(tx(x), tz(z))));
     c.closePath();
   };
-  c.fillStyle = COL.deep;
+  // (a scene can paint the ground beyond the rough in its own colour: dune country, with no woods to stand in)
+  const out = scn.rec.palette?.paintOut ? scn.rec.palette.base : COL.deep;
+  c.fillStyle = out;
   c.fillRect(0, 0, cw, ch);
   // the rough, with a soft darker band where it meets the woods
   c.lineJoin = "round";
   path(hole.shape.rough);
-  c.strokeStyle = "#356c35";
+  c.strokeStyle = scn.rec.palette?.paintOut ? "#6b8a47" : "#356c35";
   c.lineWidth = 3.5 * s;
   c.stroke();
   c.fillStyle = COL.rough;
@@ -266,7 +270,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
     uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
     // the hills are tinted by their height over the hole's ground: brighter and yellower higher up
-    scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+    scn.tint(x, z, y, ground.y(x, z), out, hill);
     col[k * 3] = hill[0]; col[k * 3 + 1] = hill[1]; col[k * 3 + 2] = hill[2];
     k++;
   };
@@ -302,7 +306,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
         const x = vx(a), z = vz(b), y = hgt(a, b);
         pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
         uv[k * 2] = (x - X0) / W; uv[k * 2 + 1] = (z - Z0) / L;
-        scn.tint(x, z, y, ground.y(x, z), COL.deep, hill);
+        scn.tint(x, z, y, ground.y(x, z), out, hill);
         // a steep face shows bare: a warm sod and earth, in bands like stacked turf
         const [sx, sz] = ground.slope(x, z);
         const st = smooth(0.45, 1.1, Math.hypot(sx, sz));
@@ -394,6 +398,11 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     const gs = buildGorse(hole, ground, opts.tier ?? "high", disposables);
     if (gs) group.add(gs);
   }
+  // ---------------------------------------------------------------- waste scrub and long grass, standing in their areas
+  {
+    const sb = buildScrub(hole, ground, opts.tier ?? "high", disposables);
+    if (sb) group.add(sb.group);
+  }
 
   // ---------------------------------------------------------------- the backdrop: far mountains, sea, rock
   {
@@ -460,7 +469,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     group,
     targetFlags,
     heightAt,
-    surfaceY: ground.y,
+    surfaceY: withDecks(ground, hole.def.props).y,
     waterY: ground.waterY,
     flag,
     cloth,
