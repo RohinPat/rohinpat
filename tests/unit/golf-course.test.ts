@@ -55,7 +55,8 @@ const MARKERS: Record<number, string[]> = {
   6: ["100", "150", "200"],
   7: ["100", "100", "150", "200", "200"],
   8: ["100", "100", "150", "150", "200", "200"],
-  9: ["100", "100", "150", "150", "200", "200"],
+  // (hole 9's second 150 and 200 stand in the cove's water, so they are left out)
+  9: ["100", "100", "150", "200"],
 };
 
 describe("course data", () => {
@@ -96,13 +97,15 @@ describe("course data", () => {
           const [x, z] = pointAt(def, d);
           const sf = b.surfaceAt(x * YD, z * YD);
           if (sf === "water") wet++;
-          // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them)
-          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
+          // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them;
+          // hole 9's cove neck has rock faces on both banks, which the line crosses at the brink)
+          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : def.n === 9 ? ["fairway", "fringe", "green", "rough", "out"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
-        // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second) and hole 6's arm of the tide (about 45 yd) are across the line
-        expect(wet > 0).toBe(def.n === 4 || def.n === 6);
+        // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second), hole 6's arm of the tide (about 45 yd) and hole 9's cove neck (about 30 yd) are across the line
+        expect(wet > 0).toBe(def.n === 4 || def.n === 6 || def.n === 9);
         if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
         if (def.n === 6) expect(wet * 2).toBeGreaterThanOrEqual(40);
+        if (def.n === 9) expect(wet * 2).toBeGreaterThanOrEqual(24);
       });
       it("every hazard is where it says it is", () => {
         for (const w of def.water) {
@@ -117,14 +120,17 @@ describe("course data", () => {
         // (hole 2's basin is open fescue to 96 yd either side)
         if (def.n === 2) return;
         // (hole 6's fairway fans out wide at the arm: its woods are further out)
-        const [wx, wz] = def.n === 6 ? [100, 60] : [60, 100];
+        // (hole 9's cleared turf runs to 110 yd on the right, so its woods are asked for beyond it)
+        const [wx, wz] = def.n === 6 ? [100, 60] : def.n === 9 ? [130, 100] : [60, 100];
         expect(b.surfaceAt(wx * YD, wz * YD)).toBe("out");
-        expect(b.surfaceAt(-wx * YD, wz * YD)).toBe("out");
+        // (hole 9's left is the cliff and the cove, not woods: its right and its far end are the woods)
+        if (def.n !== 9) expect(b.surfaceAt(-wx * YD, wz * YD)).toBe("out");
         expect(b.surfaceAt(0, 600 * YD)).toBe("out");
       });
       it("a ball in the woods is dropped on ground in play, a little inside the edge", () => {
         if (def.n === 2) return;
-        for (const side of [-1, 1]) {
+        // (hole 9's left edge is the cove and the cliff: only its right is woods)
+        for (const side of def.n === 9 ? [1] : [-1, 1]) {
           const [dx, dz] = b.edgeDrop(side * 70 * YD, 60 * YD);
           expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
           expect(Math.abs(dx)).toBeLessThan(70 * YD);
@@ -348,5 +354,18 @@ describe("score", () => {
     recordRound(9, 2);
     expect(localStorage.length + sessionStorage.length).toBe(0);
     expect(document.cookie).toBe("");
+  });
+});
+
+describe("hole 9's cove", () => {
+  const b = buildHole(NINE_DEFS.find((d) => d.n === 9)!);
+  it("a ball in the cove is dropped on the fairway on the tee side of it, for a stroke", () => {
+    // (the cove's shore lies 100 yd out: its drop is 80 yd, on dry, flat ground in play)
+    expect(b.drops).toHaveLength(1);
+    const [dx, dz] = b.drops[0];
+    expect(["fairway", "fringe", "rough"]).toContain(b.surfaceAt(dx, dz));
+    expect(dz / YD).toBeLessThan(90);
+    expect(dz / YD).toBeGreaterThan(60);
+    expect(Math.abs(dx / YD)).toBeLessThan(20);
   });
 });
