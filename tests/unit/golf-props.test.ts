@@ -95,7 +95,7 @@ describe("holes without props", () => {
     expect("prop" in b).toBe(false);
     expect(solidsOf(hole.def.props, ter)).toEqual([]);
   });
-  it("only holes 2, 4, 5 and 7 have props", () => {
-    expect(NINE_DEFS.filter((d) => d.props?.length).map((d) => d.n)).toEqual([2, 4, 5, 7]);
+  it("only holes 2, 4, 5, 6 and 7 have props", () => {
+    expect(NINE_DEFS.filter((d) => d.props?.length).map((d) => d.n)).toEqual([2, 4, 5, 6, 7]);
   });
 });
