@@ -15,9 +15,9 @@ export const HOLE8: SceneryRecord | null = {
     sea: "right",
     seaY: -8,
     deep: 8,
-    keepOut: 70,
+    keepOut: 8,
     // the peninsula's tip behind the tee, up the east shore, and the bay's head bending east past the green
-    line: [[-420, -340], [-120, -330], [60, -290], [125, -190], [135, -60], [132, 120], [138, 260], [146, 350], [152, 430], [172, 530], [235, 612], [360, 660], [700, 676], [1400, 690]],
+    line: [[-420, -340], [-120, -330], [60, -290], [125, -190], [135, -60], [132, 120], [138, 260], [141, 330], [136, 385], [131, 420], [124, 450], [112, 476], [100, 500], [120, 545], [180, 590], [260, 625], [400, 660], [700, 676], [1400, 690]],
     tones: { shallow: "#9fd6cf", mid: "#5aa7b5", deep: "#2f6f8f", foam: "#f4fbfb" },
     glitter: 0.4,
     slope: { drop: 16, reach: 220 },

@@ -49,9 +49,10 @@ describe("the tee card's call-outs", () => {
     expect(calloutsOf(buildHole(def(3)))).toEqual(["climbs 9 m"]);
     // hole 6's cape: the tee stands over the flats, and the arm of the tide is carried on the line to the pin
     expect(calloutsOf(buildHole(def(6)))).toEqual(["drops 21 m", "carry 155 to clear"]);
-    // flat enough, and nothing across the line: nothing is said
-    expect(calloutsOf(buildHole(def(8)))).toEqual([]);
-  });
+    // hole 8 climbs the bay's shore to the island's plateau; the lake's channel is across the line only past the carry range (the second shot's to worry about), so nothing else is said
+    expect(calloutsOf(buildHole(def(8)))).toEqual(["climbs 18 m"]);
+    // (it builds six holes' ground: about a second alone, several on a loaded CI box)
+  }, 20_000);
   it("follow the numbers: a taller crest says so, with no typed text", () => {
     const d7 = def(7);
     const taller: HoleDef = { ...d7, ground: { ...d7.ground!, rise: d7.ground!.rise.map(([z, h]) => [z, h * 1.5] as [number, number]) } };

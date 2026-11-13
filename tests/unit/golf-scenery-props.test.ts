@@ -82,7 +82,8 @@ describe("buildProps", () => {
     expect(so.calls).toBe(1);
     expect(so.tris).toBeLessThanOrEqual(150);
     expect(hi.tris).toBe(placeStacks(hole9, rec9, 7).length * STACK_TRIS + so.tris);
-  });
+    // (it builds the holes' backdrops on every tier: about a second alone, several on a loaded CI box)
+  }, 20_000);
   it("is empty without props and deterministic with them", () => {
     expect(buildProps(hole9, { ...rec9, props: undefined }, heightAt, "high")).toBeNull();
     const a = run("high"), b = run("high");

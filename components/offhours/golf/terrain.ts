@@ -166,6 +166,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const SIG = G.sigma ?? SIGMA, EASE = G.greenEase ?? GREEN_EASE, T_FLAT = G.teeFlat ?? TEE_FLAT, T_EASE = G.teeEase ?? TEE_EASE;
   const fx = compileFeatures(def.features, def.bunkers);
   const CELL = G.cell ?? CELL_DEFAULT;
+  // the ground is baked at the default cell everywhere, and finer (CELL) only in tiles near a cliff's face, where it is needed
+  const COARSE = Math.max(CELL, CELL_DEFAULT);
   const cliffy = fx.cliffs.length > 0;
   const mounds = (G.mounds ?? []).map(([x, z, r, h]) => ({ x: x * YD, z: z * YD, r: r * YD, h }));
 
@@ -281,7 +283,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const digs = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
     if (gx < -40 || gx > GW + 40 || gy < -40 || gy > GH + 40) return 1;
-    return smooth((outsideGreen(hole, gx, gy) - (CELL * 1.5 + 0.2)) / 1);
+    return smooth((outsideGreen(hole, gx, gy) - (COARSE * 1.5 + 0.2)) / 1);
   };
   const potted = sand.map((_, i) => fx.pot(i, 1e9, 1e9) !== null);
   /** a pot's face is too steep for the baked grid's cells: it is dug on top of the grid, exactly */
@@ -310,16 +312,46 @@ export function terrainOf(hole: BuiltHole): Terrain {
   // baked on a grid over the hole (the line's blend is the slow part), read back bilinearly
   const box = hole.shape.box;
   const X0 = box.x0 - 60, Z0 = box.z0 - 60;
-  const nx = Math.ceil((box.x1 + 60 - X0) / CELL) + 1, nz = Math.ceil((box.z1 + 60 - Z0) / CELL) + 1;
+  const nx = Math.ceil((box.x1 + 60 - X0) / COARSE) + 1, nz = Math.ceil((box.z1 + 60 - Z0) / COARSE) + 1;
   let grid: Float32Array | null = null;
   const bake = () => {
     const g = new Float32Array(nx * nz);
-    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) g[j * nx + i] = full(X0 + i * CELL, Z0 + j * CELL);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) g[j * nx + i] = full(X0 + i * COARSE, Z0 + j * COARSE);
     return g;
   };
+  // the finer tiles: TILE m square, baked when first asked for, and only where a cliff's face or its apron may reach (away
+  // from it a cliff's ground is flat: the full drop or none), or where an open cliff fades out past its end
+  const fine = CELL < COARSE && cliffy;
+  const TILE = 12, TN = Math.round(TILE / CELL), TR = TILE * 0.75;
+  const tx = Math.ceil((nx - 1) * COARSE / TILE), tz = Math.ceil((nz - 1) * COARSE / TILE);
+  const tileFine = fine ? new Int8Array(tx * tz).fill(-1) : null;
+  const tiles = new Map<number, Float32Array>();
+  const nearFace = (cx: number, cz: number) =>
+    fx.cliffs.some((g) => {
+      const a = g.at(cx, cz);
+      // (the distance out from the brink changes no faster than the distance moved, so a tile whose middle is this far off has none of it)
+      return (a.along > 0 && a.along < 1) || (a.c > -g.run * 4 - TR && a.c < g.run + g.talus + TR);
+    });
   const base = (x: number, z: number) => {
-    const fi = (x - X0) / CELL, fj = (z - Z0) / CELL;
+    const fi = (x - X0) / COARSE, fj = (z - Z0) / COARSE;
     if (fi < 0 || fj < 0 || fi >= nx - 1 || fj >= nz - 1) return full(x, z);
+    if (tileFine) {
+      const ti = Math.floor((x - X0) / TILE), tj = Math.floor((z - Z0) / TILE), t = tj * tx + ti;
+      if (tileFine[t] < 0) tileFine[t] = nearFace(X0 + (ti + 0.5) * TILE, Z0 + (tj + 0.5) * TILE) ? 1 : 0;
+      if (tileFine[t]) {
+        let g = tiles.get(t);
+        if (!g) {
+          g = new Float32Array((TN + 1) * (TN + 1));
+          const ox = X0 + ti * TILE, oz = Z0 + tj * TILE;
+          for (let j = 0; j <= TN; j++) for (let i = 0; i <= TN; i++) g[j * (TN + 1) + i] = full(ox + i * CELL, oz + j * CELL);
+          tiles.set(t, g);
+        }
+        const ui = (x - X0 - ti * TILE) / CELL, uj = (z - Z0 - tj * TILE) / CELL;
+        const i = Math.min(TN - 1, Math.floor(ui)), j = Math.min(TN - 1, Math.floor(uj)), u = ui - i, v = uj - j;
+        const k = j * (TN + 1) + i;
+        return lerp(lerp(g[k], g[k + 1], u), lerp(g[k + TN + 1], g[k + TN + 2], u), v);
+      }
+    }
     grid ??= bake();
     const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j;
     const k = j * nx + i;
