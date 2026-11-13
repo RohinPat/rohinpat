@@ -9,9 +9,20 @@ import { OLD_H2 } from "./golf-old-h2";
 
 // The course's data, the lie table and the scoring: no screen, no clock.
 
+/** a point inside a lake's shore, yd: its middle if that is in it (a round tarn), else across the arm from its second point */
+const inShore = (s: [number, number][]): [number, number] => {
+  const inPoly = ([x, z]: [number, number]) => {
+    let c = false;
+    for (let i = 0, j = s.length - 1; i < s.length; j = i++)
+      if (s[i][1] > z !== s[j][1] > z && x < ((s[j][0] - s[i][0]) * (z - s[i][1])) / (s[j][1] - s[i][1]) + s[i][0]) c = !c;
+    return c;
+  };
+  const mid: [number, number] = [s.reduce((a, p) => a + p[0], 0) / s.length, s.reduce((a, p) => a + p[1], 0) / s.length];
+  return inPoly(mid) ? mid : [(s[1][0] + s[s.length - 2][0]) / 2, (s[1][1] + s[s.length - 2][1]) / 2];
+};
 /** a point on a hazard that is inside it, yd */
 const inside = (w: Water): [number, number] =>
-  "path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? [w.shore.reduce((a, p) => a + p[0], 0) / w.shore.length, w.shore.reduce((a, p) => a + p[1], 0) / w.shore.length] : [w.x, w.z];
+  "path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? inShore(w.shore) : [w.x, w.z];
 /** where along the line (yd) the nearest point to (x, z) is, and how far off it (yd) */
 function along(def: HoleDef, x: number, z: number) {
   const L = def.line;
@@ -37,11 +48,11 @@ function pointAt(def: HoleDef, s: number): [number, number] {
 }
 const MARKERS: Record<number, string[]> = {
   1: ["100", "150", "150", "200", "200"],
-  2: ["100"],
+  2: [],
   3: ["100", "100", "150", "200", "200"],
-  4: ["100", "100", "200"],
-  5: ["100", "100", "150", "150"],
-  6: ["100", "100", "150", "150", "200", "200"],
+  4: ["100", "100", "150", "200"],
+  5: ["100", "100", "150"],
+  6: ["100", "150", "200"],
   7: ["100", "100", "150", "200", "200"],
   8: ["100", "100", "150", "150", "200", "200"],
   9: ["100", "100", "150", "150", "200", "200"],
@@ -85,11 +96,13 @@ describe("course data", () => {
           const [x, z] = pointAt(def, d);
           const sf = b.surfaceAt(x * YD, z * YD);
           if (sf === "water") wet++;
-          else expect(["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
+          // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them)
+          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
-        // only hole 4's creek is across the line, 14 yd of it
-        expect(wet > 0).toBe(def.n === 4);
+        // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second) and hole 6's arm of the tide (about 45 yd) are across the line
+        expect(wet > 0).toBe(def.n === 4 || def.n === 6);
         if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
+        if (def.n === 6) expect(wet * 2).toBeGreaterThanOrEqual(40);
       });
       it("every hazard is where it says it is", () => {
         for (const w of def.water) {
@@ -101,11 +114,16 @@ describe("course data", () => {
         expect(b.world.sand).toHaveLength(def.bunkers.length);
       });
       it("beyond the rough is the woods", () => {
-        expect(b.surfaceAt(60 * YD, 100 * YD)).toBe("out");
-        expect(b.surfaceAt(-60 * YD, 100 * YD)).toBe("out");
+        // (hole 2's basin is open fescue to 96 yd either side)
+        if (def.n === 2) return;
+        // (hole 6's fairway fans out wide at the arm: its woods are further out)
+        const [wx, wz] = def.n === 6 ? [100, 60] : [60, 100];
+        expect(b.surfaceAt(wx * YD, wz * YD)).toBe("out");
+        expect(b.surfaceAt(-wx * YD, wz * YD)).toBe("out");
         expect(b.surfaceAt(0, 600 * YD)).toBe("out");
       });
       it("a ball in the woods is dropped on ground in play, a little inside the edge", () => {
+        if (def.n === 2) return;
         for (const side of [-1, 1]) {
           const [dx, dz] = b.edgeDrop(side * 70 * YD, 60 * YD);
           expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
@@ -150,13 +168,13 @@ describe("course data", () => {
     });
   }
 
-  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,030 yd", () => {
+  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,157 yd", () => {
     expect(HOLE_DEFS.map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [1, "Open Door", 4, 340],
       [2, "Short Straw", 3, 150],
       [3, "The Elbow", 4, 365],
-      [4, "Reed Creek", 5, 470],
-      [5, "The Collar", 3, 175],
+      [4, "Reed Creek", 4, 410],
+      [5, "The Collar", 4, 362],
       [6, "Last Light", 4, 395],
     ]);
     expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(23);
@@ -176,7 +194,7 @@ describe("course data", () => {
     const at = (z: number) => b.surfaceAt(0, z * YD);
     // from the tee: the ledge, then rock, then scree, then water the whole way to the green's apron
     expect(at(10)).toBe("fairway");
-    expect(at(21)).toBe("out");
+    expect(at(17.5)).toBe("out");
     let wet = 0;
     for (let z = 40; z < 135; z += 1) if (at(z) === "water") wet++;
     expect(wet).toBeGreaterThanOrEqual(88);
@@ -186,11 +204,12 @@ describe("course data", () => {
     expect(d.bunkers[0].x).toBeGreaterThan(0);
     expect(b.drops).toHaveLength(1);
     const [dx, dz] = b.drops[0];
-    expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
+    expect(["fairway", "rough", "fescue"]).toContain(b.surfaceAt(dx, dz));
     expect(waterWithin(b.surfaceAt, dx, dz, DROP_CLEAR)).toBeNull();
-    expect(dz / YD).toBeLessThan(d.pin[1] - 5);
     expect(dx).toBeGreaterThan(0);
-    expect(["fairway", "rough"]).toContain(b.surfaceAt(24 * YD, 100 * YD));
+    // (the bench and the floor of the basin are a fescue field, not woods)
+    expect(b.surfaceAt(40 * YD, 100 * YD)).toBe("fescue");
+    expect(b.surfaceAt(-90 * YD, 100 * YD)).toBe("fescue");
     expect(Math.abs(b.wind[0])).toBeGreaterThan(Math.abs(b.wind[1]) * 5);
   });
 });

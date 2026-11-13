@@ -59,6 +59,8 @@ export type Palette = {
   ramp?: [number, number];
   /** phase 3: blotches of a second colour over the ground (gold aspen, willow): the share of ground they cover, their size in m */
   patches?: { color: string; share: number; scale?: number; seed?: number };
+  /** the ground between the rough and the hills is painted in `base` instead of woodland green, so a hole whose trees are cleared has no dark band (dune country) */
+  paintOut?: boolean;
 };
 
 export type HillsSpec = {
@@ -120,6 +122,8 @@ export type WallSpec = {
   foot: string;
   capDepth?: number;
   seed?: number;
+  /** the least distance (m) the wall's spine may stand from play (default WALL_KEEP, 60): a wall a waterfall pours from into the tarn comes close, so it says 0 */
+  keep?: number;
 };
 
 /** phase 3 (waterfall.ts): a fall down one of the scene's walls into a pool of its own at the foot */

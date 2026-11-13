@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
 import { terrainOf } from "@/components/offhours/golf/terrain";
+import { YD } from "@/components/offhours/golf/scene";
 import { sceneryFor } from "@/components/golf3d/scenery/scenes";
 import { HOLE6 } from "@/components/golf3d/scenery/hole6";
 import { bakeShore, glitterFactor } from "@/components/golf3d/scenery/ocean";
@@ -15,13 +16,18 @@ import type { CoastSpec } from "@/components/golf3d/scenery/types";
 const hole = () => buildHole(NINE_DEFS.find((d) => d.n === 6)!);
 
 describe("hole 6, Last Light", () => {
-  it("is registered, valid against its hole, and keeps clear of the in-play creek", () => {
+  it("is registered, valid against its hole, and the estuary is joined to the arm of the tide that crosses the line", () => {
     const rec = sceneryFor(6);
     expect(rec).toBe(HOLE6);
     const h = hole();
     expect(validateScenery(h, rec!)).toEqual([]);
-    // the estuary starts beyond the creek, not at it
-    expect(clearanceOf(h, rec.coast!.line)).toBeGreaterThanOrEqual(rec.coast!.keepOut);
+    // wave 2: the arm is the hole's own water (a Lake) and opens into the estuary: the coast lies on its left end, not 70 m off,
+    // and the sea stands at the level of the water in the flats (the lake's surface is a lip under its level)
+    const arm = h.def.water[0] as { level: number };
+    expect(rec.coast!.keepOut).toBe(0);
+    expect(clearanceOf(h, rec.coast!.line)).toBeLessThan(25);
+    expect(Math.abs(rec.coast!.seaY - (arm.level - 0.22))).toBeLessThan(0.5);
+    expect(Math.abs(terrainOf(h).waterY(-60 * YD, 215 * YD) - rec.coast!.seaY)).toBeLessThan(0.5);
   });
 
   it("has the golden-hour skin, a low sun ahead and to the left, a shallow basin and a lighthouse", () => {
