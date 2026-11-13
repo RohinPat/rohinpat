@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLUBS, simulate, type ShotIn } from "@/components/offhours/golf/flight";
-import { HOLE_DEFS, NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { HOLE_DEFS, NINE_DEFS, buildHole, type HoleDef } from "@/components/offhours/golf/course";
 import { GH, GW } from "@/components/offhours/golf/green";
 import { bothLies, lieFor, slopeLie, slopeWords, waterWithin } from "@/components/offhours/golf/lie";
 import { CourseGame } from "@/components/offhours/golf/play";
@@ -159,11 +159,12 @@ describe("what a shot plays like", () => {
   });
 
   it("the game says what the pin plays like, and suggests the club for it", () => {
-    // hole 2 from the tee: a long way down, it plays short; hole 5: uphill, it plays long
+    // hole 2 from the tee: a long way down, it plays short; a hole like it turned uphill plays long
     const g2 = new CourseGame({ seed: 3, hills: true, holes: [HOLE_DEFS[1]] });
     g2.wind = [0, 0];
     expect(g2.playsLike()!).toBeLessThan(g2.yardsToPin() - 4);
-    const g5 = new CourseGame({ seed: 3, hills: true, holes: [HOLE_DEFS[4]] });
+    const up: HoleDef = { ...HOLE_DEFS[1], n: 12, water: [], props: undefined, ground: { rise: [[0, 0], [24, 0], [55, 4], [95, 8], [137, 9]], swell: 0.3, sigma: 9 } };
+    const g5 = new CourseGame({ seed: 3, hills: true, holes: [up] });
     g5.wind = [0, 0];
     expect(g5.playsLike()!).toBeGreaterThan(g5.yardsToPin() + 3);
     // the suggestion is for the distance it plays: a pure swing at it comes down on the green
@@ -191,10 +192,10 @@ describe("what a shot plays like", () => {
 });
 
 describe("the bots on the hills: measured bands, pinned", () => {
-  // 30 seeded rounds each over all six holes with hills (par 22)
+  // 30 seeded rounds each over all six holes with hills (par 23)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true } }));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
-  it("skilled: par + 3 to par + 6, every hole about a par plus one, never stuck", { timeout: 90_000 }, () => {
+  it("skilled: par + 2 to par + 5, every hole about a par plus one, never stuck", { timeout: 90_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(25.5);
@@ -215,10 +216,10 @@ describe("the bots on the hills: measured bands, pinned", () => {
 });
 
 describe("the nine on the hills (the 3D course's round): measured bands, pinned", () => {
-  // 30 seeded rounds over all nine holes (par 36)
+  // 30 seeded rounds over all nine holes (par 37)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1, { game: { hills: true, holes: NINE_DEFS }, maxSeconds: 1400 }));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
-  it("skilled: par + 3 to par + 8, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
+  it("skilled: par + 2 to par + 7, every hole about a par plus one, none out of reach", { timeout: 120_000 }, () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(39);

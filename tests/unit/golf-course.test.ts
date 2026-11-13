@@ -9,7 +9,8 @@ import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound,
 // The course's data, the lie table and the scoring: no screen, no clock.
 
 /** a point on a hazard that is inside it, yd */
-const inside = (w: Water): [number, number] => ("path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? w.shore[0] : [w.x, w.z]);
+const inside = (w: Water): [number, number] =>
+  "path" in w ? w.path[Math.floor(w.path.length / 2)] : "shore" in w ? [(w.shore[1][0] + w.shore[w.shore.length - 2][0]) / 2, (w.shore[1][1] + w.shore[w.shore.length - 2][1]) / 2] : [w.x, w.z];
 /** where along the line (yd) the nearest point to (x, z) is, and how far off it (yd) */
 function along(def: HoleDef, x: number, z: number) {
   const L = def.line;
@@ -38,8 +39,8 @@ const MARKERS: Record<number, string[]> = {
   2: ["100", "100"],
   3: ["100", "100", "150", "200", "200"],
   4: ["100", "100", "150", "200"],
-  5: ["100", "100", "150", "150"],
-  6: ["100", "100", "150", "150", "200", "200"],
+  5: ["100", "100", "150"],
+  6: ["100", "150", "200"],
   7: ["100", "100", "150", "200", "200"],
   8: ["100", "100", "150", "150", "200", "200"],
   9: ["100", "100", "150", "150", "200", "200"],
@@ -79,11 +80,13 @@ describe("course data", () => {
           const [x, z] = pointAt(def, d);
           const sf = b.surfaceAt(x * YD, z * YD);
           if (sf === "water") wet++;
-          else expect(["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
+          // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them)
+          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
-        // only hole 4's creek is across the line: 14 yd of it at the first crossing, and the bridge carries the line over the second
-        expect(wet > 0).toBe(def.n === 4);
+        // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second) and hole 6's arm of the tide (about 45 yd) are across the line
+        expect(wet > 0).toBe(def.n === 4 || def.n === 6);
         if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
+        if (def.n === 6) expect(wet * 2).toBeGreaterThanOrEqual(40);
       });
       it("every hazard is where it says it is", () => {
         for (const w of def.water) {
@@ -95,8 +98,10 @@ describe("course data", () => {
         expect(b.world.sand).toHaveLength(def.bunkers.length);
       });
       it("beyond the rough is the woods", () => {
-        expect(b.surfaceAt(60 * YD, 100 * YD)).toBe("out");
-        expect(b.surfaceAt(-60 * YD, 100 * YD)).toBe("out");
+        // (hole 6's fairway fans out wide at the arm: its woods are further out)
+        const [wx, wz] = def.n === 6 ? [100, 60] : [60, 100];
+        expect(b.surfaceAt(wx * YD, wz * YD)).toBe("out");
+        expect(b.surfaceAt(-wx * YD, wz * YD)).toBe("out");
         expect(b.surfaceAt(0, 600 * YD)).toBe("out");
       });
       it("a ball in the woods is dropped on ground in play, a little inside the edge", () => {
@@ -144,24 +149,24 @@ describe("course data", () => {
     });
   }
 
-  it("holes are numbered in order, with the par and the yards the plan says: par 22, 1,955 yd", () => {
+  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,142 yd", () => {
     expect(HOLE_DEFS.map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [1, "Open Door", 4, 340],
       [2, "Short Straw", 3, 135],
       [3, "The Elbow", 4, 365],
       [4, "Reed Creek", 4, 410],
-      [5, "The Collar", 3, 175],
+      [5, "The Collar", 4, 362],
       [6, "Last Light", 4, 395],
     ]);
-    expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(22);
+    expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(23);
   });
-  it("the back three make a nine: par 35", () => {
+  it("the back three make a nine: par 36", () => {
     expect(NINE_DEFS.slice(6).map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [7, "The Ridge", 4, 385],
       [8, "Long Water", 5, 520],
       [9, "Homeward", 4, 415],
     ]);
-    expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(35);
+    expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);
     expect(NINE_DEFS.slice(0, 6)).toEqual(HOLE_DEFS);
   });
   it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {

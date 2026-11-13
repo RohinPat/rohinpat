@@ -77,6 +77,34 @@ const CREEK_LINE = 0.6;
 /** the baked grid's cell, m */
 const CELL = 1.5;
 
+/**
+ * A lake's signed distance (m, negative inside) as the terrain asks for it: exact within about FAR of the shore (where the bank is dug), and read from a
+ * coarse grid of the exact distance beyond that (a lake's ring has a point every 2.5 m, and the bake asks for every cell)
+ */
+const SD_CELL = 6, SD_FAR = 8;
+function lakeSd(ring: [number, number][]) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of ring) [x0, x1, z0, z1] = [Math.min(x0, x), Math.max(x1, x), Math.min(z0, z), Math.max(z1, z)];
+  x0 -= SD_FAR * 2;
+  z0 -= SD_FAR * 2;
+  const nx = Math.ceil((x1 + SD_FAR * 2 - x0) / SD_CELL) + 1, nz = Math.ceil((z1 + SD_FAR * 2 - z0) / SD_CELL) + 1;
+  let grid: Float32Array | null = null;
+  return (x: number, z: number) => {
+    const fi = (x - x0) / SD_CELL, fj = (z - z0) / SD_CELL;
+    // (outside the grid, which reaches 2 * SD_FAR past the shore, the shore is at least that far: nothing reads further)
+    if (fi < 0 || fj < 0 || fi >= nx - 1 || fj >= nz - 1) return SD_FAR * 2;
+    if (!grid) {
+      grid = new Float32Array(nx * nz);
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) grid[j * nx + i] = ringSd(ring, x0 + i * SD_CELL, z0 + j * SD_CELL);
+    }
+    const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j, k = j * nx + i;
+    const a = grid[k], b = grid[k + 1], c = grid[k + nx], d = grid[k + nx + 1];
+    // the distance is 1-Lipschitz, so a cell whose corners are all well clear of the shore is read from the grid
+    if (Math.min(Math.abs(a), Math.abs(b), Math.abs(c), Math.abs(d)) > SD_FAR) return lerp(lerp(a, b, u), lerp(c, d, u), v);
+    return ringSd(ring, x, z);
+  };
+}
+
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
@@ -203,7 +231,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const ponds: Pond[] = [];
   const creeks: CreekPt[][] = [];
   const creekDeep: number[] = [];
-  const lakes: { ring: [number, number][]; level: number }[] = [];
+  const lakes: { ring: [number, number][]; level: number; sd: (x: number, z: number) => number }[] = [];
   for (const w of def.water) {
     if ("path" in w) {
       creeks.push(polyOf(w));
@@ -212,7 +240,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     else if ("shore" in w) {
       const ring = lakeOf(w);
       const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
-      lakes.push({ ring, level: w.level ?? levelled(mx, mz) });
+      lakes.push({ ring, level: w.level ?? levelled(mx, mz), sd: lakeSd(ring) });
     } else ponds.push({ x: w.x * YD, z: w.z * YD, rx: w.rx * YD, rz: w.rz * YD, c: Math.cos(w.rot ?? 0), s: Math.sin(w.rot ?? 0), level: levelled(w.x * YD, w.z * YD), lobe: w.lobe });
   }
   const blobR = (b: { x: number; z: number; rx: number; rz: number; c: number; s: number; lobe?: number }, x: number, z: number) => {
@@ -240,7 +268,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     if (ponds.length) {
       const k = 1 - onPad(x, z);
       for (const p of ponds) y = lerp(y, p.level, k * (1 - smooth((blobR(p, x, z) - 1.1) / 0.9)));
-      for (const l of lakes) y = lerp(y, l.level, k * (1 - smooth((ringSd(l.ring, x, z) - 2) / 14)));
+      for (const l of lakes) y = lerp(y, l.level, k * (1 - smooth((l.sd(x, z) - 2) / 14)));
     }
     return y;
   };
@@ -261,7 +289,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
     for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
-    for (const l of lakes) dig += POND_DIP * smooth((0.67 - ringSd(l.ring, x, z)) / BANK_RUN);
+    for (const l of lakes) dig += POND_DIP * smooth((0.67 - l.sd(x, z)) / BANK_RUN);
     creeks.forEach((c, i) => {
       const sd = creekSd(c, x, z);
       // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN
@@ -320,7 +348,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     },
     waterY: (x, z) => {
       for (let i = 0; i < creeks.length; i++) if (creekSd(creeks[i], x, z) < 1.5) return wet(x, z) - CREEK_LINE * creekDeep[i];
-      for (const l of lakes) if (ringSd(l.ring, x, z) < 1.5) return l.level - POND_LIP;
+      for (const l of lakes) if (l.sd(x, z) < 1.5) return l.level - POND_LIP;
       return wet(x, z) - POND_LIP;
     },
     pad,

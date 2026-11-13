@@ -65,7 +65,8 @@ describe("modes", () => {
       const r = playRound(BOTS.skilled, s.seed, { game: { holes: s.defs } });
       expect(r.finished, day).toBe(true);
       expect(r.pickedUp, day).toBe(0);
-      // (par 35 since hole 4 became a par 4 with two crossings to carry: a skilled bot plays it at about par + 1.6, so the worst of ten days is a stroke or two higher)
+      // (par 36 again: hole 4 became a par 4 with two crossings to carry and hole 5 a par 4 over the dune; with hole 6's cape too,
+      // a skilled bot's worst of ten days is a stroke or two higher than it was)
       expect(r.total - r.par, day).toBeLessThan(12);
     }
   });
@@ -107,7 +108,7 @@ describe("the round's stats", () => {
     });
     const s = roundStats(g);
     expect(s.greens).toMatch(/^\d\/6$/);
-    expect(s.fairways).toMatch(/^\d\/4$/);
+    expect(s.fairways).toMatch(/^\d\/5$/);
     expect(s.putts).toBe(g.stats.reduce((a, x) => a + x.putts, 0));
   });
 });
