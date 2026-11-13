@@ -166,7 +166,10 @@ test.describe("link UI: laptop", () => {
     await padlock(host).click();
     const card = host.getByTestId("pair-card");
     await expect(card).toBeVisible();
-    const b = (await card.boundingBox())!;
+    // the card scales in out of the padlock (pl-pop-in): measure only once that has finished
+    await expect.poll(() => host.locator(".pl-pop").evaluate((el) => el.getAnimations().length)).toBe(0);
+    const box = async () => (await card.boundingBox())!;
+    const b = await box();
     const x = b.x + b.width - 30;
 
     // a long drag up across the card
@@ -182,10 +185,12 @@ test.describe("link UI: laptop", () => {
     await card.getByTestId("pair-code").click({ clickCount: 3 });
     expect(await host.evaluate(() => window.getSelection()?.toString().trim() ?? "")).not.toBe("");
 
-    // a scroll over it
-    await host.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    // a scroll over it: aim at the card as it is now (the reveal and the drag have moved and resized it)
+    const w = await box();
+    await host.mouse.move(w.x + w.width / 2, w.y + w.height / 2);
     await host.mouse.wheel(0, 400);
-    await host.waitForTimeout(200);
+    // a wheel that reached the lock layer would unlock it in React's next commit: let that frame paint before judging
+    await host.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     await expect(unlockButton(host)).toBeVisible();
     await expect(card).toBeVisible();
     await context.close();

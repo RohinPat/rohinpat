@@ -62,6 +62,8 @@ test.describe("Night run: the steering assist", () => {
     await expect(assistBtn(page)).toHaveText(/assist: full/i);
     await page.keyboard.press("Enter");
     await expect(assistBtn(page)).toHaveText(/assist: off/i);
+    // the button's text is ahead of the game: wait for the game to take the level, then read it
+    await expect(canvas(page)).toHaveAttribute("data-assist", "0", SLOW);
     expect(await level(page)).toBe(0);
     await context.close();
   });
