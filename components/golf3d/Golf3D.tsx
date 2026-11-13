@@ -149,6 +149,8 @@ function Course() {
         setLoadedSteps((n) => n + 1);
         setReady(true);
         if (expose.current) (window as unknown as { __golf3d?: CourseRenderer | null }).__golf3d = gl;
+        if (expose.current) (window as unknown as { __golfPaint?: unknown; __golfFly?: unknown }).__golfPaint = draw.paint;
+        if (expose.current) (window as unknown as { __golfFly?: unknown }).__golfFly = flyoverView;
       })
       .catch(() => {
         if (!gone) say("The course did not load.");

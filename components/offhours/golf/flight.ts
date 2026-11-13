@@ -61,6 +61,8 @@ export const STEEP_SLIDE = 0.8, STEEP_FALL = 1.0, STEEP_REST = 0.75, STEEP_RING 
 const SCRAPE = 1.6;
 /** a rolling ball whose middle passes this close to the middle of the cup (m), no faster than HOLE_V (m/s), drops in */
 const HOLE_R = 0.06, HOLE_V = 1.5;
+/** a rolling ball's slowing on a bridge's deck, m/s^2 (the green's: hard and smooth) */
+const DECK_ROLL = 0.9;
 
 const SURF: Record<Surface, { e: number; et: number; mu: number; roll: number; keep: number }> = {
   green: { e: 0.22, et: 0.55, mu: 0.8, roll: 0.9, keep: 0.45 },
@@ -126,7 +128,7 @@ export type ShotIn = {
   /** trees a ball in the air can hit (world metres: x, z, crown radius, height): it loses most of its speed and drops */
   trees?: { x: number; z: number; r: number; h: number }[];
   /** the ground's height (m) and slope in world coordinates (terrain.ts); flat at 0 without it */
-  ground?: { y: (x: number, z: number) => number; slope: (x: number, z: number) => [number, number] };
+  ground?: { y: (x: number, z: number) => number; slope: (x: number, z: number) => [number, number]; /** true over a bridge's deck (solids.ts `withDecks`): planks and stone, which a ball rolls on faster than on grass */ deck?: (x: number, z: number) => boolean };
   /** the cup, in world coordinates: a ball that rolls over it slowly enough drops in */
   cup?: [number, number];
   /** walls, boulders, posts a ball can hit, in world metres (solids.ts); none: every step below is the one without */
@@ -384,7 +386,7 @@ export function simulate(inp: ShotIn): Shot {
         steps++;
         break;
       }
-      let dec = SURF[surf].roll;
+      let dec = gr?.deck?.(x + ox, z + oz) ? DECK_ROLL : SURF[surf].roll;
       let steepNow = false;
       if (gr) {
         const [fx0, fz0] = gr.slope(x + ox, z + oz);

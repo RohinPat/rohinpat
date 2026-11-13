@@ -5,7 +5,8 @@ import { blend, poseFor, type Pose } from "./golfer";
 import { newPutt, puttBegin, puttKey, puttPointer, puttShoot, puttStep, zone, type Putt, type PuttEnv } from "./green";
 import { bothLies, dropFor, lieFor, slopeLie, slopeWords } from "./lie";
 import { FLAT, terrainOf, type Terrain } from "./terrain";
-import { solidsOf } from "./solids";
+import { solidsOf, withDecks, type Solid } from "./solids";
+import { calloutsOf } from "./sightline";
 import type { RemoteShot } from "./remoteSwing";
 import { TARGETS, YD, newCam, type Cam } from "./scene";
 import { PICK_UP_OVER, holeScore, overUnder, recordRound, shouldPickUp, type HoleScore } from "./score";
@@ -177,6 +178,8 @@ export const swingLen = (h: number) => clamp(h * 0.3, 110, 230);
 const LIE_WORDS: Partial<Record<Surface, string>> = { fairway: "in the fairway", rough: "in the rough", bunker: "in the bunker", fringe: "on the fringe", green: "on the green", fescue: "in the long fescue", waste: "in the waste area" };
 const LIE_CAPS: Partial<Record<Surface, string>> = { fairway: "FAIRWAY", rough: "ROUGH", bunker: "BUNKER", fringe: "FRINGE", green: "GREEN", fescue: "FESCUE", waste: "WASTE AREA" };
 /** the HUD's line for a penalty drop */
+/** what a ball is told it hit when it struck a wall, a boulder or a post */
+export const PROP_WORDS: Record<Solid["kind"], string> = { wall: "the wall", boulder: "a boulder", post: "the post", gatepost: "the gatepost", rail: "the rail" };
 const DROP_CAPS: Record<"water" | "out" | "gorse" | "oob" | "steep", string> = { water: "WATER · +1", out: "TREES · +1", gorse: "IN THE GORSE · +1", oob: "OUT OF BOUNDS · +1", steep: "UNPLAYABLE · +1" };
 /** a lie the driver cannot be played from (it is too thick round the club) */
 const NO_DRIVER = new Set<Surface>(["rough", "fescue"]);
@@ -310,7 +313,7 @@ export class CourseGame {
   private startHole(i: number) {
     this.idx = i;
     this.hole = buildHole(this.defs[i]);
-    this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
+    this.terrain = this.opts.hills ? withDecks(terrainOf(this.hole), this.hole.def.props) : FLAT;
     this.ball = [0, 0];
     this.lie = "fairway";
     this.strokes = 0;
@@ -333,7 +336,11 @@ export class CourseGame {
     const ch = this.challenge;
     if (ch) this.say(`${ch.kind === "targets" ? `Targets: ${ch.shots} balls, a new flag for each.` : `Closest to the pin: ${ch.shots} balls at one flag.`} ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
     else if (this.opts.practice === "range") this.say(`Range. ${windSay(this.wind, this.yaw, sp)} ${this.flagWords()}`);
-    else this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
+    else {
+      // (what the tee card says of the drop and the carry, said too)
+      const calls = this.callouts().map((c) => `${c[0].toUpperCase()}${c.slice(1)}.`).join(" ");
+      this.say(`Hole ${d.n}, ${d.yards} yards, par ${d.par}. ${calls ? `${calls} ` : ""}${windSay(this.wind, this.yaw, sp)} ${CLUBS[this.club].name}.`);
+    }
   }
 
   // ------------------------------------------------------------ practice
@@ -398,7 +405,7 @@ export class CourseGame {
     if (this.balls > 0 && this.balls % GREEN_BALLS === 0) {
       this.idx = (this.idx + 1) % this.defs.length;
       this.hole = buildHole(this.defs[this.idx]);
-      this.terrain = this.opts.hills ? terrainOf(this.hole) : FLAT;
+      this.terrain = this.opts.hills ? withDecks(terrainOf(this.hole), this.hole.def.props) : FLAT;
       this.camReady = false;
     }
     const H = this.hole.green;
@@ -485,6 +492,11 @@ export class CourseGame {
   yardsToTarget() {
     const [tx, tz] = this.target();
     return Math.hypot(tx - this.ball[0], tz - this.ball[1]) / YD;
+  }
+  /** what the tee card says of the hole's drop and carry (sightline.ts): nothing on a flat course, which has no hills to read */
+  callouts(): string[] {
+    if (!this.opts.hills || this.terrain === FLAT) return [];
+    return calloutsOf(this.hole);
   }
   yardsToPin() {
     return this.hole.toPin(this.ball[0], this.ball[1]) / YD;
@@ -1078,7 +1090,7 @@ export class CourseGame {
       this.result = `${LIE_CAPS[sh.surface] ?? ""} · ${sh.surface === "green" || sh.surface === "fringe" ? `${ft} FT` : `${Math.round(toPin)} YD`} TO GO`;
       msg += `, ${LIE_WORDS[sh.surface] ?? ""}. ${sh.surface === "green" || sh.surface === "fringe" ? feet(ft) : yards(Math.round(toPin))} to the pin.`;
     }
-    this.say(`${sh.tree ? `${msg} Hit a tree.` : msg}${this.strikeSay}`);
+    this.say(`${sh.tree ? `${msg} Hit a tree.` : sh.prop ? `${msg} Hit ${PROP_WORDS[sh.prop.kind]}.` : msg}${this.strikeSay}`);
     // a great one is played again
     this.replay = this.replayNext = null;
     if (this.opts.replays && !this.opts.practice && !drop) {

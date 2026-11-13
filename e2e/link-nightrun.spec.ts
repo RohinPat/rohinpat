@@ -135,8 +135,8 @@ test.describe("Night run: the keyboard", () => {
     await tile.scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
     const a = await tile.screenshot();
-    await page.waitForTimeout(700);
-    expect((await tile.screenshot()).equals(a)).toBe(false);
+    // the attract mode moves on its own: wait for a frame that differs (software WebGL on CI can take a while per frame)
+    await expect.poll(async () => (await tile.screenshot()).equals(a), SLOW).toBe(false);
 
     await tile.click();
     await expect(stage(page)).toBeVisible(SLOW);
@@ -154,9 +154,8 @@ test.describe("Night run: the keyboard", () => {
     // braking slows it
     const fast = await attr(page, "speed");
     await page.keyboard.down("ArrowDown");
-    await page.waitForTimeout(1200);
+    await expect.poll(() => attr(page, "speed"), SLOW).toBeLessThan(fast);
     await page.keyboard.up("ArrowDown");
-    expect(await attr(page, "speed")).toBeLessThan(fast);
     expect(linkRequests).toEqual([]);
     await context.close();
   });
