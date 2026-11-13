@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
-import { DECK_THICK, RAIL_H, bridgeShape, rockCluster, wallRuns, type Prop, type PropGround } from "@/components/offhours/golf/solids";
+import { DECK_THICK, RAIL_H, bridgeShape, deckTop, rockCluster, wallRuns, type Prop, type PropGround } from "@/components/offhours/golf/solids";
 
 // A hole's props (HoleDef.props, solids.ts) as three.js meshes. Everything is built into two merged meshes however
 // many props there are: one for the solid things (stone, wood, paint: one draw call, vertex-coloured, flat-shaded)
@@ -264,6 +264,38 @@ export function buildProps3D(hole: BuiltHole, ground: PropGround, tier: Tier, di
         const b = bridgeShape(p, ground);
         const yaw = Math.atan2(b.ux, b.uz);
         const at = (k: number, across = 0): [number, number] => [b.ax + (b.bx - b.ax) * k + b.nx * across, b.az + (b.bz - b.az) * k + b.nz * across];
+        if (b.arch > 0) {
+          // a stone bridge: cobbled slabs on a thick, cambered deck, a parapet each side under a capstone, and stone let down
+          // to the ground wherever the bank is high enough to carry the deck (the burn runs under the middle)
+          const ns = Math.max(6, Math.round(b.len / (TR.plank * 1.6)));
+          const sl = b.len / ns;
+          for (let i = 0; i < ns; i++) {
+            const k0 = i / ns, k1 = (i + 1) / ns, km = (k0 + k1) / 2;
+            const y0 = deckTop(b, k0), y1 = deckTop(b, k1);
+            const tilt = -Math.atan2(y1 - y0, sl);
+            const [x, z] = at(km);
+            const top = (y0 + y1) / 2;
+            const seg = sl * 1.03 / Math.cos(tilt);
+            solid.add(BOX, place(x, top - 0.18, z, b.w, 0.36, seg, yaw, tilt), col(i % 2 ? "#9d978a" : "#a9a395"), { jit: 0.02, seed: pi * 7 + i, vary: 0.1, moss: 0.15 });
+            // the fill under the slab: the ground's height at its sides is the bank, so it stops where the burn is
+            const gd = Math.min(low(x + b.nx * (b.w / 2), z + b.nz * (b.w / 2), 0.2), low(x - b.nx * (b.w / 2), z - b.nz * (b.w / 2), 0.2)) - 0.3;
+            if (top - 0.6 - gd > 0.4 && ground.y(x, z) > top - 1.35)
+              solid.add(BOX, place(x, (top - 0.36 + gd) / 2, z, b.w + 0.3, top - 0.36 - gd, sl * 1.03, yaw), col("#8a867b"), { jit: 0.04, seed: pi * 9 + i, vary: 0.16, moss: 0.3 });
+            for (const side of [-1, 1]) {
+              const [px, pz] = at(km, side * (b.w / 2 - 0.19));
+              solid.add(BOX, place(px, top + (RAIL_H - 0.12) / 2, pz, 0.38, RAIL_H - 0.12, seg, yaw, tilt), col(i % 3 ? "#8f8c84" : "#7d7a73"), { jit: 0.02, seed: pi * 11 + i + side, vary: 0.16, moss: 0.25 });
+              solid.add(BOX, place(px, top + RAIL_H - 0.06, pz, 0.54, 0.12, seg * 0.98, yaw, tilt), col("#b7b1a2"), { jit: 0.02, seed: pi * 13 + i, vary: 0.08, moss: 0.35 });
+            }
+          }
+          // the corner stones, taller, at each end of the parapets
+          for (const [k, dir] of [[0, 1], [1, -1]] as const)
+            for (const side of [-1, 1]) {
+              const [x, z] = at(k, side * (b.w / 2 - 0.19));
+              const top = deckTop(b, k);
+              solid.add(BOX, place(x + b.ux * dir * 0.2, top + 0.55, z + b.uz * dir * 0.2, 0.62, 1.1, 0.62, yaw), col("#a39f94"), { jit: 0.02, seed: pi * 17 + k, vary: 0.12, moss: 0.3 });
+            }
+          break;
+        }
         // the deck: planks across, on two stringers
         const np = Math.max(2, Math.round(b.len / TR.plank));
         const pl = b.len / np;

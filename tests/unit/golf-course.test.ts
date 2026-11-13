@@ -38,7 +38,7 @@ const MARKERS: Record<number, string[]> = {
   1: ["100", "150", "150", "200", "200"],
   2: ["100", "100"],
   3: ["100", "100", "150", "200", "200"],
-  4: ["100", "100", "200"],
+  4: ["100", "100", "150", "200"],
   5: ["100", "100", "150"],
   6: ["100", "150", "200"],
   7: ["100", "100", "150", "200", "200"],
@@ -83,7 +83,7 @@ describe("course data", () => {
           // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them)
           else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
-        // only hole 4's creek (14 yd of it) and hole 6's arm of the tide (about 45 yd) are across the line
+        // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second) and hole 6's arm of the tide (about 45 yd) are across the line
         expect(wet > 0).toBe(def.n === 4 || def.n === 6);
         if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
         if (def.n === 6) expect(wet * 2).toBeGreaterThanOrEqual(40);
@@ -149,24 +149,24 @@ describe("course data", () => {
     });
   }
 
-  it("holes are numbered in order, with the par and the yards the plan says: par 24", () => {
+  it("holes are numbered in order, with the par and the yards the plan says: par 23, 2,142 yd", () => {
     expect(HOLE_DEFS.map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [1, "Open Door", 4, 340],
       [2, "Short Straw", 3, 135],
       [3, "The Elbow", 4, 365],
-      [4, "Reed Creek", 5, 470],
+      [4, "Reed Creek", 4, 410],
       [5, "The Collar", 4, 362],
       [6, "Last Light", 4, 395],
     ]);
-    expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(24);
+    expect(HOLE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(23);
   });
-  it("the back three make a nine: par 37", () => {
+  it("the back three make a nine: par 36", () => {
     expect(NINE_DEFS.slice(6).map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [7, "The Ridge", 4, 385],
       [8, "Long Water", 5, 520],
       [9, "Homeward", 4, 415],
     ]);
-    expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(37);
+    expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);
     expect(NINE_DEFS.slice(0, 6)).toEqual(HOLE_DEFS);
   });
   it("hole 2 has water short and left of the green, sand to the right, and a crosswind", () => {

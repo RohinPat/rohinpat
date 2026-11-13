@@ -230,9 +230,13 @@ export function terrainOf(hole: BuiltHole): Terrain {
   type Pond = { x: number; z: number; rx: number; rz: number; c: number; s: number; level: number; lobe?: number };
   const ponds: Pond[] = [];
   const creeks: CreekPt[][] = [];
+  const creekDeep: number[] = [];
   const lakes: { ring: [number, number][]; level: number; sd: (x: number, z: number) => number }[] = [];
   for (const w of def.water) {
-    if ("path" in w) creeks.push(polyOf(w));
+    if ("path" in w) {
+      creeks.push(polyOf(w));
+      creekDeep.push(w.deep ?? CREEK_DIP);
+    }
     else if ("shore" in w) {
       const ring = lakeOf(w);
       const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
@@ -286,11 +290,11 @@ export function terrainOf(hole: BuiltHole): Terrain {
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
     for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
     for (const l of lakes) dig += POND_DIP * smooth((0.67 - l.sd(x, z)) / BANK_RUN);
-    for (const c of creeks) {
+    creeks.forEach((c, i) => {
       const sd = creekSd(c, x, z);
       // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN
-      dig += CREEK_DIP * smooth((BANK_RUN * 0.55 - sd) / BANK_RUN) + (sd < 0 ? 0.35 * smooth(-sd / 3) : 0);
-    }
+      dig += creekDeep[i] * smooth((BANK_RUN * 0.55 - sd) / BANK_RUN) + (sd < 0 ? 0.35 * smooth(-sd / 3) : 0);
+    });
     sand.forEach((b, i) => {
       // a pot bunker is its own shape (features.ts); any other is a bowl as deep as the bunker says
       if (!potted[i]) dig += b.depth * smooth((1.08 - blobR(b, x, z)) / 0.45);
@@ -343,7 +347,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
       return base(x, z) + relief(gx, gy);
     },
     waterY: (x, z) => {
-      for (const c of creeks) if (creekSd(c, x, z) < 1.5) return wet(x, z) - CREEK_LINE * CREEK_DIP;
+      for (let i = 0; i < creeks.length; i++) if (creekSd(creeks[i], x, z) < 1.5) return wet(x, z) - CREEK_LINE * creekDeep[i];
       for (const l of lakes) if (l.sd(x, z) < 1.5) return l.level - POND_LIP;
       return wet(x, z) - POND_LIP;
     },

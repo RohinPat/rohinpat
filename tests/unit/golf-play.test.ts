@@ -282,7 +282,7 @@ describe("the green", () => {
     expect(g.phase).toBe("round-card");
     expect(g.round).not.toBeNull();
     expect(g.round!.total).toBe(r.total);
-    expect(g.round!.par).toBe(24);
+    expect(g.round!.par).toBe(23);
     expect(g.round!.isBest).toBe(true);
     expect(g.round!.previous).toBeNull();
     // a press too soon is ignored (the key that holed it)
@@ -332,7 +332,7 @@ describe("repeatability and the idle player", () => {
 });
 
 describe("the bots: measured bands, pinned", () => {
-  // 30 seeded rounds each over all six holes (par 24). The numbers in the PR are these.
+  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these.
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
   const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));

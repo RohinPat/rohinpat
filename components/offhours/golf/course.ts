@@ -1,6 +1,6 @@
 import { seeded } from "../useCanvas";
 import type { Surface } from "./flight";
-import type { Prop } from "./solids";
+import { onDeck, type Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
 import type { Feature } from "./features";
 import type { Ground } from "./terrain";
@@ -44,7 +44,14 @@ export type Blob = {
   lobe?: number;
 };
 /** a creek: water along a path (yd), `w` yd wide; the path is smoothed into a meander */
-export type Creek = { path: [number, number][]; w: number; /** width (yd) at each path point (eased between them), so the carry varies along the creek */ ws?: number[] };
+export type Creek = {
+  path: [number, number][];
+  w: number;
+  /** width (yd) at each path point (eased between them), so the carry varies along the creek */
+  ws?: number[];
+  /** how deep the bed is dug below the ground beside it, m (default 0.95): a burn in a real channel, with banks to climb */
+  deep?: number;
+};
 /** a lake: water inside a closed shore (yd, the points are smoothed into a curve), lying level in ground at `level` m (the ground at its shore; else the ground at its middle), its surface a lip under that */
 export type Lake = { shore: [number, number][]; level?: number };
 export type Water = Blob | Creek | Lake;
@@ -228,40 +235,74 @@ export const HOLE_DEFS: HoleDef[] = [
     features: [{ k: "pot", b: 0, d: 1.7 }],
   },
   {
-    // a creek across the fairway, 320 to 334 yd from the tee, and the green 136 yd past it
+    // one burn crosses the hole twice: over the fairway at 200 to 260 yd, down the right between, and back across in front of the green
     n: 4,
     name: "Reed Creek",
-    par: 5,
-    yards: 470,
-    line: [[0, 0], [0, 300], [10, 474]],
-    half: [14, 22, 20],
+    par: 4,
+    yards: 410,
+    line: [[0, 0], [0, 300], [6, 414]],
+    half: [16, 26, 20],
     rough: 14,
-    pin: [9, 470],
-    green: { c: [10, 472], seed: 4404, severity: 0.85 },
+    pin: [6, 410],
+    green: { c: [6, 412], seed: 4404, severity: 0.85 },
     bunkers: [
-      { x: 23, z: 268, rx: 5, rz: 9 },
-      { x: 33, z: 470, rx: 5, rz: 6 },
+      { x: 14, z: 282, rx: 5, rz: 9, rot: 0.1, depth: 0.5 },
+      { x: 25, z: 408, rx: 5, rz: 6 },
+      { x: -19, z: 404, rx: 4.5, rz: 5.5, rot: 0.4, depth: 0.7 },
     ],
-    water: [{ path: [[-64, 333], [-44, 324], [-24, 329], [0, 328], [20, 322.5], [42, 328], [66, 326]], w: 14, ws: [12, 13, 15, 13.5, 11, 14, 12] }],
-    trees: { seed: 41, edge: 6, spacing: 6 },
+    water: [
+      {
+        path: [[-72, 192], [-52, 198], [-26, 207], [0, 227], [24, 247], [38, 270], [40, 300], [36, 334], [22, 362], [0, 376], [-26, 378], [-52, 373], [-76, 380]],
+        w: 11,
+        ws: [6, 11, 12, 14, 15, 11, 9, 10, 9, 11, 13, 10, 8, 6],
+        deep: 1.5,
+      },
+    ],
+    trees: {
+      seed: 41,
+      edge: 6,
+      spacing: 6,
+      sides: [0.5, 0.5],
+      behind: 1,
+      clear: [
+        [[-160, 150], [-24, 150], [-24, 430], [-160, 430]],
+        [[24, 150], [160, 150], [160, 430], [24, 430]],
+      ],
+    },
     wind: { speed: 2.5, dir: 0.3 },
-    landing: [0, 255],
-    // the fairway runs down to the creek, so a lay-up keeps rolling toward it; then up again to a raised green
-    ground: { rise: [[0, 0], [110, 2], [230, 0], [300, -2], [327, -3.5], [370, -1.5], [430, 2], [474, 3.5]], tilt: [[200, 0.02], [300, 0], [420, -0.015]] },
-    // a footbridge over the creek on the right, past the fairway's edge, yellow stakes on both banks, reeds, rocks
+    // dense stands where the burn goes into the woods, so it comes from somewhere and goes somewhere
+    copse: [
+      [-74, 186, 18], [-80, 196, 20], [-68, 200, 17], [-84, 188, 19], [-76, 205, 18], [-62, 189, 16], [-86, 200, 17],
+      [-78, 374, 18], [-84, 384, 20], [-72, 388, 17], [-88, 376, 19], [-80, 392, 18], [-68, 384, 16], [-90, 386, 17],
+    ],
+    landing: [-12, 258],
+    ground: {
+      rise: [[0, 0], [20, -0.3], [45, -2.4], [80, -5.5], [120, -8.3], [170, -9.8], [205, -10.4], [232, -10.8], [262, -9.2], [300, -8.4], [340, -8.8], [375, -9.7], [395, -9.2], [414, -8.6]],
+      tilt: [[240, 0], [270, -0.012], [340, -0.012], [380, 0]],
+      baseY: 50,
+    },
+    // a bank behind the green to hold a ball that runs on, and mounds that pen the left rough on the first fairway
+    features: [
+      { k: "ridge", path: [[-40, 436], [-12, 441], [18, 442], [48, 436]], w: 14, h: 1.8 },
+      { k: "mound", x: -34, z: 270, r: 11, rz: 16, h: 1.1 },
+    ],
     props: [
-      { kind: "bridge", a: [30, 316], b: [30, 339], w: 2.6 },
-      ...[-24, -10, 12, 22].flatMap((x): Prop[] => [
-        { kind: "stake", at: [x, 318.5], color: "yellow" },
-        { kind: "stake", at: [x, 336.5], color: "yellow" },
-      ]),
-      { kind: "reeds", at: [14, 320.5], r: 4, n: 34, seed: 1 },
-      { kind: "reeds", at: [-34, 321], r: 5, n: 34, seed: 2 },
-      { kind: "reeds", at: [24, 335], r: 4, n: 30, seed: 3 },
-      { kind: "reeds", at: [-4, 335], r: 5, n: 34, seed: 7 },
-      { kind: "rocks", at: [27.5, 317], r: 2, n: 8, seed: 3 },
-      { kind: "rocks", at: [32.5, 338.5], r: 2, n: 8, seed: 4 },
-      { kind: "tuft", at: [34, 322], r: 4, n: 20, seed: 5 },
+      // the stone bridge over the second crossing, on the line to the green: a ball that lands on the deck rolls over it
+      { kind: "bridge", a: [0, 364], b: [0, 389], w: 3.2, arch: 0.45 },
+      { kind: "reeds", at: [-31, 198.5], r: 4, n: 34, seed: 1 },
+      { kind: "reeds", at: [-46, 190], r: 5, n: 34, seed: 2 },
+      { kind: "reeds", at: [-42, 206], r: 4, n: 28, seed: 3 },
+      { kind: "reeds", at: [46, 266], r: 4, n: 34, seed: 4 },
+      { kind: "reeds", at: [47, 298], r: 5, n: 40, seed: 5 },
+      { kind: "reeds", at: [43, 330], r: 4, n: 30, seed: 6 },
+      { kind: "reeds", at: [-40, 368], r: 4, n: 30, seed: 7 },
+      { kind: "reeds", at: [-52, 386], r: 4, n: 28, seed: 8 },
+      { kind: "reeds", at: [9, 361], r: 3, n: 18, seed: 9 },
+      { kind: "rocks", at: [30, 255], r: 2, n: 8, seed: 3 },
+      { kind: "rocks", at: [34, 340], r: 2, n: 8, seed: 4 },
+      { kind: "rocks", at: [-62, 366], r: 2, n: 8, seed: 5 },
+      { kind: "rocks", at: [-5, 360], r: 2, n: 6, seed: 6 },
+      { kind: "tuft", at: [14, 372], r: 4, n: 20, seed: 5 },
     ],
   },
   {
@@ -769,7 +810,10 @@ export function buildHole(def: HoleDef): BuiltHole {
     return null;
   };
 
+  const bridged = !!def.props && def.props.some((p) => p.kind === "bridge");
   const surfaceAt = (x: number, z: number): Surface => {
+    // a bridge's deck is dry: a ball that comes down on it rolls on it (solids.ts `withDecks` lifts the ground to the deck)
+    if (bridged && onDeck(def.props, x, z)) return "fairway";
     for (const b of def.water) if (waterHit(b, x, z)) return "water";
     if (areas.length && areaAt(x, z, ["oob"])) return "oob";
     if (def.targets)

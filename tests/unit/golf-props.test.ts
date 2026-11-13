@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLUBS, simulate, type ShotIn, type Surface } from "@/components/offhours/golf/flight";
 import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
-import { bridgeShape, collide, solidsOf, wallRuns, type Prop, type Solid } from "@/components/offhours/golf/solids";
+import { bridgeShape, collide, deckTop, onDeck, solidsOf, wallRuns, withDecks, type Prop, type Solid } from "@/components/offhours/golf/solids";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { YD } from "@/components/offhours/golf/scene";
 
@@ -41,13 +41,77 @@ describe("solids", () => {
     expect(rails.length).toBe(2);
     for (const r of rails) expect(r.y0).toBe(b.deckY);
   });
-  it("hole 4's bridge spans the creek: its ends are dry and its middle is over the water", () => {
+  it("hole 4's stone bridge spans the creek: its ends are dry, its deck is dry, and the water runs under and beside it", () => {
     const h = buildHole(NINE_DEFS.find((d) => d.n === 4)!);
     const br = h.def.props!.find((p) => p.kind === "bridge") as Extract<Prop, { kind: "bridge" }>;
-    const at = (k: number) => h.surfaceAt((br.a[0] + (br.b[0] - br.a[0]) * k) * YD, (br.a[1] + (br.b[1] - br.a[1]) * k) * YD);
+    const at = (k: number, across = 0) => h.surfaceAt((br.a[0] + (br.b[0] - br.a[0]) * k) * YD + across, (br.a[1] + (br.b[1] - br.a[1]) * k) * YD);
     expect(at(0)).not.toBe("water");
     expect(at(1)).not.toBe("water");
-    expect(at(0.5)).toBe("water");
+    // the middle of the span is the deck, which is dry; a few metres to either side of it is the creek
+    expect(at(0.5)).toBe("fairway");
+    expect(at(0.5, 3)).toBe("water");
+    expect(at(0.5, -3)).toBe("water");
+    expect((br.arch ?? 0)).toBeGreaterThan(0);
+  });
+  it("a stone bridge's deck springs from the ground at both ends and rises to a crown that clears the water", () => {
+    const g = { y: (x: number, z: number) => (Math.abs(z - 100 * YD) < 6 ? -2 : 0), waterY: () => -1.8 };
+    const p: Extract<Prop, { kind: "bridge" }> = { kind: "bridge", a: [0, 90], b: [0, 110], arch: 0.4 };
+    const b = bridgeShape(p, g);
+    expect(deckTop(b, 0)).toBeCloseTo(0, 6);
+    expect(deckTop(b, 1)).toBeCloseTo(0, 6);
+    expect(deckTop(b, 0.5)).toBeCloseTo(b.deckY, 6);
+    expect(b.deckY).toBeGreaterThanOrEqual(0.4);
+    for (const k of [0.25, 0.5, 0.75]) expect(deckTop(b, k)).toBeGreaterThanOrEqual(g.waterY() + 1 - 1e-6);
+    expect(onDeck([p], 0, 100 * YD)).toBe(true);
+    expect(onDeck([p], 3, 100 * YD)).toBe(false);
+    expect(onDeck([p], 0, 120 * YD)).toBe(false);
+  });
+});
+
+describe("a ball on a bridge", () => {
+  // a creek 12 m wide across the course at z = 100 yd, 1.5 m deep, with a stone bridge over it
+  const props: Prop[] = [{ kind: "bridge", a: [0, 90], b: [0, 110], w: 3.2, arch: 0.45 }];
+  const zc = 100 * YD;
+  const dug = { y: (x: number, z: number) => (Math.abs(z - zc) < 6 ? -1.5 : 0), slope: () => [0, 0] as [number, number], waterY: () => -0.9 };
+  const decked = withDecks(dug, props);
+  const surf = (x: number, z: number): Surface => (Math.abs(z - zc) < 6 && !onDeck(props, x, z) ? "water" : "fairway");
+  const solids = solidsOf(props, decked);
+  it("with no bridge the ground is untouched", () => {
+    expect(withDecks(dug, undefined)).toBe(dug);
+    expect(withDecks(dug, [{ kind: "boulder", at: [0, 0], size: 1 }])).toBe(dug);
+  });
+  it("the deck is the ground's height over it, and the ground everywhere else", () => {
+    expect(decked.y(0, zc)).toBeGreaterThan(0.4);
+    expect(decked.y(5, zc)).toBeCloseTo(dug.y(5, zc), 9);
+    expect((decked as { base?: unknown }).base).toBe(dug);
+  });
+  it("a ball that lands on the deck rolls over it and comes off the far end, dry", () => {
+    // from 30 m short of the creek, a wedge that lands on the deck (a 4 m wide target, so find a power that does)
+    let found = 0;
+    for (let sp = 0.3; sp < 0.7; sp += 0.005) {
+      const s = simulate(base({ club: CLUBS[4], speed: sp, surfaceAt: surf, ground: decked, solids, origin: [0, zc - 30] }));
+      const first = s.bounces[0];
+      if (!first || !onDeck(props, first.x, zc - 30 + first.z)) continue;
+      found++;
+      expect(first.surface).toBe("fairway");
+      expect(s.surface).not.toBe("water");
+      // it ends past the deck (rolled over it), not in the creek under it
+      expect(s.pts[s.pts.length - 1]).toBeGreaterThan(8);
+    }
+    expect(found).toBeGreaterThan(2);
+  });
+  it("the same shot with no deck is in the water", () => {
+    let wet = 0;
+    for (let sp = 0.3; sp < 0.7; sp += 0.005) {
+      const s = simulate(base({ club: CLUBS[4], speed: sp, surfaceAt: (x, z) => (Math.abs(z - zc) < 6 ? "water" : "fairway"), ground: dug, origin: [0, zc - 30] }));
+      if (s.surface === "water") wet++;
+    }
+    expect(wet).toBeGreaterThan(2);
+  });
+  it("is deterministic", () => {
+    const a = simulate(base({ speed: 0.45, surfaceAt: surf, ground: decked, solids, origin: [0, zc - 30] }));
+    const b = simulate(base({ speed: 0.45, surfaceAt: surf, ground: decked, solids, origin: [0, zc - 30] }));
+    expect(Array.from(a.pts)).toEqual(Array.from(b.pts));
   });
 });
 
