@@ -24,7 +24,9 @@ describe("scattering scrub and tufts", () => {
     expect(dense.length).toBeGreaterThan(300);
     expect(capped.length).toBeLessThanOrEqual(150);
     expect(capped.length).toBeGreaterThan(60);
-    expect(scatter(h3, "waste", 4, 400, 1)).toEqual([]);
+    // (hole 3's canyon floor is sand and scrub, so it is scattered like hole 5's waste)
+    expect(scatter(h3, "waste", 4, 400, 1).length).toBeGreaterThan(100);
+    expect(scatter(h3, "waste", 4, 0, 1)).toEqual([]);
     expect(scatter(h5, "waste", 4, 0, 1)).toEqual([]);
   });
   it("keeps clear of the green and of any bunker cut out of a field", () => {
@@ -42,7 +44,7 @@ describe("the scrub mesh", () => {
     expect(high.group.children).toHaveLength(2);
     expect(buildScrub(h5, ground, "low", sink)!.calls).toBe(2);
     expect(buildScrub(h5, ground, "soft", sink)).toBeNull();
-    expect(buildScrub(h3, terrainOf(h3), "high", sink)).toBeNull();
+    expect(buildScrub(h3, terrainOf(h3), "high", sink)).not.toBeNull();
     // hole 1 has both too: fescue on the flanks of its face and a waste scrape in the right rough
     expect(buildScrub(h1, terrainOf(h1), "high", sink)!.calls).toBe(2);
     sink.forEach((d) => d.dispose());
