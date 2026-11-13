@@ -392,29 +392,52 @@ export const BACK_DEFS: HoleDef[] = [
     ],
   },
   {
-    // a long right-hander with a lake down the right of the second shot and a pond off the front right of the green; the
-    // ground and the wind both lean toward the water. Get home in two over the pond, or lay up left
+    // a climb up the bay's shore to a green on an island in a lake that lies on the bluff beside the bay, 17 m over the tee.
+    // The drive carries about 240 yd to the foot of the plateau. From there the island is 235 yd across the water: the brave
+    // line is a driver at 95 to 100% on a true line (a 3 wood is 15 yd short, in the lake). Or lay up left, to the lake's
+    // near bank 390 yd out, and pitch 105 yd over the water to the island (a footbridge crosses the channel behind it, for
+    // show). Short, long and wide of the island are the lake, and the ball is dropped on the lay-up bank for a stroke
     n: 8,
     name: "Long Water",
     par: 5,
-    yards: 520,
-    line: [[0, 0], [0, 280], [45, 522]],
-    half: [15, 21, 19],
+    yards: 492,
+    line: [[0, 0], [0, 245], [-14, 380], [-4, 447], [30, 482]],
+    half: [15, 21, 20, 18, 17],
     rough: 14,
-    pin: [44, 518],
-    green: { c: [45, 521], seed: 4808, severity: 0.7 },
+    pin: [30, 480],
+    green: { c: [30, 481], seed: 4808, severity: 0.7 },
     bunkers: [
-      { x: -20, z: 262, rx: 5, rz: 10 },
-      { x: 29, z: 514, rx: 4, rz: 6 },
+      { x: -24, z: 250, rx: 5, rz: 10 },
+      { x: -36, z: 376, rx: 5, rz: 9, rot: 0.2 },
     ],
     water: [
-      { x: 64, z: 400, rx: 15, rz: 34, rot: -0.18, lobe: 2.3 },
-      { x: 67, z: 499, rx: 8, rz: 10, lobe: 1.1 },
+      // the lake: a bay of the sea loch lifted onto the plateau, wrapped round the island on three sides (open to the west)
+      {
+        shore: [[8, 332], [22, 322], [45, 318], [70, 324], [96, 336], [116, 356], [128, 384], [132, 418], [129, 454], [124, 488], [112, 518], [92, 538], [64, 548], [36, 544], [14, 532], [8, 516], [12, 506], [26, 503], [42, 499], [52, 491], [55, 480], [51, 470], [41, 463], [26, 461], [12, 462], [6, 452], [5, 438], [3, 412], [4, 382], [6, 354]],
+        level: 16.8,
+        depth: 2.2,
+      },
+      // the channel on the island's west side, which the footbridge crosses
+      {
+        shore: [[2, 438], [10, 446], [15, 458], [15, 472], [14, 488], [13, 504], [12, 516], [10, 526], [1, 530], [-7, 522], [-8, 496], [-8, 472], [-4, 454], [-2, 443]],
+        level: 16.8,
+        depth: 2.2,
+      },
     ],
-    trees: { seed: 83, edge: 6, spacing: 6 },
+    trees: { seed: 83, edge: 6, spacing: 6, clear: [[[24, -60], [220, -60], [220, 700], [24, 700]], [[-80, 530], [220, 530], [220, 700], [-80, 700]]], sides: [0.4, 0.15], behind: 0 },
     wind: { speed: 2, dir: 1.2 },
-    landing: [0, 262],
-    ground: { rise: [[0, 0], [150, -2], [280, -3], [420, -5], [522, -4]], tilt: [[300, 0], [400, -0.025], [480, 0]], swell: 0.7 },
+    landing: [0, 245],
+    ground: { rise: [[0, 0], [60, 2], [150, 6], [235, 11], [290, 15], [325, 17], [405, 17.4], [495, 17.8]], swell: 0.5 },
+    // drop zones: along the fairway for the trees; at the lake, the lay-up bank on the left, a short pitch from the island
+    drops: [[0, 70], [0, 150], [0, 225], [-14, 390]],
+    props: [
+      { kind: "bridge", a: [-12, 484], b: [19, 480], w: 2.6 },
+      { kind: "reeds", at: [-12, 442], r: 4, n: 14, seed: 4 },
+      { kind: "reeds", at: [3, 520], r: 3, n: 9, seed: 6 },
+      { kind: "rocks", at: [112, 524], r: 5, n: 9, seed: 3 },
+      { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
+      { kind: "sign", at: [6, 4], yaw: -0.3 },
+    ],
   },
   {
     // home from a raised tee: down to a dogleg left with a stand of trees on the inside of the corner, the ground kicking

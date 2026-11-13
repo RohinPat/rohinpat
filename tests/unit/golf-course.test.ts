@@ -43,7 +43,7 @@ const MARKERS: Record<number, string[]> = {
   5: ["100", "100", "150", "150"],
   6: ["100", "100", "150", "150", "200", "200"],
   7: ["100", "100", "150", "200", "200"],
-  8: ["100", "100", "150", "150", "200", "200"],
+  8: ["100", "150", "200", "200"],
   9: ["100", "100", "150", "150", "200", "200"],
 };
 
@@ -87,9 +87,10 @@ describe("course data", () => {
           if (sf === "water") wet++;
           else expect(["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
-        // only hole 4's creek is across the line, 14 yd of it
-        expect(wet > 0).toBe(def.n === 4);
+        // only hole 4's creek is across the line, 14 yd of it, and hole 8's channel under the footbridge, a few yards
+        expect(wet > 0).toBe(def.n === 4 || def.n === 8);
         if (def.n === 4) expect(wet * 2).toBeGreaterThanOrEqual(12);
+        if (def.n === 8) expect(wet * 2).toBeLessThanOrEqual(30);
       });
       it("every hazard is where it says it is", () => {
         for (const w of def.water) {
@@ -164,7 +165,7 @@ describe("course data", () => {
   it("the back three make a nine: par 36", () => {
     expect(NINE_DEFS.slice(6).map((d) => [d.n, d.name, d.par, d.yards])).toEqual([
       [7, "The Ridge", 4, 385],
-      [8, "Long Water", 5, 520],
+      [8, "Long Water", 5, 492],
       [9, "Homeward", 4, 415],
     ]);
     expect(NINE_DEFS.reduce((a, d) => a + d.par, 0)).toBe(36);

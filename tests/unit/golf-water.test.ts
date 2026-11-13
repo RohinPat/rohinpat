@@ -74,7 +74,8 @@ describe("a pond with a natural shore", () => {
 });
 
 describe("a lake from a polygon", () => {
-  const d = { ...BACK_DEFS.find((x) => x.n === 8)!, water: [LAKE] };
+  // (hole 8 as the old plan drew it: a long, gentle fall; the real hole 8 has a plateau of its own and no one lake at 46..88)
+  const d = { ...BACK_DEFS.find((x) => x.n === 8)!, water: [LAKE], props: undefined, drops: undefined, ground: { rise: [[0, 0], [150, -2], [280, -3], [420, -5], [522, -4]] as [number, number][], swell: 0.7 } };
   const b = buildHole(d);
   const t = terrainOf(b);
   it("is water inside the shore and dry outside, with the drawn outline on the shore", () => {
