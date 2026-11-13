@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLUBS, simulate } from "@/components/offhours/golf/flight";
 import { NINE_DEFS, buildHole } from "@/components/offhours/golf/course";
-import { CourseGame } from "@/components/offhours/golf/play";
+import { CourseGame, REST_HOLD, STEP } from "@/components/offhours/golf/play";
 import { DROP_CLEAR, dropFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
 import { solidsOf } from "@/components/offhours/golf/solids";
@@ -67,8 +67,12 @@ describe("hole 8: the island green", () => {
     const sf = (x: number, z: number) => hole.surfaceAt(x * YD, z * YD);
     expect(["fairway", "rough"]).toContain(sf(...br.a));
     expect(["fairway", "rough", "fringe", "green"]).toContain(sf(...br.b));
+    // (the deck reads as fairway, so the water is checked on the ground beneath it)
     let wet = 0;
-    for (let k = 0.1; k < 0.9; k += 0.05) if (sf(br.a[0] + (br.b[0] - br.a[0]) * k, br.a[1] + (br.b[1] - br.a[1]) * k) === "water") wet++;
+    for (let k = 0.1; k < 0.9; k += 0.05) {
+      const x = br.a[0] + (br.b[0] - br.a[0]) * k, z = br.a[1] + (br.b[1] - br.a[1]) * k;
+      if (ground.y(x * YD, z * YD) < ground.waterY(x * YD, z * YD)) wet++;
+    }
     expect(wet).toBeGreaterThanOrEqual(5);
     // it is a prop to look at, with rails that stop a ball
     expect(solidsOf(def.props, ground).length).toBeGreaterThan(0);
@@ -167,5 +171,48 @@ describe("hole 8: the bots finish it", () => {
     const m = rs.reduce((a, b) => a + b, 0) / rs.length;
     expect(m).toBeGreaterThanOrEqual(4.8);
     expect(m).toBeLessThanOrEqual(6.8);
+  });
+});
+
+describe("hole 8: putting on the island", () => {
+  // (a helper, so the phase is not narrowed to "rest" in the test body)
+  const settle = (g: CourseGame) => {
+    g.phase = "rest";
+    g.restT = REST_HOLD;
+    g.step(STEP);
+  };
+  const run = (g: CourseGame, until: () => boolean, max = 40) => {
+    const t0 = g.t;
+    while (!until() && g.t - t0 < max) g.step(STEP);
+    return until();
+  };
+  // a ball on the ground, ready to be played: the same set-up as the holes test's `place` (metres, as the hole's surfaces are)
+  const placeOn = (g: CourseGame, x: number, z: number) => {
+    g.ball = [x * YD, z * YD];
+    g.lie = "fairway";
+    g.strokes = 2;
+    g.phase = "ready";
+    (g as unknown as { prepareShot(tee: boolean): void }).prepareShot(false);
+    g.wind = [0, 0];
+    g.camReady = false;
+  };
+  it("a ball a yard off the island green is putted, and is holed in a few putts", () => {
+    const g = new CourseGame({ seed: 5, holes: [def] });
+    g.key({ key: " " }, true);
+    g.wind = [0, 0];
+    // a yard off the green's edge, on the bridge side (yd)
+    let z = PZ;
+    while (["green", "fringe"].includes(hole.surfaceAt(PX * YD, z * YD))) z -= 0.05;
+    placeOn(g, PX + 0.5, z - 0.4);
+    settle(g);
+    expect(g.phase).toBe("putt");
+    for (let i = 0; i < 14 && g.phase === "putt"; i++) {
+      run(g, () => !g.puttState().rolling || g.phase !== "putt", 20);
+      if (g.phase !== "putt") break;
+      const ps = g.puttState();
+      g.puttShoot(Math.atan2(ps.cup[1] - ps.ball[1], ps.cup[0] - ps.ball[0]), Math.min(1, Math.sqrt(ps.dist / 12) + 0.25));
+    }
+    run(g, () => g.phase === "hole-card", 10);
+    expect(g.phase).toBe("hole-card");
   });
 });

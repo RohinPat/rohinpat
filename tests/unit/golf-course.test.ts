@@ -4,6 +4,8 @@ import { HOLE_DEFS, NINE_DEFS, buildHole, type Blob, type HoleDef, type Water } 
 import { GH, GW, zone } from "@/components/offhours/golf/green";
 import { DROP_BACK_MAX, DROP_CLEAR, LIE_ORDER, dropFor, lieFor, waterWithin } from "@/components/offhours/golf/lie";
 import { YD } from "@/components/offhours/golf/scene";
+import { onDeck } from "@/components/offhours/golf/solids";
+import { terrainOf } from "@/components/offhours/golf/terrain";
 import { PICK_UP_OVER, bestRound, forgetBest, holeScore, overUnder, recordRound, shouldPickUp, toPar } from "@/components/offhours/golf/score";
 import { OLD_H2 } from "./golf-old-h2";
 
@@ -108,7 +110,9 @@ describe("course data", () => {
       it("every hazard is where it says it is", () => {
         for (const w of def.water) {
           const [x, z] = inside(w);
-          expect(b.surfaceAt(x * YD, z * YD)).toBe("water");
+          // (a bridge's deck is dry, so a hazard under one reads as fairway: then it is the ground beneath that is water)
+          if (onDeck(def.props, x * YD, z * YD)) expect(terrainOf(b).y(x * YD, z * YD)).toBeLessThan(terrainOf(b).waterY(x * YD, z * YD));
+          else expect(b.surfaceAt(x * YD, z * YD)).toBe("water");
         }
         for (const s of def.bunkers) expect(b.surfaceAt(s.x * YD, s.z * YD)).toBe("bunker");
         expect(b.world.water).toHaveLength(def.water.length);
