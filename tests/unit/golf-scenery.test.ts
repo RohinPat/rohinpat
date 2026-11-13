@@ -62,7 +62,8 @@ describe("the backdrop leaves the playable ground alone", () => {
         for (const b of hole.blockers) expect(keep(b.x, b.z, b.h)).toBe(true);
         for (const t of hole.world.trees) if (beyond(t.x, t.z) < 5) expect(keep(t.x, t.z, t.h)).toBe(true);
       }
-    });
+      // (it builds the hole's ground and backdrop and walks them: about a second alone, several on a loaded CI box)
+    }, 20_000);
   }
 
   it("holds by construction: a hostile record changes nothing inside the gate", () => {

@@ -44,7 +44,8 @@ describe("the ground's shape", () => {
     // a long way down on 2 (30 m, off the cliff), and down on 3 too: its mesa green sits under the canyon's tee
     expect(terrainOf(holes[1]).pad).toBeLessThan(-27);
     expect(terrainOf(holes[2]).pad).toBeLessThan(-7);
-  });
+    // (it builds every hole's ground: about a second alone, several on a loaded CI box)
+  }, 20_000);
 
   it("has no steps or cliffs anywhere a ball can be", { timeout: 60_000 }, () => {
     for (const h of holes) {
