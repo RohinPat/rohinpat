@@ -253,8 +253,9 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
         // (the low side is on the left of the path: + s)
         const at = (x: number, z: number) => {
           const i = pathInfo(path, x, z, closed);
-          // (the true distance to the brink, signed: round a corner it is longer than the distance to either segment's line)
-          return { c: i.s >= 0 ? i.d : -i.d, along: closed ? 1 : 1 - smooth(i.over / fade) };
+          // (the true distance to the brink, signed: round a corner it is longer than the distance to either segment's line; past the end of
+          // an open path the face runs straight on, fading, so there it is the lateral distance)
+          return { c: i.over !== 0 ? i.s : i.s >= 0 ? i.d : -i.d, along: closed ? 1 : 1 - smooth(i.over / fade) };
         };
         cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, frac, at });
         // the zone the face and its apron cover, for the mesh and for "near": the path grown by the apron
@@ -435,7 +436,7 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
     rock: (x, z) => {
       for (const g of cliffs) {
         const a = g.at(x, z);
-        if (a.along > 0.5 && a.c > -0.4 && a.c < g.run + 0.6) return true;
+        if (a.along > 0.03 && a.c > -1 && a.c < g.run + 0.6) return true;
       }
       return false;
     },

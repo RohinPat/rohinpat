@@ -9,12 +9,12 @@ import { COAST_ROCK } from "./rock";
 export const HOLE7: SceneryRecord | null = {
   id: "ridge",
   skin: { skyTop: "#4f93d2", skyLow: "#bfe0ee", haze: "#d8eaee", glow: "#fff1d0", fogFar: 3000, skySun: [0.25, 0.3, 0.92] },
-  hills: { base: 2, amp: 9, reach: 150, fall: { bearing: 10, from: 30, to: 130, drop: 46 } },
+  hills: { base: 2, amp: 9, reach: 150, fall: { bearing: 10, from: 30, to: 130, drop: 24 } },
   palette: { base: "#5f9244", high: "#a9bb6a", ramp: [30, 110] },
-  ringY0: -42,
+  ringY0: -24,
   coast: {
     sea: "left",
-    seaY: -42,
+    seaY: -24,
     deep: 8,
     keepOut: 70,
     tones: { shallow: "#76cdc8", mid: "#3f9ab0", deep: "#1f6489", foam: "#f4fbfb" },

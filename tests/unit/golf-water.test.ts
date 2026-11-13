@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BACK_DEFS, HOLE_DEFS, buildHole, creekSd, polyOf, ringSd, type Creek, type Lake } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
+import { onDeck } from "@/components/offhours/golf/solids";
 import { terrainOf } from "@/components/offhours/golf/terrain";
 import { riffles, waterStakes } from "@/components/golf3d/water3d";
 import { OLD_H2 } from "./golf-old-h2";
@@ -25,7 +26,8 @@ describe("a creek", () => {
     }
   });
   it("the hit test, the outline and the distance field agree", () => {
-    for (const p of poly.filter((_, i) => i % 9 === 0)) {
+    // (the bridge's deck is dry, so the creek under it is skipped)
+    for (const p of poly.filter((q, i) => i % 9 === 0 && !onDeck(HOLE_DEFS[3].props, q.x, q.z))) {
       expect(b.surfaceAt(p.x, p.z)).toBe("water");
       expect(creekSd(poly, p.x, p.z)).toBeLessThan(0);
     }

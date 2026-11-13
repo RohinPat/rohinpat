@@ -17,9 +17,9 @@ type P = [number, number];
 type Tier = "high" | "low" | "soft";
 
 /** metres between columns along the brink */
-const STEP: Record<Tier, number> = { high: 1.4, low: 2.2, soft: 3.6 };
+const STEP: Record<Tier, number> = { high: 1.8, low: 2.6, soft: 4 };
 /** rows on the face (equal steps of height) and on the scree */
-const FACE_ROWS: Record<Tier, number> = { high: 18, low: 11, soft: 7 };
+const FACE_ROWS: Record<Tier, number> = { high: 15, low: 10, soft: 6 };
 const SCREE_ROWS: Record<Tier, number> = { high: 6, low: 4, soft: 3 };
 /** the turf behind the lip the ribbon starts on, m behind the brink (also where the ground mesh stops being let down) */
 const BACK = 3.3;
@@ -33,7 +33,7 @@ const WARM = ["#c4b497", "#b5a281", "#cdbda0"];
 const DARK = "#7b7774";
 const SCREE = ["#a29887", "#ab9f8c", "#9a9080"];
 const TURF = "#587f43";
-const LIP = "#8b8c7c";
+const LIP = "#7d8f5c";
 
 const smooth = (a: number, b: number, v: number) => {
   const u = Math.max(0, Math.min(1, (v - a) / (b - a)));
@@ -187,7 +187,7 @@ export function buildCliffs(hole: BuiltHole, tier: Tier, disposables: { dispose:
     const bulge = (i: number, f: number) => {
       const band = bandOf(f, i), k = blk[i % p.length];
       const w = smooth(0.04, 0.2, f) * (1 - smooth(0.82, 0.98, f));
-      return w * (0.7 * (hash1(k, g.seed + 29) - 0.5) + 0.34 * (hash2(band, k, g.seed + 37) - 0.5) + 0.1 * noise1(i * 0.9 + band * 3.3, g.seed * 3 + band));
+      return w * (0.36 * (hash1(k, g.seed + 29) - 0.5) + 0.2 * (hash2(band, k, g.seed + 37) - 0.5) + 0.05 * noise1(i * 0.9 + band * 3.3, g.seed * 3 + band));
     };
     const vtx = (i: number, j: number): number[] => {
       const q = p[i % N], n = nrm[i % N], r = rows[j];

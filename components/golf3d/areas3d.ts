@@ -75,9 +75,9 @@ export function paintAreas(c: CanvasRenderingContext2D, areas: AreaM[], tx: (x: 
         // wisps: thin curved strokes, mostly leaning the same way, in three straws
         const cols = [AREA_COL.fescueB, AREA_COL.fescueC, AREA_COL.fescueA, "#e9dc9e"];
         c.lineWidth = Math.max(1, 0.05 * s);
-        for (let i = 0; i < area * 5; i++) {
+        for (let i = 0; i < area * 7; i++) {
           const [x, z] = at();
-          const ang = -1.2 + (r() - 0.5) * 1.6, len = (0.35 + r() * 0.8) * s;
+          const ang = -1.2 + (r() - 0.5) * 1.9, len = (0.45 + r() * 1.0) * s;
           const bx = tx(x), bz = tz(z);
           c.strokeStyle = cols[i & 3];
           c.beginPath();
@@ -173,19 +173,32 @@ export function paintAreas(c: CanvasRenderingContext2D, areas: AreaM[], tx: (x: 
           c.ellipse(tx(x), tz(z), (0.5 + r() * 1.2) * s, (0.4 + r() * 0.8) * s, r() * 3.14, 0, 6.3);
           c.fill();
         }
-        // tufts of scrub: three or four blades from a point, and stones
-        c.lineWidth = Math.max(1, 0.07 * s);
-        for (let i = 0; i < area / 1.4; i++) {
+        // wind ripples: long faint arcs across the sand, pale on the ridge and dark in the trough
+        c.lineWidth = Math.max(1, 0.05 * s);
+        for (let i = 0; i < area / 7; i++) {
           const [x, z] = at();
-          const px = tx(x), pz = tz(z);
-          c.strokeStyle = r() > 0.4 ? AREA_COL.wasteTuft : AREA_COL.wasteTuftB;
-          const n = 3 + Math.floor(r() * 2);
+          const px = tx(x), pz = tz(z), len = (0.8 + r() * 1.8) * s, bend = (r() - 0.5) * 0.5 * s;
+          c.strokeStyle = r() > 0.5 ? "rgba(250,242,208,0.5)" : "rgba(150,124,74,0.32)";
+          c.beginPath();
+          c.moveTo(px, pz);
+          c.quadraticCurveTo(px + len * 0.5, pz + bend, px + len, pz + bend * 0.3);
+          c.stroke();
+        }
+        // scrub: soft dabs of grey-green and dry straw, in twos and threes (the bushes stand over the biggest: scrub3d.ts)
+        for (let i = 0; i < area / 3.2; i++) {
+          const [x, z] = at();
+          const px = tx(x), pz = tz(z), n = 1 + Math.floor(r() * 3);
           for (let k = 0; k < n; k++) {
-            const ang = -Math.PI / 2 + (k - (n - 1) / 2) * 0.55 + (r() - 0.5) * 0.3, len = (0.25 + r() * 0.35) * s;
+            const rad = (0.1 + r() * 0.2) * s;
+            const ox = (r() - 0.5) * 0.5 * s, oz = (r() - 0.5) * 0.4 * s;
+            c.fillStyle = "rgba(96,92,52,0.28)";
             c.beginPath();
-            c.moveTo(px, pz);
-            c.lineTo(px + Math.cos(ang) * len, pz + Math.sin(ang) * len);
-            c.stroke();
+            c.ellipse(px + ox + rad * 0.3, pz + oz + rad * 0.25, rad * 1.1, rad * 0.8, 0, 0, 6.3);
+            c.fill();
+            c.fillStyle = r() > 0.35 ? AREA_COL.wasteTuft : r() > 0.5 ? AREA_COL.wasteTuftB : "#c9b56e";
+            c.beginPath();
+            c.ellipse(px + ox, pz + oz, rad, rad * 0.75, 0, 0, 6.3);
+            c.fill();
           }
         }
         for (let i = 0; i < area / 5; i++) {

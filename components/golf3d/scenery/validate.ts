@@ -41,7 +41,8 @@ export function validateScenery(hole: BuiltHole, rec: SceneryRecord): string[] {
   }
   for (const w of rec.walls ?? []) {
     const d = clearanceOf(hole, wallSpine(hole, w));
-    if (d < WALL_KEEP) bad.push(`wall comes within ${d.toFixed(0)} m of play (keep ${WALL_KEEP})`);
+    const keep = w.keep ?? WALL_KEEP;
+    if (d < keep) bad.push(`wall comes within ${d.toFixed(0)} m of play (keep ${keep})`);
     colors.push(...w.rock, w.cap, w.foot);
   }
   if (rec.rings?.length) {

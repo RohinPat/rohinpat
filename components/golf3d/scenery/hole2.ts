@@ -1,8 +1,7 @@
 import type { SceneryRecord } from "./types";
 
-// Phase 3: hole 2's backdrop (plan.md 3.11 and the world map, section 5). Short Straw heads north, a long drop to a green
-// with the tarn (the in-play pond) on its left. Ahead stands a granite wall with a waterfall coming down it into a pool of
-// its own, the snow range above it and a lone peak in line with the green; the hills on the right lead toward the red
+// Phase 3: hole 2's backdrop (plan.md 3.11 and the world map, section 5). Short Straw heads north, off an escarpment to a green on a
+// peninsula in the tarn. Behind the tarn stands a cirque of granite with a waterfall coming down it into the tarn, the snow range above it and a lone peak in line with the green; the hills on the right lead toward the red
 // canyon, the valley lies behind the tee. Gold aspen shows in patches on the slopes. Do not import from scenes.ts.
 
 const GRANITE = ["#d9dcd8", "#bdc2c2", "#a3a9ad", "#848c93"];
@@ -13,12 +12,14 @@ export const HOLE2: SceneryRecord | null = {
   hills: { base: 10, amp: 20, reach: 110 },
   palette: { base: "#5c9660", high: "#b9bd9e", reach: 40, patches: { color: "#a8993f", share: 0.22, scale: 70, seed: 6 } },
   walls: [
-    // the granite wall ahead, bowed round the green; the waterfall comes down it
-    { follow: "beyond", offset: 140, halfWidth: 250, curve: 80, height: 50, rows: 8, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 70, seed: 21 },
-    // its shoulder on the left, over the tarn
-    { follow: "line", side: "left", offset: 120, from: 0.55, to: 1, height: 38, rows: 6, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 60, seed: 22 },
+    // the cirque's back wall, close behind the tarn: the waterfall comes down it into the tarn's far corner
+    { follow: "beyond", offset: 30, halfWidth: 250, curve: 0, height: 75, rows: 8, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 70, seed: 21, keep: 0 },
+    // its shoulders, left and right, closing the basin
+    { follow: "line", side: "left", offset: 175, from: 0.5, to: 1, height: 50, rows: 6, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 60, seed: 22 },
+    { follow: "line", side: "right", offset: 175, from: 0.5, to: 1, height: 50, rows: 6, rock: GRANITE, cap: "#9aa493", foot: "#aab0a2", capDepth: 60, seed: 23 },
   ],
-  waterfall: { wall: 0, at: 0.38, width: [9, 14], pool: 13 },
+  waterfall: { wall: 0, at: 0.41, width: [9, 14], pool: 13 },
+  mist: { color: "#eaf3f5", layers: [{ radius: 170, top: 8, alpha: 0.4 }, { radius: 260, top: 16, alpha: 0.35 }], seed: 3 },
   rings: [
     {
       radius: 2400,
