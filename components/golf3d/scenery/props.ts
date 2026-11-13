@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
 import { bearingOf, clamp, hash1, hash2, lerp, nearest, resample, signedDist, wrapDeg } from "./geo";
+import { clubhouseGeometry } from "./clubhouse";
 import { GATE } from "./height";
 import { COAST_ROCK } from "./rock";
 import type { P, PropsSpec, SceneryRecord, Tier } from "./types";
@@ -246,6 +247,23 @@ export function buildProps(
     let y = Infinity;
     for (const [dx, dz] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3]]) y = Math.min(y, heightAt(lp[0] + dx, lp[1] + dz));
     mesh.position.set(lp[0], y, lp[1]);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    frees.push(geometry, m);
+    tris += t;
+    calls++;
+  }
+
+  const ch = spec.clubhouse;
+  if (ch) {
+    const { geometry, tris: t } = clubhouseGeometry(rec.skin?.skySun ?? [0.3, 0.7, 0.5]);
+    const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, m);
+    // stand on the ground at the footing's high side, so it is not buried on a slope
+    let y = -Infinity;
+    for (const [dx, dz] of [[-13, -5], [13, -5], [-13, 5], [13, 5]]) y = Math.max(y, heightAt(ch.at[0] + dx, ch.at[1] + dz));
+    mesh.position.set(ch.at[0], y, ch.at[1]);
+    mesh.rotation.y = ch.rot ?? 0;
     mesh.frustumCulled = false;
     group.add(mesh);
     frees.push(geometry, m);

@@ -117,12 +117,21 @@ describe("the camera over a crest", () => {
     expect(g.cam.y - g.terrain.y(g.ball[0], g.ball[1])).toBeLessThan(2.6);
   });
   it("shows the landing from a tee above it: the camera looks out at the aim, not the slope under the tee", () => {
-    const high: HoleDef = { ...def(9), ground: { rise: [[0, 0], [40, 0], [80, -14], [215, -16], [410, -16]], sigma: 9 } };
+    // (no water across the line here: hole 9's own cove makes a carry, which takes the ledge eye instead, in the next test)
+    const high: HoleDef = { ...def(9), water: [], ground: { rise: [[0, 0], [40, 0], [80, -14], [215, -16], [410, -16]], sigma: 9 } };
     const g = new CourseGame({ seed: 5, holes: [high], hills: true });
     g.key({ key: " " }, true);
     for (let i = 0; i < 90; i++) paint(fakeCtx(), g, 1280, 720, 1 / 60, ptr, { world: false });
     expect(Math.hypot(g.cam.tx - g.cam.x, g.cam.tz - g.cam.z)).toBeGreaterThan(150);
     expect(g.cam.y).toBeGreaterThan(g.terrain.y(g.ball[0], g.ball[1]) + 2.5);
+  });
+  it("a carry over a cove far below the tee: the eye stays low, behind the golfer, and looks over the rim at the landing", () => {
+    const g = new CourseGame({ seed: 5, holes: [def(9)], hills: true });
+    g.key({ key: " " }, true);
+    for (let i = 0; i < 90; i++) paint(fakeCtx(), g, 1280, 720, 1 / 60, ptr, { world: false });
+    // the cove's bed is 40 m under the tee, but its lip is 100 yd out and hides it: the eye is the golfer's, and the look is the landing
+    expect(g.cam.y - g.terrain.y(g.ball[0], g.ball[1])).toBeLessThan(6);
+    expect(Math.hypot(g.cam.tx - g.cam.x, g.cam.tz - g.cam.z)).toBeGreaterThan(140);
   });
   it("does not run away while a shot flies over the crest", () => {
     const g = new CourseGame({ seed: 5, holes: [def(7)], hills: true });

@@ -55,7 +55,8 @@ describe("the lighthouse", () => {
     expect(sd).toBeGreaterThan(-20);
     expect(beyondOf(hole9, p[0], p[1])).toBeGreaterThan(GATE + 45);
     const brg = (Math.atan2(p[0] - hole9.pin[0], p[1] - hole9.pin[1]) * 180) / Math.PI;
-    expect(Math.abs(brg + 48)).toBeLessThan(25);
+    // (the lighthouse stands behind the flag, bearing -8 from the pin, as the record asks)
+    expect(Math.abs(brg + 8)).toBeLessThan(25);
     expect(placeLighthouse(hole9, rec9)).toEqual(p);
   });
   it("the sea-on-the-right coast puts it on land on the right", () => {
@@ -74,13 +75,17 @@ describe("buildProps", () => {
   const run = (tier: "high" | "low" | "soft") => buildProps(hole9, rec9, heightAt, tier)!;
   it("budgets per tier", () => {
     const hi = run("high"), lo = run("low"), so = run("soft");
-    expect(hi.calls).toBe(2);
-    expect(hi.tris).toBeLessThanOrEqual(1200);
-    expect(lo.calls).toBe(2);
+    // (three calls: the stacks, the lighthouse and hole 9's clubhouse, each one mesh)
+    expect(hi.calls).toBe(3);
+    // (the clubhouse's posts, windows and roof are about 250 of these triangles: the cap is for the whole of hole 9's props)
+    expect(hi.tris).toBeLessThanOrEqual(1300);
+    expect(lo.calls).toBe(3);
     expect(lo.tris).toBeLessThan(hi.tris);
-    expect(lo.tris).toBeLessThanOrEqual(1200 / 2 + 200);
-    expect(so.calls).toBe(1);
-    expect(so.tris).toBeLessThanOrEqual(150);
+    // (the low tier keeps the clubhouse too, about 250 triangles, so its cap is the old one plus that)
+    expect(lo.tris).toBeLessThanOrEqual(1200 / 2 + 200 + 250);
+    // (soft: the lighthouse and the clubhouse, one mesh each, and no stacks)
+    expect(so.calls).toBe(2);
+    expect(so.tris).toBeLessThanOrEqual(150 + 300);
     expect(hi.tris).toBe(placeStacks(hole9, rec9, 7).length * STACK_TRIS + so.tris);
     // (it builds the holes' backdrops on every tier: about a second alone, several on a loaded CI box)
   }, 20_000);
@@ -115,7 +120,8 @@ describe("buildProps", () => {
     let instFreed = false;
     inst.addEventListener("dispose", () => (instFreed = true));
     r.dispose();
-    expect(freed).toBe(4);
+    // (three meshes, each with a geometry and a material: the clubhouse is the third)
+    expect(freed).toBe(6);
     expect(instFreed).toBe(true);
   });
 });

@@ -153,11 +153,24 @@ export const bell = (u: number) => (u <= 0 ? 1 : u >= 1 ? 0 : 0.5 + 0.5 * Math.c
 const flatBell = (u: number, flat: number) => (u <= flat ? 1 : bell((u - flat) / (1 - flat)));
 
 /** how a point sits against a polyline: its distance, the side (+ on the left looking along it), where along it (0..1), and how far past an end */
+/** a path's points (closed: with the first again at the end) and the length along it at each, worked out once per path: a long cliff asks about every cell of the ground */
+const walked = new WeakMap<Pt[], { pts: Pt[]; cum: number[]; total: number }>();
+const walkedClosed = new WeakMap<Pt[], { pts: Pt[]; cum: number[]; total: number }>();
+function walk(path: Pt[], closed: boolean) {
+  const cache = closed ? walkedClosed : walked;
+  let w = cache.get(path);
+  if (!w) {
+    const pts = closed ? [...path, path[0]] : path;
+    let total = 0;
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push((total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])));
+    cache.set(path, (w = { pts, cum, total }));
+  }
+  return w;
+}
+
 export function pathInfo(path: Pt[], x: number, z: number, closed = false) {
-  const pts = closed ? [...path, path[0]] : path;
-  let total = 0;
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push((total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])));
+  const { pts, cum, total } = walk(path, closed);
   let best = { d: Infinity, s: 0, t: 0, over: 0 };
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, az] = pts[i], [bx, bz] = pts[i + 1];

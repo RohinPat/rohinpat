@@ -3,6 +3,7 @@ import type { Surface } from "./flight";
 import { onDeck, type Prop } from "./solids";
 import { GH, GW, makeGreen, shapeR, zone, type Hole } from "./green";
 import { compileFeatures, type Feature } from "./features";
+import { BRINK_9, COVE_9 } from "./coast9";
 import type { Ground } from "./terrain";
 import { RANGE_WORLD, TARGETS, YD, fogAt, hex, mixc, poly, HAZE, type Cam, type Tree, type World } from "./scene";
 
@@ -706,35 +707,57 @@ export const BACK_DEFS: HoleDef[] = [
     ],
   },
   {
-    // home from a raised tee: down to a dogleg left with a stand of trees on the inside of the corner, the ground kicking
-    // to the outside toward a bunker, and a green on a shelf with a pond long and left
+    // home along the sea cliff: a tee 34 m over the sea and a cove cut into the cliffs across the line. The neck of the cove is
+    // rock on both banks with water between them (about 105 to 135 yd out), and it crosses the whole fairway. A short carry
+    // of about 150 yd clears it onto the shelf beyond and leaves about 210 in. West of the shelf the bay opens: a long carry of
+    // about 240 yd, aimed at the far land (-40, 240), flies the bay and leaves about 105, a wedge. A ball in the cove is dropped
+    // on the fairway at (10, 80), a stroke and the drop. Over the cliff is out of bounds, and the green stands on the headland
+    // with the lighthouse behind the flag and the clubhouse beyond it.
     n: 9,
     name: "Homeward",
     par: 4,
-    yards: 415,
-    line: [[0, 0], [0, 200], [-70, 410]],
-    half: [16, 22, 18],
+    yards: 367,
+    line: [[0, 0], [10, 185], [-92, 338]],
+    half: [16, 20, 17],
     rough: 14,
-    pin: [-68, 406],
-    green: { c: [-70, 409], seed: 4909, severity: 0.85 },
+    pin: [-90, 335],
+    green: { c: [-92, 338], seed: 4909, severity: 0.85 },
     bunkers: [
-      { x: 26, z: 212, rx: 5, rz: 9 },
-      { x: -84, z: 397, rx: 5, rz: 4, rot: 0.5 },
-      { x: -55, z: 421, rx: 4, rz: 5 },
+      { x: 30, z: 176, rx: 5, rz: 9, rot: 0.1 },
+      { x: -73, z: 322, rx: 5, rz: 4, rot: 0.6 },
+      { x: -108, z: 346, rx: 4, rz: 5 },
     ],
-    water: [{ x: -93, z: 428, rx: 10, rz: 7, rot: 0.4, lobe: 5.2 }],
-    trees: { seed: 97, edge: 6, spacing: 6 },
-    copse: [[-38, 148, 17], [-44, 159, 19], [-36, 169, 16], [-48, 173, 18], [-40, 184, 20], [-52, 189, 17]],
-    wind: { speed: 3, dir: -2.2 },
-    landing: [-5, 215],
-    ground: { rise: [[0, 0], [60, -2], [200, -7], [300, -8], [415, -6]], tilt: [[160, 0], [210, -0.03], [290, 0]] },
-    // out of bounds down the left, past the rough and the copse: white stakes on the line, stroke and distance beyond
+    water: [{ shore: COVE_9, level: -34.2, depth: 1.1 }],
+    trees: {
+      seed: 97,
+      edge: 6,
+      spacing: 6,
+      // headland: open turf with the odd tree on the left, the cove's east end and the back of the green bare
+      clear: [[[-300, -80], [-26, -80], [-26, 90], [-40, 240], [-110, 330], [-300, 330]], [[28, 84], [110, 84], [110, 150], [28, 150]]],
+      sides: [0.12, 0.6],
+      behind: 0,
+    },
+    wind: { speed: 2.5, dir: -1.9 },
+    // the tee shot's aim: the shelf, the short carry's landing (a driver's full carry goes past it, over the bay's shore)
+    landing: [8, 160],
+    // a cove ball is dropped on the fairway on the tee side: a stroke, and 80 yd of the hole back (drop zones: HoleDef.drops)
+    drops: [[10, 80]],
+    // a tee 34 m up (baseY), the ground easing 3 m to the shelf and 7 m to the green; the cliff does the rest
+    ground: { rise: [[0, 0], [40, -0.3], [100, -1], [150, -2], [185, -3], [230, -3.8], [290, -5.2], [340, -6.5], [369, -7]], sigma: 14, cell: 0.75, baseY: 34 },
+    features: [{ k: "cliff", path: BRINK_9, drop: 38, run: 3, talus: 14, scree: 0.12, ledges: 6, seed: 9 }],
+    // heath on the cliff top, then white stakes at the lip: over the edge (and the open sea beyond the cove) is out of bounds.
+    // The cleared ground is turf, not bare wood floor: fescue on the cliff top west of the fairway's rough, on the headland
+    // inland of the stakes, and on the cleared ground behind the cove's east end (all clear of the fairway and its rough)
     areas: [
-      {
-        kind: "oob",
-        poly: [[-34, 40], [-40, 100], [-60, 150], [-62, 190], [-68, 240], [-82, 300], [-96, 360], [-112, 360], [-98, 300], [-84, 240], [-80, 190], [-76, 150], [-56, 100], [-50, 40]],
-        stakes: [[-34, 40], [-40, 100], [-60, 150], [-62, 190], [-68, 240], [-82, 300], [-96, 360]],
-      },
+      { kind: "fescue", poly: [[-36, 15], [-34, 66], [-46, 84], [-74, 74], [-100, 56], [-106, 32], [-104, 8], [-70, 2]] },
+      { kind: "fescue", poly: [[-40, -80], [-112, -80], [-113, 36], [-106, 60], [-80, 80], [-50, 88], [-40, 80]] },
+      { kind: "fescue", poly: [[-74, 228], [-112, 230], [-125, 251], [-132, 280], [-133, 296], [-104, 296], [-100, 290], [-92, 276], [-82, 258], [-74, 240]] },
+      { kind: "fescue", poly: [[-111, 298], [-133, 298], [-133, 330], [-135, 380], [-131, 410], [-111, 410]] },
+      { kind: "fescue", poly: [[40, 84], [110, 84], [110, 150], [40, 150]] },
+      { kind: "gorse", poly: [[-92, 22], [-84, 30], [-78, 22], [-86, 14]] },
+      { kind: "oob", poly: [[-113, -70], [-113, 36], [-106, 60], [-190, 60], [-190, -70]], stakes: [[-113, -60], [-113, 36], [-106, 60]] },
+      { kind: "oob", poly: [[-112, 234], [-125, 251], [-132, 280], [-133, 330], [-135, 380], [-131, 410], [-190, 410], [-190, 234]], stakes: [[-112, 234], [-125, 251], [-132, 280], [-133, 330], [-135, 380], [-131, 410]] },
+      { kind: "oob", poly: [[-160, 40], [-160, 240], [-190, 240], [-190, 40]] },
     ],
   },
 ];

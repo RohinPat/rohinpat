@@ -104,6 +104,23 @@ function waterAhead(g: CourseGame, bx: number, bz: number, yaw: number, dm: numb
   return far;
 }
 
+/** the first run of water the aim crosses within 140 yd: its near and far ends (m from the ball) and the lowest bed in it */
+function waterRun(g: CourseGame, G: Ground, bx: number, bz: number, yaw: number, dm: number): { near: number; far: number; low: number } | null {
+  const sf = g.hole.surfaceAt;
+  const sx = Math.sin(yaw), sz = Math.cos(yaw);
+  const reach = Math.min(dm, 140 * YD);
+  let near = -1, far = -1, low = Infinity;
+  for (let d = 4; d <= reach; d += 3) {
+    const x = bx + sx * d, z = bz + sz * d;
+    if (sf(x, z) === "water") {
+      if (near < 0) near = d;
+      far = d;
+      low = Math.min(low, G(x, z));
+    } else if (near >= 0) break;
+  }
+  return near < 0 ? null : { near, far, low };
+}
+
 /** the most the eye rises to see the aim over a crest, m, and the least drop to the aim, m, that the camera looks down to */
 const PEEK_CAP = 12, DROP_MIN = 6;
 /** the point the eye must see over the ground at the aim: this high over it, m (the flag, the top of a post, a ball flying in) */
@@ -158,8 +175,13 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
   let lo = { ex: -a[0] * back + rt[0] * off, ey: 1.9, ez: -a[2] * back + rt[2] * off, tx: a[0] * ahead, ty: 0.9, tz: a[2] * ahead, F: F0 };
   // water across the line within reach: the eye rises so that it can be seen, and looks at it
   const hz = waterAhead(g, bx, bz, yaw, dm);
-  // (the ledge's own eye, below, is for a carry over water from high above it; a dry drop looks out at the landing)
-  const drop = hz === null ? 0 : dropOf(g, G, bx, bz);
+  // (the ledge's own eye, below, is for a carry over water from high above it; a dry drop looks out at the landing. The water's
+  // bed counts too: a cove 40 m under the tee is a ledge even when the landing lies level with the tee)
+  const wet = hz === null ? null : waterRun(g, G, bx, bz, yaw, dm);
+  const dd = hz === null ? 0 : dropOf(g, G, bx, bz);
+  // (how far the bed of that water lies under the ball, as dropOf: none under 10 m, all of it from 16 m)
+  const wd = wet === null ? 0 : smooth(clamp((gb - wet.low - 10) / 6, 0, 1));
+  const drop = Math.max(dd, wd);
   if (hz !== null && drop < 1) {
     const look = clamp(hz + 35, 45, Math.max(45, dm));
     lo = { ex: -a[0] * 12 + rt[0] * off, ey: 14, ez: -a[2] * 12 + rt[2] * off, tx: a[0] * look, ty: 0, tz: a[2] * look, F: F0 * 1.1 };
@@ -180,10 +202,15 @@ function addressRig(g: CourseGame, bx: number, bz: number, yd: number, w: number
       }
       if (clear) break;
     }
-    // looking 20 degrees down, at the tarn half way over: the golfer, the lip, the tarn and the green (above the middle) in one picture
-    const hx = a[0] * dm * 0.5, hz2 = a[2] * dm * 0.5;
-    const aim = ey - Math.hypot(hx - ex, hz2 - ez) * 0.364 - (G(bx + hx, bz + hz2) - gb);
-    const ledge = { ex, ey, ez, tx: hx, ty: Math.max(1, aim), tz: hz2, F: F0 * 0.95 };
+    // looking 20 degrees down, at the tarn half way over: the golfer, the lip, the tarn and the green (above the middle) in one picture.
+    // Over water that lies deep under the ball the look is 10 degrees down, at the landing, and not held to the ground: the golfer
+    // below, the cliff's rim across the middle and the far shelf and the landing above it. (The water itself is behind the rim:
+    // from a tee back from the lip it is out of sight, and the cove is seen from above.)
+    const overWater = wet !== null && wd > dd;
+    const at = overWater ? dm : dm * 0.5;
+    const hx = a[0] * at, hz2 = a[2] * at;
+    const aim = ey - Math.hypot(hx - ex, hz2 - ez) * (overWater ? 0.176 : 0.364) - (G(bx + hx, bz + hz2) - gb);
+    const ledge = { ex, ey, ez, tx: hx, ty: overWater ? aim : Math.max(1, aim), tz: hz2, F: F0 * 0.95 };
     lo = { ex: lo.ex + (ledge.ex - lo.ex) * drop, ey: lo.ey + (ledge.ey - lo.ey) * drop, ez: lo.ez + (ledge.ez - lo.ez) * drop, tx: lo.tx + (ledge.tx - lo.tx) * drop, ty: lo.ty + (ledge.ty - lo.ty) * drop, tz: lo.tz + (ledge.tz - lo.tz) * drop, F: lo.F + (ledge.F - lo.F) * drop };
   }
   // a tee shot to a landing zone is not a shot at a green: it keeps the long view, down the hole

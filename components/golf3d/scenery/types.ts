@@ -102,6 +102,8 @@ export type PropsSpec = {
   stacks?: { count: number; seed: number; sd?: [number, number]; height?: [number, number] };
   /** one lighthouse: at a point (course m), or found on the coast near a bearing from the green */
   lighthouse?: { at?: P; bearing?: number; distance?: number };
+  /** hole 9 (clubhouse.ts): the clubhouse, at a point (course m), its front (the veranda) turned `rot` radians from facing back down the hole (-z) */
+  clubhouse?: { at: P; rot?: number };
 };
 
 export type WallSpec = {
