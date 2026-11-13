@@ -51,7 +51,8 @@ function pointAt(def: HoleDef, s: number): [number, number] {
 const MARKERS: Record<number, string[]> = {
   1: ["100", "150", "150", "200", "200"],
   2: [],
-  3: ["100", "100", "150", "200", "200"],
+  // (hole 3's near 100 yd marker stands on the canyon's sand, a hazard that is not fairway or rough: it is left out)
+  3: ["100", "150", "200", "200"],
   4: ["100", "100", "150", "200"],
   5: ["100", "100", "150"],
   6: ["100", "150", "200"],
@@ -99,7 +100,8 @@ describe("course data", () => {
           const sf = b.surfaceAt(x * YD, z * YD);
           if (sf === "water") wet++;
           // (hole 5's waste is carried, and its dune's crest is long grass; hole 6's far shore has sand bars: the line runs through them)
-          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
+          // (hole 3's line crosses its ravine, a slot of rock: "out", and its canyon floor is sand: "waste")
+          else expect(def.n === 5 ? ["fairway", "fringe", "green", "waste", "fescue"] : def.n === 6 ? ["fairway", "fringe", "green", "waste"] : def.n === 3 ? ["fairway", "fringe", "green", "waste", "out"] : ["fairway", "fringe", "green"], `${d} yd along`).toContain(sf);
         }
         // only hole 4's creek (14 yd of it at the first crossing; the bridge carries the line over the second), hole 6's arm of the tide (about 45 yd) and hole 8's channel under the footbridge (a few yards) are across the line
         expect(wet > 0).toBe(def.n === 4 || def.n === 6 || def.n === 8);
@@ -131,7 +133,8 @@ describe("course data", () => {
         if (def.n === 2) return;
         for (const side of [-1, 1]) {
           const [dx, dz] = b.edgeDrop(side * 70 * YD, 60 * YD);
-          expect(["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
+          // (hole 3's woods are the canyon's sand, so its drop may land on the waste)
+          expect(def.n === 3 ? ["fairway", "rough", "waste"] : ["fairway", "rough"]).toContain(b.surfaceAt(dx, dz));
           expect(Math.abs(dx)).toBeLessThan(70 * YD);
         }
       });
