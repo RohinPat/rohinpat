@@ -139,7 +139,7 @@ export const DROP_BACK_MAX = 23;
  * the woods, with nothing playable on the line until near the tee), it is dropped beside where it went in, toward the
  * middle of the hole, as a ball in the woods is.
  */
-export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: number) => [number, number], surfaceAt?: (x: number, z: number) => Surface, pin?: [number, number], zones: [number, number][] = [], flat?: (x: number, z: number) => boolean): Drop | null {
+export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: number) => [number, number], surfaceAt?: (x: number, z: number) => Surface, pin?: [number, number], zones: [number, number][] = [], flat?: (x: number, z: number) => boolean, rockName?: (x: number, z: number) => "ravine" | "cliff" | null): Drop | null {
   const n = shot.n;
   const ex = shot.ox + shot.pts[(n - 1) * 4 + 1], ez = shot.oz + shot.pts[(n - 1) * 4 + 3];
   // unplayable on a cliff: a drop zone if the hole has one, else the nearest flat open ground
@@ -156,7 +156,7 @@ export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: nu
       [cx, cz] = [shot.ox + d.x, shot.oz + d.z];
     }
     const [x, y] = nearestZone(zones, cx, cz)!;
-    return { x, z: y, why: ground, penalty: 1, say: `${ground === "water" ? "Water" : ground === "out" ? "In the trees" : "In the gorse. Unplayable"}. One stroke added. Dropping at the drop zone.` };
+    return { x, z: y, why: ground, penalty: 1, say: `${ground === "water" ? "Water" : ground === "out" ? outWord(rockName, ex, ez) : "In the gorse. Unplayable"}. One stroke added. Dropping at the drop zone.` };
   }
   if (ground === "water") {
     const d = shot.drop ?? { x: 0, z: 0 };
@@ -196,9 +196,15 @@ export function dropFor(shot: Shot, ground: Surface, edgeDrop: (x: number, z: nu
   }
   if (ground === "out") {
     const [x, z] = edgeDrop(ex, ez);
-    return { x, z, why: "out", penalty: 1, say: "In the trees. One stroke added. Dropping." };
+    return { x, z, why: "out", penalty: 1, say: `${outWord(rockName, ex, ez)}. One stroke added. Dropping.` };
   }
   return null;
+}
+
+/** what a ball that came to rest in the woods says: on a cliff's rock it is in the ravine or down the cliff, else in the trees */
+function outWord(rockName: ((x: number, z: number) => "ravine" | "cliff" | null) | undefined, x: number, z: number): string {
+  const r = rockName?.(x, z);
+  return r === "ravine" ? "In the ravine" : r === "cliff" ? "Down the cliff" : "In the trees";
 }
 
 /** a drop beside the water at (x, z): the woods' drop toward the middle of the hole, then on until it is DROP_CLEAR clear (null if it never is) */

@@ -136,6 +136,18 @@ describe("hole 3, The Elbow", () => {
     const [dx, dz] = b.drops[0];
     expect(Math.hypot(g.ball[0] - dx, g.ball[1] - dz)).toBeLessThan(3);
   });
+  it("a ball that comes down in the ravine is in the ravine, not in the trees", () => {
+    expect(b.rockName(59 * YD, 309 * YD)).toBe("ravine");
+    expect(b.rockName(0, 0)).toBeNull();
+    const g = onHole(3);
+    place(g, 0, 204.8, "fairway", 2);
+    g.setAim(aimTo(g));
+    g.setClub(4);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready")).toBe(true);
+    expect(g.shot!.surface).toBe("out");
+    expect(g.said[g.said.length - 1]).toMatch(/In the ravine\. One stroke added\. Dropping at the drop zone\.$/);
+  });
   it("the default aim goes down the first leg to the landing zone", () => {
     const g = onHole(3);
     expect(g.yawT).toBeCloseTo(Math.atan2(b.landing[0], b.landing[1]), 9);

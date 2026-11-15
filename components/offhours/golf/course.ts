@@ -361,7 +361,7 @@ export const HOLE_DEFS: HoleDef[] = [
       { k: "cliff", path: CANYON_3, closed: true, drop: 16, run: 3.5, talus: 10, scree: 0.1, ledges: 7, seed: 31, rock: "canyon" },
       // the ravine: a slot of rock across the floor and out through both walls, its two faces meeting in the middle (run 12:
       // there is no floor to stand on), so a ball in it is on rock
-      { k: "cliff", path: RAVINE_3, closed: true, drop: 12, run: 12, talus: 1, scree: 0, ledges: 6, seed: 5, rock: "canyon" },
+      { k: "cliff", path: RAVINE_3, closed: true, drop: 12, run: 12, talus: 1, scree: 0, ledges: 6, seed: 5, rock: "canyon", ravine: true },
     ],
     // the canyon floor past the rough, to the foot of the walls, is sand and scrub
     areas: [{ kind: "waste", poly: WASTE_L_3 }, { kind: "waste", poly: WASTE_R_3 }],
@@ -959,6 +959,8 @@ type Sample = { x: number; z: number; nx: number; nz: number; hw: number; m: num
 export type BuiltHole = {
   def: HoleDef;
   surfaceAt: (x: number, z: number) => Surface;
+  /** what a cliff's rock at a point is (features.ts `rockName`): a ravine, a cliff face, or null off the rock */
+  rockName: (x: number, z: number) => "ravine" | "cliff" | null;
   world: World;
   /** the green as a putting Hole, and the maps between the course (metres) and its coordinates */
   green: Hole;
@@ -1297,6 +1299,7 @@ export function buildHole(def: HoleDef): BuiltHole {
   const b: BuiltHole = {
     def,
     surfaceAt,
+    rockName: (x, z) => cliffs?.rockName(x, z) ?? null,
     world,
     green,
     toGreen,
