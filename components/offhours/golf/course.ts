@@ -121,7 +121,7 @@ export type HoleDef = {
   /** the rough, beyond the fairway, yd */
   rough: number;
   pin: [number, number];
-  green: { c: [number, number]; seed: number; severity: number };
+  green: { c: [number, number]; seed: number; severity: number; size?: number };
   bunkers: Blob[];
   water: Water[];
   trees: {
@@ -330,7 +330,7 @@ export const HOLE_DEFS: HoleDef[] = [
     half: [15, 21, 19],
     rough: 14,
     pin: [80, 337.5],
-    green: { c: [81.5, 340.5], seed: 4303, severity: 0.8 },
+    green: { c: [81.5, 340.5], seed: 4303, severity: 0.65, size: 1.15 },
     bunkers: [
       { x: 30, z: 212, rx: 5, rz: 9, rot: -0.15 },
       { x: 98, z: 337, rx: 5, rz: 5, rot: -0.8 },
@@ -532,7 +532,7 @@ export const HOLE_DEFS: HoleDef[] = [
     half: [15, 48, 46, 38, 20],
     rough: 18,
     pin: [-107, 366.5],
-    green: { c: [-109, 369], seed: 4606, severity: 1.0 },
+    green: { c: [-109, 369], seed: 4606, severity: 0.8, size: 1.15 },
     bunkers: [
       { x: -19, z: 296, rx: 4.5, rz: 8, rot: 0.5 },
       { x: -91, z: 355, rx: 5, rz: 4.5 },
@@ -1024,7 +1024,7 @@ export function buildHole(def: HoleDef): BuiltHole {
   const toGreen = (x: number, z: number): [number, number] => [GW / 2 + (x - cx), GH / 2 - (z - cz)];
   const fromGreen = (gx: number, gy: number): [number, number] => [cx + gx - GW / 2, cz - (gy - GH / 2)];
   const pin: [number, number] = [def.pin[0] * YD, def.pin[1] * YD];
-  const green = makeGreen(def.green.seed, def.green.severity, def.n, def.par);
+  const green = makeGreen(def.green.seed, def.green.severity, def.n, def.par, def.green.size);
   green.cup = toGreen(pin[0], pin[1]);
   green.tee = toGreen(0, 0);
 

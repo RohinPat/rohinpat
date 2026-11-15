@@ -65,11 +65,9 @@ describe("modes", () => {
       const r = playRound(BOTS.skilled, s.seed, { game: { holes: s.defs } });
       expect(r.finished, day).toBe(true);
       expect(r.pickedUp, day).toBe(0);
-      // (par 36 again: hole 4 became a par 4 with two crossings to carry and hole 5 a par 4 over the dune; with hole 6's cape
-      // and hole 2's 150 yd carry over the tarn too, a skilled bot's worst of ten days is a stroke or two higher than it was.
-      // Hole 3's ravine is a stroke and a drop back across the slot: on 2026-12-02 the skilled bot took 7 there. Hole 9's cove
-      // adds no more than a par 4 for it)
-      expect(r.total - r.par, day).toBeLessThan(13);
+      // (par 36. Hole 3's and hole 6's greens are a little softer and larger than they were, so the skilled bot's worst of
+      // these ten days is 11 over: 2026-12-09. The bound is that worst day plus one; the seeds make it the same every run)
+      expect(r.total - r.par, day).toBeLessThan(12);
     }
   });
 });
