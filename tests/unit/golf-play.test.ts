@@ -333,7 +333,8 @@ describe("repeatability and the idle player", () => {
 });
 
 describe("the bots: measured bands, pinned", () => {
-  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these.
+  // 30 seeded rounds each over all six holes (par 23). The numbers in the PR are these. (The approach lands a yard onto
+  // the green's front, not three: the skilled bot's mean went from 28.3 to 27.8, the keyboard's from 27.5 to 27.7.)
   const rounds = (bot: (typeof BOTS)[string]) => Array.from({ length: 30 }, (_, i) => playRound(bot, i + 1));
   const total = (rs: ReturnType<typeof rounds>) => mean(rs.map((r) => r.total));
   const holeMean = (rs: ReturnType<typeof rounds>, h: number) => mean(rs.map((r) => r.holes[h]));
@@ -342,7 +343,7 @@ describe("the bots: measured bands, pinned", () => {
     const rs = rounds(BOTS.skilled);
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(26);
-    expect(total(rs)).toBeLessThanOrEqual(29);
+    expect(total(rs)).toBeLessThanOrEqual(28.5);
     // (22 is a round a stroke under par: hole 3's and hole 6's greens were made a little softer and larger, see course.ts)
     expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(22);
     expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(36);

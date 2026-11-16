@@ -114,8 +114,8 @@ const LAY_OVER = 10;
 const LAY_SHORT = 18;
 /** a pin this much (yd) past the longest carry is still aimed at: the roll gets there */
 const REACH_ROLL = 15;
-/** a shot played to run up to the pin still lands at least this far (yd) onto the green */
-const GREEN_IN = 3;
+/** a run-up lands this far (yd) onto the green's front: the pin sits only 4-8 yd in, so a deeper landing rolls past it */
+const GREEN_IN = 1;
 export type MapView = { x: number; y: number; w: number; h: number; /** the point on the hole (metres) under a point on the canvas */ at: (px: number, py: number) => [number, number] };
 
 export const STEP = 1 / 60;
