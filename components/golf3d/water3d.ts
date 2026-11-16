@@ -237,6 +237,8 @@ export function buildWater(o: WaterOpts) {
 
   // ------------------------------------------------------------------ each body of water
   def.water.forEach((w, wi) => {
+    // (the sea is the scenery's ocean at its own level: no sheet of its own, or it would show a seam at the hole's box)
+    if ("shore" in w && w.sea) return;
     const ring = hole.world.water[wi] as P[];
     let cx = 0, cz = 0;
     ring.forEach(([x, z]) => ((cx += x), (cz += z)));

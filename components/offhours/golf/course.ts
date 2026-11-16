@@ -58,7 +58,8 @@ export type Lake = {
   shore: [number, number][];
   level?: number;
   /** how deep the bed is dug under the ground at the shore, m (default 1.1). A deep tarn: 2 to 4. The waterline sits on the shore when `level` is the ground there, plus 0.22, less 0.19 x depth */
-  depth?: number;
+  depth?: number;  /** the sea itself (hole 9's cove): play and the drops are as for a lake, but the scenery's ocean draws it, not a lake sheet, so there is no seam where the cove meets the open sea */
+  sea?: boolean;
 };
 export type Water = Blob | Creek | Lake;
 const isCreek = (w: Water): w is Creek => "path" in w;
@@ -109,6 +110,8 @@ const along = (path: [number, number][], gap: number): [number, number][] => {
 };
 
 export type HoleDef = {
+  /** the tee markers stand this far either side of the line, m (default 2.6): hole 9's cliff top is narrow, so its pair stand nearer */
+  teeHalf?: number;
   n: number;
   name: string;
   par: 3 | 4 | 5;
@@ -725,6 +728,7 @@ export const BACK_DEFS: HoleDef[] = [
     name: "Homeward",
     par: 4,
     yards: 367,
+    teeHalf: 1.6,
     line: [[0, 0], [10, 185], [-92, 338]],
     half: [16, 20, 17],
     rough: 14,
@@ -735,7 +739,7 @@ export const BACK_DEFS: HoleDef[] = [
       { x: -73, z: 322, rx: 5, rz: 4, rot: 0.6 },
       { x: -108, z: 346, rx: 4, rz: 5 },
     ],
-    water: [{ shore: COVE_9, level: -34.2, depth: 1.1 }],
+    water: [{ shore: COVE_9, level: -34, depth: 1.1, sea: true }],
     trees: {
       seed: 97,
       edge: 6,

@@ -475,9 +475,10 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     const mg = new THREE.CylinderGeometry(0.05, 0.07, 0.14, 8);
     const mm = new THREE.MeshLambertMaterial({ color: "#3b6fd1" });
     disposables.push(mg, mm);
+    const half = hole.def.teeHalf ?? 2.6;
     for (const side of [-1, 1]) {
       const m = new THREE.Mesh(mg, mm);
-      const mx = Math.cos(yaw) * side * 2.6 + Math.sin(yaw) * 1.2, mz = -Math.sin(yaw) * side * 2.6 + Math.cos(yaw) * 1.2;
+      const mx = Math.cos(yaw) * side * half + Math.sin(yaw) * 1.2, mz = -Math.sin(yaw) * side * half + Math.cos(yaw) * 1.2;
       m.position.set(mx, ground.y(mx, mz) + 0.07, mz);
       m.castShadow = true;
       group.add(m);
