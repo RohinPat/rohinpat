@@ -6,15 +6,19 @@
 type Pt = [number, number];
 
 /**
- * The brink, walked with the sea on the left. North up the cliff beside the tee, then east along the south shore of the cove
- * to its head, across the neck (a channel 35 yd wide, 140 yd out, that cuts the whole fairway), back west along the north
- * bank, north along the west bank of the shelf the neck leads to, west along the north wall of the bay (where a drive that
- * carries 230 yd lands), then north again past the green and round the headland the lighthouse stands on.
+ * The brink, walked with the sea on the left. Down the cliff's south face to the tee's own brink, then along a shore that
+ * runs diagonally past the tee (the tee stands on the edge, with the cove's water in front and to the left), north beside
+ * the drive with the cove on the left, east along the south shore of the cove to its head, across the neck (a channel 35 yd
+ * wide, 100 to 135 yd out, that cuts the whole fairway), back west along the north bank, north along the west bank of the
+ * shelf the neck leads to, west along the north wall of the bay (where a drive that carries 230 yd lands), then north again
+ * past the green and round the headland the lighthouse stands on.
  */
 export const BRINK_9: Pt[] = [
-  [-118, -140], [-118, -60], [-118, 0], [-117, 38],
-  // the south shore of the cove, falling in toward its head
-  [-108, 62], [-84, 82], [-52, 94], [-14, 100], [22, 102], [44, 104],
+  [-118, -140], [-118, -60], [-118, -36],
+  // the diagonal shore past the tee, then north beside the drive: the cove's water lies on the left of the first 100 yd
+  [-100, -31.2], [-60, -20.6], [-30, -12.6], [-5, -6], [-5, 30], [-5, 60], [-5, 88], [-5, 100],
+  // the cove's south shore, falling in toward its head
+  [22, 102], [44, 104],
   // the neck's east end, a rock slot
   [56, 110], [60, 120], [54, 130],
   // the north bank, then the west bank of the shelf
@@ -26,7 +30,7 @@ export const BRINK_9: Pt[] = [
 ];
 
 /** the brink points of the cove proper: where the water in play lies */
-const COVE_FROM = 4, COVE_TO = 23;
+const COVE_FROM = 2, COVE_TO = 26;
 
 /** the brink, moved `d` yd to the sea side (a mitred offset) */
 function offset(path: Pt[], d: number): Pt[] {
@@ -61,12 +65,12 @@ function dense(path: Pt[], gap: number): Pt[] {
 }
 
 /**
- * The water in play: the cove, as a closed shore (a `Lake`). It runs along the foot of the walls, 6 yd out from the brink
+ * The water in play: the cove, as a closed shore (a `Lake`). It runs along the foot of the walls, 1 yd out from the brink
  * (the face and its scree are `cliff`, rock, not water) and closes out in the open sea, where the out of bounds takes over.
  */
 export const COVE_9: Pt[] = (() => {
-  const wall = offset(BRINK_9.slice(COVE_FROM, COVE_TO + 1), 6);
+  const wall = offset(BRINK_9.slice(COVE_FROM, COVE_TO + 1), 1);
   const first = wall[0], last = wall[wall.length - 1];
-  const mouth: Pt[] = [[last[0] - 10, last[1] + 2], [-150, 232], [-160, 190], [-160, 120], [-150, 62], [first[0] - 12, first[1] - 6]];
+  const mouth: Pt[] = [[last[0] - 10, last[1] + 2], [-150, 252], [-330, 252], [-330, -330], [-120, -330], [-120, -37]];
   return dense([...wall, ...mouth], 9);
 })();

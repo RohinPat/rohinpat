@@ -86,8 +86,9 @@ describe("course data", () => {
       });
       it("the tee is mown, with no sand or water near it", () => {
         expect(b.surfaceAt(0, 0)).toBe("fairway");
-        // (hole 2's tarn lies at the foot of the cliff the tee stands on, 35 yd out)
-        const clear = def.n === 2 ? 30 : 60;
+        // (hole 2's tarn lies at the foot of the cliff the tee stands on, 35 yd out; hole 9's cove is the tee's own brink, its
+        // shore 5 yd off the tee on the left: the cliff the golfer plays from)
+        const clear = def.n === 2 ? 30 : def.n === 9 ? 5 : 60;
         for (const blob of def.bunkers) expect(Math.hypot(blob.x, blob.z)).toBeGreaterThan(clear);
         for (const w of def.water) for (const [x, z] of "path" in w ? w.path : "shore" in w ? w.shore : [[w.x, w.z]]) expect(Math.hypot(x, z)).toBeGreaterThan(clear);
       });
