@@ -408,7 +408,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   disposables.push(tg, tm);
 
   // ---------------------------------------------------------------- the green
-  group.add(buildGreen(hole, canvas, { X0, Z0, s }, tier, disposables));
+  // the grain drifts downhill on the high tier only, and stands still under reduced motion
+  group.add(buildGreen(hole, canvas, { X0, Z0, s }, tier, disposables, (opts.tier ?? "high") !== "soft" && !opts.reduce));
 
   // ---------------------------------------------------------------- water
   if (hole.world.water.length) {

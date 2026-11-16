@@ -99,7 +99,8 @@ export function createPutt3D(): Putt3D {
     "position",
     new THREE.Float32BufferAttribute([-0.05, 0, -0.5, 0.05, 0, -0.5, 0.05, 0, 0.15, -0.05, 0, -0.5, 0.05, 0, 0.15, -0.05, 0, 0.15, -0.2, 0, 0.15, 0.2, 0, 0.15, 0, 0, 0.5], 3),
   );
-  const arrowM = keep(new THREE.MeshBasicMaterial({ color: "#f2ead7", transparent: true, opacity: 0.55, depthWrite: false, ...ON_GROUND, side: THREE.DoubleSide }));
+  // the arrows take their colour per instance (dark on the grass; the ones by the line are bright), so the material is white
+  const arrowM = keep(new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.72, depthWrite: false, ...ON_GROUND, side: THREE.DoubleSide }));
   const arrows = new THREE.InstancedMesh(arrowG, arrowM, ARROWS);
   arrows.frustumCulled = false;
   group.add(arrows);
@@ -113,14 +114,18 @@ export function createPutt3D(): Putt3D {
   };
 
   /** the slope arrows for a hole's green, once: every 1.15 m on the putting surface, downhill, longer where it is steeper */
+  const arrowSet: { gx: number; gy: number; x: number; y: number; z: number; yaw: number; len: number }[] = [];
+  const nearC = new THREE.Color("#fff6cf"), farC = new THREE.Color("#0e3a24");
+  let arrowKey = "";
   const buildArrows = (hole: BuiltHole) => {
     arrowsFor = hole;
+    arrowKey = "";
+    arrowSet.length = 0;
     const rel = reliefOf(hole);
     const H = hole.green;
-    let n = 0;
     const step = 1.15, e = 0.05;
-    for (let gy = step / 2; gy < GH && n < ARROWS; gy += step)
-      for (let gx = step / 2; gx < GW && n < ARROWS; gx += step) {
+    for (let gy = step / 2; gy < GH && arrowSet.length < ARROWS; gy += step)
+      for (let gx = step / 2; gx < GW && arrowSet.length < ARROWS; gx += step) {
         if (zone(H, gx, gy) !== 0) continue;
         const sx = (greenHeight(H, gx + e, gy) - greenHeight(H, gx - e, gy)) / (2 * e);
         const sy = (greenHeight(H, gx, gy + e) - greenHeight(H, gx, gy - e)) / (2 * e);
@@ -128,14 +133,31 @@ export function createPutt3D(): Putt3D {
         if (m < 0.004) continue;
         const [x, z] = hole.fromGreen(gx, gy);
         // downhill on the green is (-sx, -sy); in the course's frame (-sx, +sy)
-        const yaw = Math.atan2(-sx, sy);
-        const len = Math.min(0.5, 6 * m + 0.08);
-        q.setFromAxisAngle(yAxis, yaw);
-        m4.compose(at.set(x, rel.y(x, z) + 0.01, z), q, sc.set(len * 0.9, 1, len));
-        arrows.setMatrixAt(n++, m4);
+        arrowSet.push({ gx, gy, x, y: rel.y(x, z) + 0.01, z, yaw: Math.atan2(-sx, sy), len: Math.min(0.5, 6 * m + 0.08) });
       }
-    arrows.count = n;
+    placeArrows(hole, null);
+  };
+  /**
+   * Places the arrows, and when a ball is given, those within 0.5 m of its line to the cup are larger and bright, the
+   * rest dark (they were cream on the pale green and lost). Redone only when the ball moves.
+   */
+  const placeArrows = (hole: BuiltHole, ball: { x: number; y: number } | null) => {
+    const [cx, cy] = hole.green.cup;
+    const bx = ball ? ball.x : cx, by = ball ? ball.y : cy;
+    const vx = cx - bx, vy = cy - by, vv = Math.max(1e-6, vx * vx + vy * vy);
+    arrowSet.forEach((a, i) => {
+      const t = Math.max(0, Math.min(1, ((a.gx - bx) * vx + (a.gy - by) * vy) / vv));
+      const d = Math.hypot(bx + vx * t - a.gx, by + vy * t - a.gy);
+      const near = !!ball && d < 0.5;
+      const s = near ? 1.4 : 1;
+      q.setFromAxisAngle(yAxis, a.yaw);
+      m4.compose(at.set(a.x, a.y, a.z), q, sc.set(a.len * 0.9 * s, 1, a.len * s));
+      arrows.setMatrixAt(i, m4);
+      arrows.setColorAt(i, near ? nearC : farC);
+    });
+    arrows.count = arrowSet.length;
     arrows.instanceMatrix.needsUpdate = true;
+    if (arrows.instanceColor) arrows.instanceColor.needsUpdate = true;
   };
 
   const update = (hole: BuiltHole, p: Putt, t: number, reduce: boolean) => {
@@ -231,7 +253,12 @@ export function createPutt3D(): Putt3D {
     drops.visible = arrows.visible = p.reading;
     if (p.reading) {
       if (arrowsFor !== hole) buildArrows(hole);
-      arrowM.opacity = 0.55 * Math.min(1, p.readT * 2.5);
+      const key = `${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+      if (key !== arrowKey) {
+        arrowKey = key;
+        placeArrows(hole, b);
+      }
+      arrowM.opacity = 0.72 * Math.min(1, p.readT * 2.5);
       let k = 0;
       for (const d of p.drops.slice(-DROPS)) {
         const al = Math.min(1, d.life) * 0.85;

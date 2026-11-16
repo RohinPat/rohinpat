@@ -54,12 +54,32 @@ const PASS_ANGLE = 0.6;
 const LAP = 0.6;
 
 /**
- * The green and its bank as a fine grid in the course's frame, lit as if its slopes were three times steeper than they
- * are, so a two per cent break shows as light and shade. Its texture repaints the green, the collar and what lies
- * around them at several times the hole texture's resolution. The mesh covers every cell the green's relief reaches
- * (so the whole green and collar footprint, and the bank), except at a pond.
+ * The light for the hillshade, in the course's frame: from the left of the line the putt camera looks down (the last
+ * 8 m to the pin), with a little from behind the camera. Light from across the line makes the sideways fall read as
+ * light against shade; the fall along the line is what the arrows show.
  */
-export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: number; Z0: number; s: number }, tier: { gcell: number; gtex: number }, disposables: { dispose: () => void }[]) {
+function lightOf(hole: BuiltHole): [number, number] {
+  const [px, pz] = hole.pin;
+  let bx = 0, bz = 0, best = Infinity;
+  for (const [x, z] of hole.line) {
+    const d = Math.abs(Math.hypot(x - px, z - pz) - 8);
+    if (d < best) [best, bx, bz] = [d, x, z];
+  }
+  const ax = px - bx, az = pz - bz, n = Math.hypot(ax, az) || 1;
+  const dx = ax / n, dz = az / n;
+  // +x is right and +z downrange, so the left of the line is (-dz, dx)
+  const lx = -dz * 0.85 - dx * 0.5, lz = dx * 0.85 - dz * 0.5;
+  const k = Math.hypot(lx, lz);
+  return [lx / k, lz / k];
+}
+
+/**
+ * The green and its bank as a fine grid in the course's frame, lit from across the line so a two per cent break shows as
+ * light and shade. Its texture repaints the green, the collar and what lies around them at several times the hole
+ * texture's resolution. The mesh covers every cell the green's relief reaches (so the whole green and collar footprint,
+ * and the bank), except at a pond. `move` lets the grain drift downhill (not on the cheapest tier, not under reduced motion).
+ */
+export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: number; Z0: number; s: number }, tier: { gcell: number; gtex: number }, disposables: { dispose: () => void }[], move = false) {
   const relief = reliefOf(hole);
   const [ax, az] = hole.fromGreen(-GPAD, GH + GPAD);
   const [bx, bz] = hole.fromGreen(GW + GPAD, -GPAD);
@@ -111,8 +131,10 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
           const s = (gx * ca + gy * sa) / PASS;
           // a pass is light, the next dark, with a soft turn between (a triangle wave in s, cut at its middle)
           const tri = Math.abs((((s % 2) + 2) % 2) - 1);
-          const stripe = mix(PAINT.stripeB, PAINT.stripeA, sstep(0.5 - 0.03, 0.5 + 0.03, tri));
           const lap = sstep(-LAP - 0.04, -LAP + 0.04, e);
+          // on the putting surface the passes are half as strong, so they do not hide the fall; the cleanup lap keeps its own
+          const tone = mix(PAINT.stripeB, PAINT.stripeA, sstep(0.5 - 0.03, 0.5 + 0.03, tri));
+          const stripe = mix(mix(PAINT.stripeB, PAINT.stripeA, 0.5), tone, 0.5 + 0.5 * lap);
           const g = mix(stripe, PAINT.lap, lap);
           // a thin dark line where the cut changes
           const edge = (1 - sstep(0.012, 0.04, Math.abs(e + 0.01))) * 0.5;
@@ -126,15 +148,20 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
     c.putImageData(img, 0, 0);
   }
 
-  // a hillshade baked into the paint: the green lit low from one side so every slope is light on one face and shade on
-  // the other, and tinted by height (higher, warmer and paler; lower, deeper and cooler), so the break reads in a still
-  // frame as well as when the ball rolls. It is paint only: the ball plays on the true surface. The shading grades
-  // with the slope (a soft knee, not a switch: one to three per cent is most of what a green has), and fades out
-  // over the apron.
+  // a hillshade baked into the paint: the green lit low from across the line so every sideways slope is light on one face
+  // and shade on the other, and tinted by height (higher, warmer and paler; lower, deeper and cooler), so the break reads
+  // at address as well as when the ball rolls. It is paint only: the ball plays on the true surface. The shading grades
+  // with the slope (a soft knee, not a switch: one to three per cent is most of what a green has), and fades out over
+  // the apron. The same grid also feeds the grain (below): the fall line and how steep it is, per point.
+  const FG = 0.1;
+  const fx = Math.ceil(W / FG) + 1, fz = Math.ceil(L / FG) + 1;
+  const fd = new Uint8Array(fx * fz * 4);
+  const [lx, lz] = lightOf(hole);
   {
-    const g = 0.1;
-    const nx = Math.ceil(W / g) + 1, nz = Math.ceil(L / g) + 1;
-    const Hy = new Float32Array(nx * nz), Rz = new Float32Array(nx * nz), Mk = new Float32Array(nx * nz);
+    const g = FG;
+    const nx = fx, nz = fz;
+    const Hy = new Float32Array(nx * nz), Rz = new Float32Array(nx * nz), Mk = new Float32Array(nx * nz), Gm = new Float32Array(nx * nz);
+    const GX = new Float32Array(nx * nz), GZ = new Float32Array(nx * nz);
     let lo = Infinity, hi = -Infinity;
     for (let j = 0; j < nz; j++)
       for (let i = 0; i < nx; i++) {
@@ -147,14 +174,14 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
         const on = o < -0.85;
         Rz[j * nx + i] = on ? r : NaN;
         Mk[j * nx + i] = 1 - sstep(0, 1.2, o);
+        // the putting surface, not the collar or the apron: where the grain may show
+        Gm[j * nx + i] = 1 - sstep(-1.0, -0.6, o);
         if (on) {
           lo = Math.min(lo, r);
           hi = Math.max(hi, r);
         }
       }
     const span = Math.max(0.06, hi - lo);
-    // light from the course's low-x, low-z side (the left, back of the green as the player sees it from the tee)
-    const lx = -0.6, lz = 0.8;
     const ov = document.createElement("canvas");
     ov.width = nx;
     ov.height = nz;
@@ -165,14 +192,17 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
         const a = j * nx + i;
         const gx = (Hy[j * nx + Math.min(nx - 1, i + 1)] - Hy[j * nx + Math.max(0, i - 1)]) / (g * (Math.min(nx - 1, i + 1) - Math.max(0, i - 1)));
         const gz = (Hy[Math.min(nz - 1, j + 1) * nx + i] - Hy[Math.max(0, j - 1) * nx + i]) / (g * (Math.min(nz - 1, j + 1) - Math.max(0, j - 1)));
-        // the slope toward the light: positive where the ground faces it, so it is lit
-        const sh = Math.tanh(-(gx * lx + gz * lz) * 9);
+        // the slope toward the light: positive where the ground faces it, so it is lit. A steep knee (30 on the gradient)
+        // so a one per cent break is a faint tone and six per cent is a clear face of light or shade
+        const sh = Math.tanh(-(gx * lx + gz * lz) * 30);
         const hgt = Rz[a] === Rz[a] ? Math.max(-1, Math.min(1, ((Rz[a] - lo) / span) * 2 - 1)) : 0;
         let r: number, gg: number, b: number, al: number;
-        if (sh >= 0) [r, gg, b, al] = [255, 255, 200, sh * 0.26];
-        else [r, gg, b, al] = [8, 50, 78, -sh * 0.4];
-        // the height tint: a faint warm wash high up, a faint cool one low down
-        const ta = Math.abs(hgt) * 0.1;
+        if (sh >= 0) [r, gg, b, al] = [255, 255, 200, sh * 0.42];
+        else [r, gg, b, al] = [8, 50, 78, -sh * 0.55];
+        // the height tint: a soft warm wash high up, a soft cool one low down
+        const ta = Math.abs(hgt) * 0.2;
+        GX[a] = gx;
+        GZ[a] = gz;
         const o = a * 4;
         const ra = al + ta * (1 - al);
         const [tr, tg, tb] = hgt >= 0 ? [255, 240, 150] : [20, 90, 120];
@@ -187,7 +217,36 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
     oc.putImageData(img, 0, 0);
     c.imageSmoothingQuality = "high";
     c.drawImage(ov, 0, 0, nx, nz, 0, 0, nx * g * T, nz * g * T);
+    // the fall line for the grain, averaged over 0.3 m so lumps in the ground do not make it scribble
+    const R = 3;
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        let sx = 0, sz = 0, n = 0;
+        for (let dj = -R; dj <= R; dj++)
+          for (let di = -R; di <= R; di++) {
+            const ii = i + di, jj = j + dj;
+            if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
+            sx += GX[jj * nx + ii];
+            sz += GZ[jj * nx + ii];
+            n++;
+          }
+        sx /= n;
+        sz /= n;
+        const a = j * nx + i;
+        const sl = Math.hypot(sx, sz), u = sl > 1e-6 ? 1 / sl : 0;
+        fd[a * 4] = 128 - sx * u * 127;
+        fd[a * 4 + 1] = 128 - sz * u * 127;
+        fd[a * 4 + 2] = Math.min(1, sl / 0.06) * 255;
+        fd[a * 4 + 3] = Gm[a] * 255;
+      }
   }
+  // the fall line field, read by the grain's shader (no draw call of its own: it is one more texture)
+  const fieldTex = new THREE.DataTexture(fd, fx, fz, THREE.RGBAFormat);
+  fieldTex.magFilter = THREE.LinearFilter;
+  fieldTex.minFilter = THREE.LinearFilter;
+  fieldTex.generateMipmaps = false;
+  fieldTex.needsUpdate = true;
+  disposables.push(fieldTex);
   // grain over everything (the contour lines are gone: they alias to dashes at a grazing angle)
   {
     const r = seeded(hole.def.n * 131 + 7);
@@ -259,11 +318,64 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
   // the terrain is sunk beneath it (greenSink), so a small constant nudge is all it needs; a slope-scaled one would
   // pull the green in front of the putting line at a grazing angle
   const m = new THREE.MeshLambertMaterial({ map: tex, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: -2 });
+  // the grain: a dash pattern in the shader, lying down the fall line. It drifts downhill when `move` (the high tier, not
+  // under reduced motion) and is static otherwise
+  const grainU = {
+    uField: { value: fieldTex },
+    uFS: { value: new THREE.Vector2((W / FG) / fx, (L / FG) / fz) },
+    uFO: { value: new THREE.Vector2(0.5 / fx, 0.5 / fz) },
+    uSize: { value: new THREE.Vector2(W, L) },
+    uT: { value: 0 },
+    uMove: { value: move ? 1 : 0 },
+  };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, grainU);
+    sh.fragmentShader = sh.fragmentShader
+      .replace("void main() {", `${GRAIN_DECL}\nvoid main() {`)
+      .replace("#include <color_fragment>", `#include <color_fragment>\n${GRAIN_BODY}`);
+  };
   disposables.push(g, m);
   const mesh = new THREE.Mesh(g, m);
   mesh.receiveShadow = true;
+  if (move) mesh.onBeforeRender = () => { grainU.uT.value = performance.now() / 1000; };
   return mesh;
 }
+
+const GRAIN_DECL = `uniform sampler2D uField;
+uniform vec2 uFS, uFO, uSize;
+uniform float uT, uMove;`;
+// hairlines lying down the fall line, a row every 0.3 m, each row broken into short dashes, a few of them lit. The
+// lines are about one and a half pixels wide whatever the distance (fwidth), and the grain fades out from 8 m to 20 m
+// so the green looks clean from the fairway. Its tint is a lighter green, not white, so it reads as grain in the grass.
+const GRAIN_BODY = `{
+  vec4 fl = texture2D(uField, vMapUv * uFS + uFO);
+  float sl = fl.b;
+  vec2 fall = fl.rg * 2.0 - 1.0;
+  fall = fall / max(length(fall), 1e-3);
+  vec2 perp = vec2(-fall.y, fall.x);
+  vec2 p = vMapUv * uSize;
+  float along = dot(p, fall) - uT * uMove * (0.03 + 0.2 * sl);
+  float across = dot(p, perp);
+  // rows in row units: px is one screen pixel in them, so the hairline stays about 1.5 px
+  float fa = fwidth(across) / 0.3;
+  float row = floor(across / 0.3);
+  float dc = abs(fract(across / 0.3) - 0.5);
+  float hw = max(0.75 * fa, 0.02);
+  float line = 1.0 - smoothstep(hw, hw + fa, dc);
+  // dashes 0.5 m apart along each row, shorter where it is flat
+  float u = along / 0.5 + 0.5 * mod(row, 2.0);
+  float cell = floor(u);
+  float pu = fract(u);
+  float pw = fwidth(u);
+  float hh = fract(sin(cell * 12.9898 + row * 78.233) * 43758.5453);
+  float dashLen = mix(0.2, 0.45, sl);
+  float dash = (1.0 - smoothstep(dashLen - pw, dashLen + pw, pu)) * step(hh, 0.18);
+  float dist = length(vViewPosition);
+  float near = 1.0 - smoothstep(8.0, 20.0, dist);
+  // none where the ground is flat: there the fall line is noise, and it would scribble
+  float amp = fl.a * smoothstep(0.1, 0.35, sl) * near * 0.09;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.6, 0.9, 0.5), line * dash * amp);
+}`;
 
 /**
  * The pin: a stout white pole, a big red cloth (it holds its colour in shade), and at its foot the cup with a pale rim
