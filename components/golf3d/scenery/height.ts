@@ -1,5 +1,6 @@
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
+import { terrainOf } from "@/components/offhours/golf/terrain";
 import { lerp, signedDist, smooth } from "./geo";
 import { fallLift } from "./fall";
 import { ridgedLift } from "./ridged";
@@ -40,11 +41,13 @@ export function makeHeight(hole: BuiltHole, ground: (x: number, z: number) => nu
     const target = coast.seaY - coast.deep - groundY;
     return lerp(land, target, k);
   };
+  // (a lake's bank is held here too: the coast's fall would drop the grass beside it under the water, see terrain.ts berm)
+  const berm = terrainOf(hole).berm;
   const heightAt = (x: number, z: number) => {
     const y = ground(x, z);
     const m = beyond(x, z);
     if (m < GATE) return y;
-    return y + liftAt(m, x, z, y);
+    return berm(x, z, y + liftAt(m, x, z, y));
   };
   const lift = (x: number, z: number) => {
     const m = beyond(x, z);
