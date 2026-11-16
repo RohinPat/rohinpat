@@ -144,6 +144,8 @@ export type CliffFeature = {
   seed?: number;
   /** the stone it is drawn in (cliff3d.ts): grey and sandstone bands (default), or the red and orange strata of the canyon country (hole 3) */
   rock?: "stone" | "canyon";
+  /** a ravine: a slot of rock a ball can come down in ("In the ravine"), not a cliff face ("Down the cliff", lie.ts) */
+  ravine?: boolean;
 };
 
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -219,6 +221,8 @@ export type Compiled = {
   held: (x: number, z: number) => number;
   /** true on a cliff's rock face (brink to the foot of the rock, not the scree below it) */
   rock: (x: number, z: number) => boolean;
+  /** what the rock at a point is: a ravine's, another cliff's, or null off the rock (as `rock`) */
+  rockName: (x: number, z: number) => "ravine" | "cliff" | null;
   /** the cliffs, in metres, for the 3D course to build their faces from */
   cliffs: CliffGeo[];
 };
@@ -233,11 +237,12 @@ export type CliffGeo = {
   ledges: number;
   seed: number;
   rock: "stone" | "canyon";
+  ravine: boolean;
   frac: (c: number) => number;
   at: (x: number, z: number) => { c: number; along: number };
 };
 
-const none: Compiled = { y: () => 0, pot: () => null, fine: () => 0, bounds: [], near: () => false, held: () => 0, rock: () => false, cliffs: [] };
+const none: Compiled = { y: () => 0, pot: () => null, fine: () => 0, bounds: [], near: () => false, held: () => 0, rock: () => false, rockName: () => null, cliffs: [] };
 
 export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker[]): Compiled {
   if (!features?.length) return none;
@@ -273,7 +278,7 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
           // an open path the face runs straight on, fading, so there it is the lateral distance)
           return { c: i.over !== 0 ? i.s : i.s >= 0 ? i.d : -i.d, along: closed ? 1 : 1 - smooth(i.over / fade) };
         };
-        cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, rock: f.rock ?? "stone", frac, at });
+        cliffs.push({ path, closed, drop: f.drop, run, talus, ledges: f.ledges ?? 5, seed: f.seed ?? 1, rock: f.rock ?? "stone", ravine: !!f.ravine, frac, at });
         // the zone the face and its apron cover, for the mesh and for "near": the path grown by the apron
         const apron = run + talus + 4;
         terms.push({
@@ -423,6 +428,18 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
   }
   const all = [...terms, ...potTerms];
   const inBox = (b: [number, number, number, number], x: number, z: number, g = 0) => x >= b[0] - g && x <= b[2] + g && z >= b[1] - g && z <= b[3] + g;
+  // (a ravine is named before a cliff face: where the two meet, the ball is in the ravine)
+  const rockName = (x: number, z: number): "ravine" | "cliff" | null => {
+    let name: "ravine" | "cliff" | null = null;
+    for (const g of cliffs) {
+      const a = g.at(x, z);
+      if (a.along > 0.03 && a.c > -1 && a.c < g.run + 0.6) {
+        if (g.ravine) return "ravine";
+        name = "cliff";
+      }
+    }
+    return name;
+  };
   return {
     y: (x, z) => {
       let y = 0;
@@ -449,13 +466,8 @@ export function compileFeatures(features: Feature[] | undefined, bunkers: Bunker
       }
       return h;
     },
-    rock: (x, z) => {
-      for (const g of cliffs) {
-        const a = g.at(x, z);
-        if (a.along > 0.03 && a.c > -1 && a.c < g.run + 0.6) return true;
-      }
-      return false;
-    },
+    rock: (x, z) => rockName(x, z) !== null,
+    rockName,
     cliffs,
   };
 }

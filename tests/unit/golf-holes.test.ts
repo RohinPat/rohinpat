@@ -136,6 +136,18 @@ describe("hole 3, The Elbow", () => {
     const [dx, dz] = b.drops[0];
     expect(Math.hypot(g.ball[0] - dx, g.ball[1] - dz)).toBeLessThan(3);
   });
+  it("a ball that comes down in the ravine is in the ravine, not in the trees", () => {
+    expect(b.rockName(59 * YD, 309 * YD)).toBe("ravine");
+    expect(b.rockName(0, 0)).toBeNull();
+    const g = onHole(3);
+    place(g, 0, 204.8, "fairway", 2);
+    g.setAim(aimTo(g));
+    g.setClub(4);
+    g.remoteSwing(PURE);
+    expect(run(g, () => g.phase === "rest" || g.phase === "ready")).toBe(true);
+    expect(g.shot!.surface).toBe("out");
+    expect(g.said[g.said.length - 1]).toMatch(/In the ravine\. One stroke added\. Dropping at the drop zone\.$/);
+  });
   it("the default aim goes down the first leg to the landing zone", () => {
     const g = onHole(3);
     expect(g.yawT).toBeCloseTo(Math.atan2(b.landing[0], b.landing[1]), 9);
@@ -851,6 +863,26 @@ describe("found in play", () => {
     const sg = g.suggested();
     expect(carryAtPower(sg.club, sg.power)).toBeLessThan(g.yardsToPin());
     expect(carryAtPower(sg.club, sg.power) + greenRoll(sg.club, sfOf(sg.power))).toBeGreaterThan(g.yardsToPin() - 3);
+  });
+  it("an approach from 140 yd on a fairway with an open front plans to land on the green, within a couple of yards of its front edge", () => {
+    const g = onHole(1);
+    place(g, 0, (339.5 - 140) * YD, "fairway", 1);
+    const pin = g.hole.pin;
+    const [bx, bz] = g.ball;
+    // the front edge: the first green yard along the line from the ball to the pin
+    const dm = Math.hypot(pin[0] - bx, pin[1] - bz);
+    let front = -1;
+    for (let d = 0; d <= dm && front < 0; d += 0.1 * YD) if (g.hole.surfaceAt(bx + ((pin[0] - bx) * d) / dm, bz + ((pin[1] - bz) * d) / dm) === "green") front = d / YD;
+    expect(front).toBeGreaterThan(0);
+    const sg = g.suggested();
+    g.setClub(sg.club);
+    g.remoteSwing({ ...PURE, power: sg.power });
+    expect(run(g, () => g.phase === "rest" || g.phase === "putt")).toBe(true);
+    // the first landing of the swing it plays: on the green, a few yards past its front at most (the game finds the
+    // front a yard at a time, so the plan's landing sits a yard or so past where this finds it)
+    const carry = g.shot!.carry;
+    expect(carry).toBeGreaterThanOrEqual(front);
+    expect(carry).toBeLessThanOrEqual(front + 3);
   });
   it("on a phone on its side (830x304) the hole and round cards fit, the shot HUD stays off them, and a touch screen is told to tap", () => {
     const g = onHole(2);

@@ -114,8 +114,8 @@ const LAY_OVER = 10;
 const LAY_SHORT = 18;
 /** a pin this much (yd) past the longest carry is still aimed at: the roll gets there */
 const REACH_ROLL = 15;
-/** a shot played to run up to the pin still lands at least this far (yd) onto the green */
-const GREEN_IN = 3;
+/** a run-up lands this far (yd) onto the green's front: the pin sits only 4-8 yd in, so a deeper landing rolls past it */
+const GREEN_IN = 1;
 export type MapView = { x: number; y: number; w: number; h: number; /** the point on the hole (metres) under a point on the canvas */ at: (px: number, py: number) => [number, number] };
 
 export const STEP = 1 / 60;
@@ -1026,7 +1026,7 @@ export class CourseGame {
     const club = CLUBS[this.club];
     const e = at(sh, sh.restT);
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
-    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin, this.hole.drops, (x, z) => Math.hypot(...this.terrain.slope(x, z)) < 0.3);
+    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin, this.hole.drops, (x, z) => Math.hypot(...this.terrain.slope(x, z)) < 0.3, this.hole.rockName);
     const def = this.hole.def;
     const fromYd = this.hole.toPin(sh.ox, sh.oz) / YD;
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);

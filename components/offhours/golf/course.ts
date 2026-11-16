@@ -58,7 +58,10 @@ export type Lake = {
   shore: [number, number][];
   level?: number;
   /** how deep the bed is dug under the ground at the shore, m (default 1.1). A deep tarn: 2 to 4. The waterline sits on the shore when `level` is the ground there, plus 0.22, less 0.19 x depth */
-  depth?: number;  /** the sea itself (hole 9's cove): play and the drops are as for a lake, but the scenery's ocean draws it, not a lake sheet, so there is no seam where the cove meets the open sea */
+  depth?: number;
+  /** the bank is held up to the lake's level (terrain.ts berm), for a lake whose shore falls below its level: a slab would show */
+  held?: boolean;
+  /** the sea itself (hole 9's cove): play and the drops are as for a lake, but the scenery's ocean draws it, not a lake sheet, so there is no seam where the cove meets the open sea */
   sea?: boolean;
 };
 export type Water = Blob | Creek | Lake;
@@ -370,7 +373,7 @@ export const HOLE_DEFS: HoleDef[] = [
       { k: "cliff", path: CANYON_3, closed: true, drop: 16, run: 3.5, talus: 10, scree: 0.1, ledges: 7, seed: 31, rock: "canyon" },
       // the ravine: a slot of rock across the floor and out through both walls, its two faces meeting in the middle (run 12:
       // there is no floor to stand on), so a ball in it is on rock
-      { k: "cliff", path: RAVINE_3, closed: true, drop: 12, run: 12, talus: 1, scree: 0, ledges: 6, seed: 5, rock: "canyon" },
+      { k: "cliff", path: RAVINE_3, closed: true, drop: 12, run: 12, talus: 1, scree: 0, ledges: 6, seed: 5, rock: "canyon", ravine: true },
     ],
     // the canyon floor past the rough, to the foot of the walls, is sand and scrub
     areas: [{ kind: "waste", poly: WASTE_L_3 }, { kind: "waste", poly: WASTE_R_3 }],
@@ -689,6 +692,7 @@ export const BACK_DEFS: HoleDef[] = [
     water: [
       // the lake: a bay of the sea loch lifted onto the plateau, wrapped round the island on three sides (open to the west)
       {
+        held: true,
         shore: [[8, 332], [22, 322], [45, 318], [70, 324], [96, 336], [116, 356], [128, 384], [132, 418], [129, 454], [124, 488], [112, 518], [92, 538], [64, 548], [36, 544], [14, 532], [8, 516], [12, 506], [26, 503], [42, 499], [52, 491], [55, 480], [51, 470], [41, 463], [26, 461], [12, 462], [6, 452], [5, 438], [3, 412], [4, 382], [6, 354]],
         level: 16.8,
         depth: 2.2,
@@ -968,6 +972,8 @@ type Sample = { x: number; z: number; nx: number; nz: number; hw: number; m: num
 export type BuiltHole = {
   def: HoleDef;
   surfaceAt: (x: number, z: number) => Surface;
+  /** what a cliff's rock at a point is (features.ts `rockName`): a ravine, a cliff face, or null off the rock */
+  rockName: (x: number, z: number) => "ravine" | "cliff" | null;
   world: World;
   /** the green as a putting Hole, and the maps between the course (metres) and its coordinates */
   green: Hole;
@@ -1306,6 +1312,7 @@ export function buildHole(def: HoleDef): BuiltHole {
   const b: BuiltHole = {
     def,
     surfaceAt,
+    rockName: (x, z) => cliffs?.rockName(x, z) ?? null,
     world,
     green,
     toGreen,

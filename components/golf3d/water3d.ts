@@ -302,7 +302,14 @@ export function buildWater(o: WaterOpts) {
             depth[j * nx + i] = Math.max(0.02, (poly ? ground.waterY(x, z) : pondY) - ground.y(x, z));
           }
         }
+      // a lake's shore distance is the exact one from its ring: the texel grid's steps would show as a saw along the foam
       const dist = distance(mask, nx, nz);
+      if (!poly)
+        for (let j = 0; j < nz; j++)
+          for (let i = 0; i < nx; i++) {
+            const k = j * nx + i;
+            if (mask[k]) dist[k] = Math.max(0, -ringSd(ring, x0 + (i + 0.5) * texel, z0 + (j + 0.5) * texel)) / texel;
+          }
       const data = new Uint8Array(nx * nz * 4);
       for (let k = 0; k < nx * nz; k++) {
         data[k * 4] = mask[k] ? Math.min(255, (depth[k] / DEPTH_MAX) * 255) : 0;

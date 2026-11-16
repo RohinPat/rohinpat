@@ -279,6 +279,18 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
         }
       }
   }
+  // a held lake's bank: the water's edge is where this mesh's triangles cross the water, so the cells there are cut finer
+  if (ground.bankNear) {
+    const reach = cell * 0.75;
+    for (let j = 0; j < cz; j++)
+      for (let i = 0; i < cx; i++) {
+        if (subOf[j * cx + i] || skip[j * cx + i] || Math.abs(xs[i + 1] - xs[i] - cell) > 1e-6 || Math.abs(zs[j + 1] - zs[j] - cell) > 1e-6) continue;
+        if (!ground.bankNear((xs[i] + xs[i + 1]) / 2, (zs[j] + zs[j + 1]) / 2, reach)) continue;
+        subOf[j * cx + i] = tier.sub2;
+        fineCells++;
+        fineTris += 2 * tier.sub2 * tier.sub2;
+      }
+  }
   const isFine = (i: number, j: number) => i >= 0 && j >= 0 && i < cx && j < cz && subOf[j * cx + i] > 0;
   // flat-shaded: every triangle has its own three vertices
   const tris = (cx * cz - fineCells - skipped) * 2 + fineTris;
