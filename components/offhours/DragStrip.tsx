@@ -90,6 +90,8 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   // a mouse has one button: a click on the dash holds the throttle until the next click, so the other hand can shift (a touch screen or a key still holds it only while down)
   const latch = useRef(false);
   const [latched, setLatched] = useState(false);
+  // the key holding the throttle (Space or Enter): its keyup releases it wherever focus has gone by then (the Stage can move focus to the dash mid-hold)
+  const keyHold = useRef<string | null>(null);
   const mouse = useRef(false);
   const phone = useRef({ target: 0, smooth: 0 });
   const told = useRef({ at: -Infinity, key: "" });
@@ -132,6 +134,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       if (document.hidden) eng.current?.silence();
       held.current = false;
       car.current.throttle = false;
+      keyHold.current = null;
       latch.current = false;
       setLatched(false);
     };
@@ -142,6 +145,18 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       window.removeEventListener("blur", away);
     };
   }, []);
+  // a key that holds the throttle lets go on its keyup, whatever element has focus by then
+  useEffect(() => {
+    if (!play) return;
+    const up = (e: KeyboardEvent) => {
+      if (keyHold.current === null || e.key !== keyHold.current) return;
+      keyHold.current = null;
+      held.current = false;
+      car.current.throttle = false;
+    };
+    window.addEventListener("keyup", up);
+    return () => window.removeEventListener("keyup", up);
+  }, [play]);
 
   const throttle = (on: boolean) => {
     // after the finish the throttle (key, tap or button) is the way to go again
@@ -259,7 +274,10 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
       keys: (e, down) => {
         mouse.current = false;
         if (e.key === " ") {
-          if (!e.repeat) throttle(down);
+          if (!e.repeat) {
+            keyHold.current = down ? " " : null;
+            throttle(down);
+          }
           return true;
         }
         if (e.key === "ArrowUp" || e.key.toLowerCase() === "e") {
@@ -996,12 +1014,15 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
             onKeyDown={(e) => {
               if (e.key !== " " && e.key !== "Enter") return;
               e.preventDefault();
-              if (!e.repeat) throttle(true);
+              // a repeat, or a second key while one holds it, changes nothing
+              if (!e.repeat && keyHold.current === null) {
+                keyHold.current = e.key;
+                throttle(true);
+              }
             }}
             onKeyUp={(e) => {
-              if (e.key !== " " && e.key !== "Enter") return;
-              e.preventDefault();
-              throttle(false);
+              // the window listener releases the hold; this stops Space's click on keyup
+              if (e.key === " " || e.key === "Enter") e.preventDefault();
             }}
             onClick={() => done && again()}
             className="flex-1 h-16 rounded-xl bg-[#1d5e3f] text-[#f2ead7] font-mono text-xs uppercase tracking-[0.2em] active:scale-[0.98] select-none touch-none"

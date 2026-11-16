@@ -1026,7 +1026,7 @@ export class CourseGame {
     const club = CLUBS[this.club];
     const e = at(sh, sh.restT);
     const end: [number, number] = [sh.ox + e[0], sh.oz + e[2]];
-    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin, this.hole.drops, (x, z) => Math.hypot(...this.terrain.slope(x, z)) < 0.3);
+    const drop = dropFor(sh, sh.surface, this.hole.edgeDrop, this.hole.surfaceAt, this.hole.pin, this.hole.drops, (x, z) => Math.hypot(...this.terrain.slope(x, z)) < 0.3, this.hole.rockName);
     const def = this.hole.def;
     const fromYd = this.hole.toPin(sh.ox, sh.oz) / YD;
     this.legs.push([sh.ox, sh.oz, end[0], end[1]]);
