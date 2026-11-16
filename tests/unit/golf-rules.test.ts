@@ -68,8 +68,9 @@ describe("out of bounds", () => {
   it("the stakes stand every 6 m along the boundary line, and the area is inside the hole's box", () => {
     const b = buildHole(NINE_DEFS[8]);
     const a = b.areas.find((q) => q.kind === "oob")!;
-    // (hole 9's first boundary runs along the cliff top for about 100 yd: about 19 stakes at 6 m)
-    expect(a.stakes.length).toBeGreaterThan(15);
+    // (hole 9's boundary is the cliff's west edge only, about 23 yd now: the cove's shore runs from the tee on, a water hazard
+    // rather than a boundary, so there are 4 stakes at 6 m, not the 19 of the old cliff top the cove used to sit behind)
+    expect(a.stakes.length).toBeGreaterThan(2);
     for (let i = 1; i < a.stakes.length; i++) expect(Math.hypot(a.stakes[i][0] - a.stakes[i - 1][0], a.stakes[i][1] - a.stakes[i - 1][1])).toBeLessThanOrEqual(6.01);
     for (const [x, z] of a.ring) {
       expect(x).toBeGreaterThanOrEqual(b.shape.box.x0);
