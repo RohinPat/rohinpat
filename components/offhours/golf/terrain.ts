@@ -313,15 +313,20 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return wet(x, z) - (dig !== 0 ? dig * digs(x, z) : 0);
   };
 
-  // baked on a grid over the hole (the line's blend is the slow part), read back bilinearly
+  // a grid over the hole (the line's blend is the slow part), read back bilinearly. A node is baked when a read first reaches
+  // it: the box runs far out over the sea (a cove's shore), and a round reads only the ground near its line
   const box = hole.shape.box;
   const X0 = box.x0 - 60, Z0 = box.z0 - 60;
   const nx = Math.ceil((box.x1 + 60 - X0) / COARSE) + 1, nz = Math.ceil((box.z1 + 60 - Z0) / COARSE) + 1;
-  let grid: Float32Array | null = null;
-  const bake = () => {
-    const g = new Float32Array(nx * nz);
-    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) g[j * nx + i] = full(X0 + i * COARSE, Z0 + j * COARSE);
-    return g;
+  const grid = new Float32Array(nx * nz);
+  const baked = new Uint8Array(nx * nz);
+  const node = (i: number, j: number) => {
+    const k = j * nx + i;
+    if (!baked[k]) {
+      grid[k] = full(X0 + i * COARSE, Z0 + j * COARSE);
+      baked[k] = 1;
+    }
+    return grid[k];
   };
   // the finer tiles: TILE m square, baked when first asked for, and only where a cliff's face or its apron may reach (away
   // from it a cliff's ground is flat: the full drop or none), or where an open cliff fades out past its end
@@ -356,10 +361,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
         return lerp(lerp(g[k], g[k + 1], u), lerp(g[k + TN + 1], g[k + TN + 2], u), v);
       }
     }
-    grid ??= bake();
     const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j;
-    const k = j * nx + i;
-    return lerp(lerp(grid[k], grid[k + 1], u), lerp(grid[k + nx], grid[k + nx + 1], u), v);
+    return lerp(lerp(node(i, j), node(i + 1, j), u), lerp(node(i, j + 1), node(i + 1, j + 1), u), v);
   };
 
   // the green: the putt's height field raised on the pad, held past the fringe, then banked down
