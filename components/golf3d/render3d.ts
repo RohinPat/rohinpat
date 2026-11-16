@@ -308,7 +308,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       if (pb.sunk) by -= Math.min(1, g.putt.dropT / 0.25) * BALL_R * 3;
       showBall = !pb.sunk || g.putt.dropT < 0.3;
       near = Math.hypot(pb.x - g.hole.green.cup[0], pb.y - g.hole.green.cup[1]) < 2.4 && !pb.sunk;
-      putt.update(g.hole, g.putt, g.t, !!opts.reduce);
+      putt.update(g.hole, g.putt, g.t, !!opts.reduce, c);
     } else putt.hide();
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
