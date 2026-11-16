@@ -10,6 +10,7 @@ import { buildProps3D } from "./props3d";
 import { buildGorse } from "./gorse3d";
 import { prepareScenery, type Skin } from "./scenery";
 import { buildWater } from "./water3d";
+import { buildFalls } from "./falls3d";
 import { paintAreas } from "./areas3d";
 import { buildCliffs, cliffCovers, cliffSink, paintCliffs } from "./cliff3d";
 import { buildScrub } from "./scrub3d";
@@ -400,6 +401,21 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   // ---------------------------------------------------------------- water
   if (hole.world.water.length) {
     buildWater({ hole, ground, tier: opts.tier ?? "high", sun: opts.sun ?? new THREE.Vector3(-0.4, 0.7, 0.5), reduce: !!opts.reduce, bay: scn.rec.coast?.tones, group, disposables });
+  }
+
+  // ---------------------------------------------------------------- a lake's waterfall down to the bay (HoleDef.falls)
+  if (def.falls) {
+    const f = def.falls;
+    const fl = buildFalls({
+      hole,
+      drawnAt: heightAt,
+      lipY: ground.waterY(f.from[0] * YD, f.from[1] * YD),
+      bayY: scn.rec.coast?.seaY ?? heightAt(f.to[0] * YD, f.to[1] * YD),
+      tier: opts.tier ?? "high",
+      reduce: !!opts.reduce,
+      disposables,
+    });
+    if (fl) group.add(fl.group);
   }
 
   // ---------------------------------------------------------------- cliffs

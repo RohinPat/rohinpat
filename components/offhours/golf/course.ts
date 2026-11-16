@@ -164,6 +164,12 @@ export type HoleDef = {
    * went in is used. Put them on dry, flat ground in play, short of the hazard; none: the ordinary drops (lie.ts).
    */
   drops?: [number, number][];
+  /**
+   * A waterfall where a lake spills off its level down to a lower bay (falls3d.ts draws it; purely visual, no play). `from` is
+   * the lip, on the lake's shore at the lake's level; `to` is the foot, in the bay at its level; `width` is the sheet's
+   * width across the fall, yd. Only the drawing reads it.
+   */
+  falls?: { from: [number, number]; to: [number, number]; width: number };
 };
 
 /**
@@ -705,6 +711,8 @@ export const BACK_DEFS: HoleDef[] = [
       { kind: "bench", at: [-7, 5], yaw: Math.PI / 2 },
       { kind: "sign", at: [6, 4], yaw: -0.3 },
     ],
+    // the lake's north-east shore is nearest the bay (9 m of bank between): the lake spills there, down to the sea
+    falls: { from: [117, 506], to: [141, 506], width: 8 },
   },
   {
     // home along the sea cliff: a tee 34 m over the sea and a cove cut into the cliffs across the line. The neck of the cove is
