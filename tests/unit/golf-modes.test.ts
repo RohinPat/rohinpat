@@ -58,15 +58,16 @@ describe("modes", () => {
     expect(t).toContain(`https://example.test/golf?quick=5`);
   });
 
-  it("the skilled bot finishes the next ten daily rounds near par", () => {
+  // (ten rounds take about a second alone, but a full run in parallel can take longer than the 5 s default: a CPU timeout, not a wait)
+  it("the skilled bot finishes the next ten daily rounds near par", { timeout: 60_000 }, () => {
     for (let i = 0; i < 10; i++) {
       const day = `2026-12-${String(i + 1).padStart(2, "0")}`;
       const s = setupFor("daily", { day });
       const r = playRound(BOTS.skilled, s.seed, { game: { holes: s.defs } });
       expect(r.finished, day).toBe(true);
       expect(r.pickedUp, day).toBe(0);
-      // (par 36. Hole 3's and hole 6's greens are a little softer and larger than they were, so the skilled bot's worst of
-      // these ten days is 11 over: 2026-12-09. The bound is that worst day plus one; the seeds make it the same every run)
+      // (par 36. The skilled bot's worst of these ten days is 9 over, on 2026-12-03 and 2026-12-08, since the approach lands a
+      // yard onto the green's front (it was 11 over on 2026-12-09 with three). The bound is that worst day plus three; the seeds make it the same every run)
       expect(r.total - r.par, day).toBeLessThan(12);
     }
   });
