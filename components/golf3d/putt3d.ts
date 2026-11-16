@@ -31,7 +31,7 @@ const ARROWS = 260;
 export type Putt3D = {
   group: THREE.Group;
   /** place everything for this frame; `ball` is where the ball is drawn (course frame) */
-  update: (hole: BuiltHole, p: Putt, t: number, reduce: boolean) => void;
+  update: (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }) => void;
   hide: () => void;
   dispose: () => void;
 };
@@ -171,7 +171,7 @@ export function createPutt3D(): Putt3D {
     arrows.instanceMatrix.needsUpdate = true;
   };
 
-  const update = (hole: BuiltHole, p: Putt, t: number, reduce: boolean) => {
+  const update = (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }) => {
     const rel = reliefOf(hole);
     const ground = (gx: number, gy: number, lift: number): [number, number, number] => {
       const [x, z] = hole.fromGreen(gx, gy);
@@ -229,16 +229,19 @@ export function createPutt3D(): Putt3D {
     const L = !b.moving && !b.sunk && !p.reading && !p.done && !p.putter && !p.tap ? lineAim(p, t) : null;
     dots.visible = tick.visible = !!L && !p.putter;
     if (L && !p.putter) {
-      dotM.opacity = tickM.opacity = L.live ? 0.9 : 0.4;
+      dotM.opacity = tickM.opacity = L.live ? 0.9 : 0.6;
       const r = rollFor(p.hole, b.x, b.y, L.dx, L.dy, L.pow);
       const half = r.len / 2;
       const fadeFrom = half * 0.6;
+      // the dots keep a roughly constant size on screen: they grow with distance from the eye, up to 4x
+      const grow = (x: number, y: number, z: number) => (eye ? Math.min(4, Math.max(1, Math.hypot(x - eye.x, y - eye.y, z - eye.z) / 3)) : 1);
       let n = 0;
       for (let s = DOT_GAP; s <= half && n < DOTS; s += DOT_GAP) {
         const [gx, gy] = along(r.pts, s);
         const f = s > fadeFrom ? 1 - 0.8 * smooth((s - fadeFrom) / Math.max(1e-3, half - fadeFrom)) : 1;
         const [x, y, z] = ground(gx, gy, 0.004);
-        m4.compose(at.set(x, y, z), noRot, sc.set(f, 1, f));
+        const k = f * grow(x, y, z);
+        m4.compose(at.set(x, y, z), noRot, sc.set(k, 1, k));
         dots.setMatrixAt(n++, m4);
       }
       dots.count = n;
@@ -249,7 +252,9 @@ export function createPutt3D(): Putt3D {
       const [px0, py0] = along(r.pts, Math.max(0, half - 0.05)), [px1, py1] = along(r.pts, half + 0.05);
       const tx = px1 - px0, ty = py1 - py0, tl = Math.hypot(tx, ty) || 1;
       const ux = tx / tl, uz = -ty / tl;
-      tick.position.set(...ground(ex, ey, 0.005));
+      const [tkx, tky, tkz] = ground(ex, ey, 0.005);
+      tick.position.set(tkx, tky, tkz);
+      tick.scale.setScalar(grow(tkx, tky, tkz));
       tick.quaternion.setFromAxisAngle(yAxis, Math.atan2(-ux, -uz));
     }
 

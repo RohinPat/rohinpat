@@ -286,7 +286,7 @@ describe("the aim line is the ball's own roll", () => {
     const opacity = () => (dots().material as THREE.MeshBasicMaterial).opacity;
     r3.update(hole, p, 0, true);
     expect(dots().visible).toBe(true);
-    expect(opacity()).toBeLessThan(0.6);
+    expect(opacity()).toBeCloseTo(0.6, 5);
     // the suggested pace (the one that rolls it to the cup on a flat green), shown as the first half of its roll
     const pace = puttPowerFor(Math.hypot(H.cup[0] - b[0], H.cup[1] - b[1]));
     const roll = puttRoll(H, b[0], b[1], Math.cos(p.kAngle), Math.sin(p.kAngle), pace);
