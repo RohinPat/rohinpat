@@ -59,6 +59,8 @@ export type Lake = {
   level?: number;
   /** how deep the bed is dug under the ground at the shore, m (default 1.1). A deep tarn: 2 to 4. The waterline sits on the shore when `level` is the ground there, plus 0.22, less 0.19 x depth */
   depth?: number;
+  /** the bank is held up to the lake's level (terrain.ts berm), for a lake whose shore falls below its level: a slab would show */
+  held?: boolean;
 };
 export type Water = Blob | Creek | Lake;
 const isCreek = (w: Water): w is Creek => "path" in w;
@@ -686,6 +688,7 @@ export const BACK_DEFS: HoleDef[] = [
     water: [
       // the lake: a bay of the sea loch lifted onto the plateau, wrapped round the island on three sides (open to the west)
       {
+        held: true,
         shore: [[8, 332], [22, 322], [45, 318], [70, 324], [96, 336], [116, 356], [128, 384], [132, 418], [129, 454], [124, 488], [112, 518], [92, 538], [64, 548], [36, 544], [14, 532], [8, 516], [12, 506], [26, 503], [42, 499], [52, 491], [55, 480], [51, 470], [41, 463], [26, 461], [12, 462], [6, 452], [5, 438], [3, 412], [4, 382], [6, 354]],
         level: 16.8,
         depth: 2.2,

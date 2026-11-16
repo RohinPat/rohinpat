@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { YD } from "@/components/offhours/golf/scene";
-import { NINE_DEFS, buildHole, lakeOf, type Lake } from "@/components/offhours/golf/course";
-import { terrainOf } from "@/components/offhours/golf/terrain";
+import { NINE_DEFS, buildHole, lakeOf, ringSd, type Lake } from "@/components/offhours/golf/course";
+import { NOTCH_FADE, terrainOf } from "@/components/offhours/golf/terrain";
 import { signedDist } from "@/components/golf3d/scenery/geo";
 import { sceneryFor } from "@/components/golf3d/scenery/scenes";
 import { prepareScenery } from "@/components/golf3d/scenery";
@@ -65,6 +65,57 @@ describe("hole 8: the lake's waterfall", () => {
         const k = (i * rows + j) * 3;
         expect(pos[k + 1]).toBeGreaterThanOrEqual(p.heightAt(pos[k], pos[k + 2]) + 0.2);
       }
+  });
+
+  it("the lake is held by its bank: 2 m out round the shore (not across the notch) the drawn ground is never below the lake's level", () => {
+    const p = prepareScenery(hole, ground.y, "high");
+    const f = def.falls!;
+    const lake = lakeOf(def.water.find((w): w is Lake => "shore" in w)!);
+    const level = 16.8;
+    // the notch: the falls' channel, its width and a little more, where the water spills and the bank is not held
+    const [ax, az] = [f.from[0] * YD, f.from[1] * YD], [bx, bz] = [f.to[0] * YD, f.to[1] * YD];
+    const across = (x: number, z: number) => {
+      const dx = bx - ax, dz = bz - az;
+      const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+      return Math.hypot(x - (ax + dx * u), z - (az + dz * u));
+    };
+    // (and the bank's ramp down into it, which is not held: terrain.ts NOTCH_FADE)
+    const notch = (f.width * YD) / 2 + 1.5 + NOTCH_FADE;
+    let sampled = 0;
+    for (let i = 0; i < lake.length; i++) {
+      const [x, z] = lake[i];
+      const [px, pz] = lake[(i + lake.length - 1) % lake.length], [nx, nz] = lake[(i + 1) % lake.length];
+      // the ring's normal here, turned to point out of the lake
+      let ux = nz - pz, uz = -(nx - px);
+      const l = Math.hypot(ux, uz) || 1;
+      ux /= l;
+      uz /= l;
+      if (ringSd(lake, x + ux, z + uz) < 0) [ux, uz] = [-ux, -uz];
+      const [qx, qz] = [x + ux * 2, z + uz * 2];
+      if (across(qx, qz) < notch) continue;
+      const sd = ringSd(lake, qx, qz);
+      if (sd < 1 || sd > 3) continue;
+      sampled++;
+      expect(p.heightAt(qx, qz), `ring ${i}`).toBeGreaterThanOrEqual(level - 0.01);
+    }
+    expect(sampled).toBeGreaterThan(150);
+  });
+
+  it("the bank steps down into the notch, no cliff: across the notch's edges the ground changes by under 0.5 m per 0.5 m", () => {
+    const p = prepareScenery(hole, ground.y, "high");
+    const f = def.falls!;
+    // a line across the falls' channel, a few metres out from the lip, at right angles to the flow
+    const [ax, az] = [f.from[0] * YD, f.from[1] * YD], [bx, bz] = [f.to[0] * YD, f.to[1] * YD];
+    const mx = (ax + bx) / 2 - 4, mz = az;
+    const flow = Math.atan2(bz - az, bx - ax);
+    const [ux, uz] = [-Math.sin(flow), Math.cos(flow)];
+    const drawn: number[] = [], play: number[] = [];
+    for (let d = -18; d <= 18.001; d += 0.5) {
+      drawn.push(p.heightAt(mx + ux * d, mz + uz * d));
+      play.push(ground.y(mx + ux * d, mz + uz * d));
+    }
+    for (const [name, ys] of [["drawn", drawn], ["play", play]] as const)
+      for (let i = 1; i < ys.length; i++) expect(Math.abs(ys[i] - ys[i - 1]), `${name} step ${i}`).toBeLessThan(0.5);
   });
 
   it("builds on every tier, with a few draws, and not at all without the field", () => {
