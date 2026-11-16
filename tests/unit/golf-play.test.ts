@@ -343,7 +343,8 @@ describe("the bots: measured bands, pinned", () => {
     expect(rs.every((r) => r.finished)).toBe(true);
     expect(total(rs)).toBeGreaterThanOrEqual(26);
     expect(total(rs)).toBeLessThanOrEqual(29);
-    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(23);
+    // (22 is a round a stroke under par: hole 3's and hole 6's greens were made a little softer and larger, see course.ts)
+    expect(Math.min(...rs.map((r) => r.total))).toBeGreaterThanOrEqual(22);
     expect(Math.max(...rs.map((r) => r.total))).toBeLessThanOrEqual(36);
     // every hole is about a par plus one, none out of reach (the par 5 is a little under: it is reached in two)
     rs[0].pars.forEach((par, h) => {

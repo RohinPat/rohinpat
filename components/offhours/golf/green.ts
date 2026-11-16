@@ -38,13 +38,15 @@ export type Hole = {
   tee: [number, number];
   par: number;
   shape: [number, number, number, number, number, number]; // radial wobble: amp/phase x3
+  /** the green's radius, times this (a course green can be a little bigger than a putting green; 1 by default) */
+  size?: number;
 };
 
 const DIST = [4.5, 6.2, 7.6, 9.4, 6.9, 11.2, 8.6, 12.4, 10.2];
 
 export function shapeR(H: Hole, th: number) {
   const s = H.shape;
-  return 1 + s[0] * Math.sin(2 * th + s[1]) + s[2] * Math.sin(3 * th + s[3]) + s[4] * Math.sin(5 * th + s[5]);
+  return (H.size ?? 1) * (1 + s[0] * Math.sin(2 * th + s[1]) + s[2] * Math.sin(3 * th + s[3]) + s[4] * Math.sin(5 * th + s[5]));
 }
 /** 0 inside the green, 1 on the fringe, 2 in the rough */
 export function zone(H: Hole, x: number, y: number) {
@@ -93,7 +95,7 @@ export function makeHole(n: number): Hole {
  * A green for the course: the same lit relief and the same ball roll as the putting greens, from a seed and a severity
  * (the putting greens run 0.6 to 1.2). The caller sets the cup and where the ball lies.
  */
-export function makeGreen(seed: number, severity: number, n = 1, par = 4): Hole {
+export function makeGreen(seed: number, severity: number, n = 1, par = 4, size = 1): Hole {
   const r = seeded(seed);
   const k = severity;
   const hills = Array.from({ length: 4 + Math.floor(r() * 3) }, () => ({ x: r() * GW, y: r() * GH, a: (r() - 0.45) * 0.55 * k, s: 1.9 + r() * 2.8 }));
@@ -106,6 +108,7 @@ export function makeGreen(seed: number, severity: number, n = 1, par = 4): Hole 
     tee: [GW / 2, GH / 2],
     par,
     shape: [0.05 + r() * 0.04, r() * 6, 0.04 + r() * 0.03, r() * 6, 0.02 + r() * 0.02, r() * 6],
+    size,
   };
 }
 
