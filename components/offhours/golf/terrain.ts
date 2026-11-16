@@ -44,8 +44,10 @@ export type Terrain = {
   slope: (x: number, z: number) => [number, number];
   /** the ground's height at a point of the green (its own coordinates) */
   yG: (gx: number, gy: number) => number;
-  /** the ground held up at a lake's bank (m): h, but at least the lake's level plus a lip just out from its shore */
+  /** the ground held up at a lake's bank (m): h, but at least the lake's level plus a lip just out from its shore (baked into the ground, so y has it) */
   berm: (x: number, z: number, h: number) => number;
+  /** whether a point is within `reach` m of a held lake's bank (the mesh is refined there) */
+  bankNear: (x: number, z: number, reach: number) => boolean;
   /** the height of the water's surface at a point of a pond or creek */
   waterY: (x: number, z: number) => number;
   /** the height the green's pad is levelled to */
@@ -80,6 +82,8 @@ const POND_LIP = 0.22;
 const CREEK_LINE = 0.6;
 /** a lake's bank: the lip over its level, and how far out from the shore it is held (m), then how far it eases back to the ground */
 export const BERM_LIP = 0.3, BERM_IN = 4, BERM_OUT = 12;
+/** how far across a waterfall's notch the bank's lift ramps back in, m (a steep lift would be a cliff) */
+export const NOTCH_FADE = 16;
 /** the baked grid's cell, m (Ground.cell) */
 const CELL_DEFAULT = 1.5;
 
@@ -300,6 +304,28 @@ export function terrainOf(hole: BuiltHole): Terrain {
     for (let i = 0; i < sand.length; i++) if (potted[i]) d += fx.pot(i, x, z)!;
     return d !== 0 ? -d * digs(x, z) : 0;
   };
+  // a held lake's bank: the ground round its shore is held at the lake's level plus a lip for BERM_IN m out, then eases back to the
+  // ground over BERM_OUT m, so the water is not held by a slab above the grass beside it. Not inside the shore. Across a waterfall's
+  // notch (HoleDef.falls) the lift ramps in over NOTCH_FADE m from the notch's edge, so the bank steps down into the notch, not off it.
+  // Only the lakes that ask (Lake.held): the rest stay as they are. Baked into the grid with the rest of the ground (full)
+  const notch = def.falls ? { a: [def.falls.from[0] * YD, def.falls.from[1] * YD] as [number, number], b: [def.falls.to[0] * YD, def.falls.to[1] * YD] as [number, number], r: (def.falls.width * YD) / 2 + 1 } : null;
+  const berm = (x: number, z: number, h: number) => {
+    let v = h;
+    for (const l of lakes) {
+      if (!l.held) continue;
+      const sd = l.sd(x, z);
+      if (sd < 0 || sd > BERM_OUT) continue;
+      const w = notch ? smooth((pathDist([notch.a, notch.b], x, z) - notch.r) / NOTCH_FADE) : 1;
+      if (w <= 0) continue;
+      v = lerp(v, lerp(Math.max(v, l.level + BERM_LIP), v, smooth((sd - BERM_IN) / (BERM_OUT - BERM_IN))), w);
+    }
+    return v;
+  };
+  /** whether a point is within `reach` m of a held lake's bank (its shore band, and the bank out to BERM_OUT) */
+  const bankNear = (x: number, z: number, reach: number) => {
+    for (const l of lakes) if (l.held) { const sd = l.sd(x, z); if (sd > -reach && sd < BERM_OUT + reach) return true; }
+    return false;
+  };
   const full = (x: number, z: number) => {
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
@@ -314,7 +340,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
       // a pot bunker is its own shape (features.ts); any other is a bowl as deep as the bunker says
       if (!potted[i]) dig += b.depth * smooth((1.08 - blobR(b, x, z)) / 0.45);
     });
-    return wet(x, z) - (dig !== 0 ? dig * digs(x, z) : 0);
+    return berm(x, z, wet(x, z) - (dig !== 0 ? dig * digs(x, z) : 0));
   };
 
   // baked on a grid over the hole (the line's blend is the slow part), read back bilinearly
@@ -379,29 +405,15 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
 
   const anyPot = potted.some(Boolean);
-  // a held lake's bank: the ground round its shore is held at the lake's level plus a lip for BERM_IN m out, then eases back to the
-  // ground over BERM_OUT m, so the water is not held by a slab above the grass beside it. Not inside the shore, nor across a
-  // waterfall's notch (HoleDef.falls), which lets the water spill. Only the lakes that ask (Lake.held): the rest stay as they are
-  const notch = def.falls ? { a: [def.falls.from[0] * YD, def.falls.from[1] * YD] as [number, number], b: [def.falls.to[0] * YD, def.falls.to[1] * YD] as [number, number], r: (def.falls.width * YD) / 2 + 1 } : null;
-  const berm = (x: number, z: number, h: number) => {
-    let v = h;
-    for (const l of lakes) {
-      if (!l.held) continue;
-      const sd = l.sd(x, z);
-      if (sd < 0 || sd > BERM_OUT) continue;
-      if (notch && pathDist([notch.a, notch.b], x, z) < notch.r) continue;
-      v = lerp(Math.max(v, l.level + BERM_LIP), v, smooth((sd - BERM_IN) / (BERM_OUT - BERM_IN)));
-    }
-    return v;
-  };
   const y = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
-    return berm(x, z, base(x, z) + relief(gx, gy) + (anyPot ? pots(x, z) : 0));
+    return base(x, z) + relief(gx, gy) + (anyPot ? pots(x, z) : 0);
   };
   const E = 0.2;
   const t: Terrain = {
     y,
     berm,
+    bankNear,
     slope: (x, z) => [(y(x + E, z) - y(x - E, z)) / (2 * E), (y(x, z + E) - y(x, z - E)) / (2 * E)],
     yG: (gx, gy) => {
       const [x, z] = hole.fromGreen(gx, gy);
