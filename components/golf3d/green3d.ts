@@ -161,6 +161,7 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
     const g = FG;
     const nx = fx, nz = fz;
     const Hy = new Float32Array(nx * nz), Rz = new Float32Array(nx * nz), Mk = new Float32Array(nx * nz), Gm = new Float32Array(nx * nz);
+    const GX = new Float32Array(nx * nz), GZ = new Float32Array(nx * nz);
     let lo = Infinity, hi = -Infinity;
     for (let j = 0; j < nz; j++)
       for (let i = 0; i < nx; i++) {
@@ -200,12 +201,8 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
         else [r, gg, b, al] = [8, 50, 78, -sh * 0.55];
         // the height tint: a soft warm wash high up, a soft cool one low down
         const ta = Math.abs(hgt) * 0.2;
-        // the grain's fall line (downhill, in the course's frame) and how steep it is, for the shader
-        const sl = Math.hypot(gx, gz), u = sl > 1e-6 ? 1 / sl : 0;
-        fd[a * 4] = 128 - gx * u * 127;
-        fd[a * 4 + 1] = 128 - gz * u * 127;
-        fd[a * 4 + 2] = Math.min(1, sl / 0.06) * 255;
-        fd[a * 4 + 3] = Gm[a] * 255;
+        GX[a] = gx;
+        GZ[a] = gz;
         const o = a * 4;
         const ra = al + ta * (1 - al);
         const [tr, tg, tb] = hgt >= 0 ? [255, 240, 150] : [20, 90, 120];
@@ -220,6 +217,28 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
     oc.putImageData(img, 0, 0);
     c.imageSmoothingQuality = "high";
     c.drawImage(ov, 0, 0, nx, nz, 0, 0, nx * g * T, nz * g * T);
+    // the fall line for the grain, averaged over 0.3 m so lumps in the ground do not make it scribble
+    const R = 3;
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++) {
+        let sx = 0, sz = 0, n = 0;
+        for (let dj = -R; dj <= R; dj++)
+          for (let di = -R; di <= R; di++) {
+            const ii = i + di, jj = j + dj;
+            if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
+            sx += GX[jj * nx + ii];
+            sz += GZ[jj * nx + ii];
+            n++;
+          }
+        sx /= n;
+        sz /= n;
+        const a = j * nx + i;
+        const sl = Math.hypot(sx, sz), u = sl > 1e-6 ? 1 / sl : 0;
+        fd[a * 4] = 128 - sx * u * 127;
+        fd[a * 4 + 1] = 128 - sz * u * 127;
+        fd[a * 4 + 2] = Math.min(1, sl / 0.06) * 255;
+        fd[a * 4 + 3] = Gm[a] * 255;
+      }
   }
   // the fall line field, read by the grain's shader (no draw call of its own: it is one more texture)
   const fieldTex = new THREE.DataTexture(fd, fx, fz, THREE.RGBAFormat);
@@ -325,7 +344,9 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
 const GRAIN_DECL = `uniform sampler2D uField;
 uniform vec2 uFS, uFO, uSize;
 uniform float uT, uMove;`;
-// dashes 0.7 m apart along the fall line and 0.3 m across, half of them lit, each longer where the slope is steeper
+// hairlines lying down the fall line, a row every 0.3 m, each row broken into short dashes, a few of them lit. The
+// lines are about one and a half pixels wide whatever the distance (fwidth), and the grain fades out from 8 m to 20 m
+// so the green looks clean from the fairway. Its tint is a lighter green, not white, so it reads as grain in the grass.
 const GRAIN_BODY = `{
   vec4 fl = texture2D(uField, vMapUv * uFS + uFO);
   float sl = fl.b;
@@ -333,17 +354,27 @@ const GRAIN_BODY = `{
   fall = fall / max(length(fall), 1e-3);
   vec2 perp = vec2(-fall.y, fall.x);
   vec2 p = vMapUv * uSize;
-  float a = dot(p, fall) - uT * uMove * (0.04 + 0.3 * sl);
-  float b = dot(p, perp);
-  float row = floor(b / 0.3);
-  float u = a / 0.7 + 0.5 * mod(row, 2.0);
+  float along = dot(p, fall) - uT * uMove * (0.03 + 0.2 * sl);
+  float across = dot(p, perp);
+  // rows in row units: px is one screen pixel in them, so the hairline stays about 1.5 px
+  float fa = fwidth(across) / 0.3;
+  float row = floor(across / 0.3);
+  float dc = abs(fract(across / 0.3) - 0.5);
+  float hw = max(0.75 * fa, 0.02);
+  float line = 1.0 - smoothstep(hw, hw + fa, dc);
+  // dashes 0.5 m apart along each row, shorter where it is flat
+  float u = along / 0.5 + 0.5 * mod(row, 2.0);
   float cell = floor(u);
+  float pu = fract(u);
+  float pw = fwidth(u);
   float hh = fract(sin(cell * 12.9898 + row * 78.233) * 43758.5453);
-  float acr = fract(b / 0.3);
-  float dash = step(fract(u), mix(0.3, 0.7, sl)) * step(hh, 0.3) * step(0.3, acr) * step(acr, 0.7);
+  float dashLen = mix(0.2, 0.45, sl);
+  float dash = (1.0 - smoothstep(dashLen - pw, dashLen + pw, pu)) * step(hh, 0.18);
+  float dist = length(vViewPosition);
+  float near = 1.0 - smoothstep(8.0, 20.0, dist);
   // none where the ground is flat: there the fall line is noise, and it would scribble
-  float amp = fl.a * smoothstep(0.1, 0.35, sl) * 0.16;
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 1.0, 0.8), dash * amp);
+  float amp = fl.a * smoothstep(0.1, 0.35, sl) * near * 0.09;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.6, 0.9, 0.5), line * dash * amp);
 }`;
 
 /**
