@@ -16,7 +16,7 @@ type Pt = [number, number];
 export const BRINK_9: Pt[] = [
   [-118, -140], [-118, -60], [-118, -36],
   // the diagonal shore past the tee, then north beside the drive: the cove's water lies on the left of the first 100 yd
-  [-100, -31.1], [-60, -20.4], [-30, -12.3], [-3, -5], [-3, 30], [-3, 60], [-3, 88], [-3, 100],
+  [-100, -31.2], [-60, -20.6], [-30, -12.6], [-5, -6], [-5, 30], [-5, 60], [-5, 88], [-5, 100],
   // the cove's south shore, falling in toward its head
   [22, 102], [44, 104],
   // the neck's east end, a rock slot
@@ -71,6 +71,6 @@ function dense(path: Pt[], gap: number): Pt[] {
 export const COVE_9: Pt[] = (() => {
   const wall = offset(BRINK_9.slice(COVE_FROM, COVE_TO + 1), 1);
   const first = wall[0], last = wall[wall.length - 1];
-  const mouth: Pt[] = [[last[0] - 10, last[1] + 2], [-150, 232], [-160, 190], [-160, 120], [-150, 62], [-150, -30]];
+  const mouth: Pt[] = [[last[0] - 10, last[1] + 2], [-150, 252], [-330, 252], [-330, -330], [-120, -330], [-120, -37]];
   return dense([...wall, ...mouth], 9);
 })();

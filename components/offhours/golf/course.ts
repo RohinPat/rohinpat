@@ -753,7 +753,7 @@ export const BACK_DEFS: HoleDef[] = [
     // a tee 34 m up (baseY), the ground easing 3 m to the shelf and 7 m to the green; the cliff does the rest
     ground: { rise: [[0, 0], [40, -0.3], [100, -1], [150, -2], [185, -3], [230, -3.8], [290, -5.2], [340, -6.5], [369, -7]], sigma: 14, cell: 0.75, baseY: 34 },
     features: [{ k: "cliff", path: BRINK_9, drop: 38, run: 3, talus: 14, scree: 0.12, ledges: 6, seed: 9 }],
-    // heath on the cliff top, then white stakes at the lip: over the edge (and the open sea beyond the cove) is out of bounds.
+    // heath on the cliff top, then white stakes on the headland's lip: over the edge is out of bounds. The sea beyond the cove is water.
     // The cleared ground is turf, not bare wood floor: fescue on the cliff top west of the fairway's rough, on the headland
     // inland of the stakes, and on the cleared ground behind the cove's east end (all clear of the fairway and its rough)
     areas: [
@@ -762,9 +762,7 @@ export const BACK_DEFS: HoleDef[] = [
       { kind: "fescue", poly: [[-111, 298], [-133, 298], [-133, 330], [-135, 380], [-131, 410], [-111, 410]] },
       { kind: "fescue", poly: [[40, 84], [110, 84], [110, 150], [40, 150]] },
       { kind: "gorse", poly: [[-92, -44], [-84, -38], [-78, -44], [-86, -50]] },
-      { kind: "oob", poly: [[-113, -70], [-113, -37], [-190, -37], [-190, -70]], stakes: [[-113, -60], [-113, -37]] },
       { kind: "oob", poly: [[-112, 234], [-125, 251], [-132, 280], [-133, 330], [-135, 380], [-131, 410], [-190, 410], [-190, 234]], stakes: [[-112, 234], [-125, 251], [-132, 280], [-133, 330], [-135, 380], [-131, 410]] },
-      { kind: "oob", poly: [[-160, 40], [-160, 240], [-190, 240], [-190, 40]] },
     ],
   },
 ];
