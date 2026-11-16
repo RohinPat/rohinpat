@@ -1,13 +1,14 @@
 import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
-import { GH, GW, TAP_HIT, greenHeight, puttAim, zone, type Putt } from "@/components/offhours/golf/green";
+import { GH, GW, TAP_HIT, greenHeight, puttAim, puttPowerFor, puttRoll, zone, type Hole, type Putt } from "@/components/offhours/golf/green";
 import { reliefOf } from "./relief";
 
 // Putting on the 3D green. The putt itself is green.ts's (its ball, its physics,
 // its controls); this is what you see of it: a camera low behind the ball looking
 // down the line, a putter that addresses the ball and swings through, a dotted line
-// as far as the putt would roll on a flat green, the path the last putt took, and
-// when reading, water that runs downhill and arrows down the slope.
+// along the ball's own predicted roll (its first half, so the break shows without
+// solving the putt), the path the last putt took, and when reading, water that runs
+// downhill and arrows down the slope.
 //
 // Everything here is in the course's frame (metres, x right, z downrange); the
 // green's own coordinates map to it with hole.fromGreen (x the same way, y the
@@ -20,7 +21,7 @@ const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 /** marks lying on the green draw over it: they sit a few millimetres up, and this settles the rest */
 const ON_GROUND = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 } as const;
 
-const DOTS = 140;
+const DOTS = 240;
 const DOT_GAP = 0.15;
 const TRAIL = 600;
 const DROP_SEG = 59;
@@ -61,18 +62,22 @@ export function createPutt3D(): Putt3D {
   putter.add(head, face, sight, shaft, grip);
   group.add(putter);
 
-  // ---- the line: dots on the ground and a ring where a flat putt would stop
+  // ---- the line: dots along the ball's roll (its first half), and a tick across the line where that part ends
   const dotG = keep(new THREE.CircleGeometry(0.02, 10));
   dotG.rotateX(-Math.PI / 2);
   const dotM = keep(new THREE.MeshBasicMaterial({ color: "#f2ead7", transparent: true, opacity: 0.9, depthWrite: false, ...ON_GROUND }));
   const dots = new THREE.InstancedMesh(dotG, dotM, DOTS);
   dots.frustumCulled = false;
   group.add(dots);
-  const ringG = keep(new THREE.RingGeometry(0.07, 0.092, 28));
-  ringG.rotateX(-Math.PI / 2);
-  const ringM = keep(new THREE.MeshBasicMaterial({ color: "#8ad9a8", transparent: true, opacity: 0.95, depthWrite: false, ...ON_GROUND, side: THREE.DoubleSide }));
-  const ring = new THREE.Mesh(ringG, ringM);
-  group.add(ring);
+  const tickG = keep(new THREE.BoxGeometry(0.16, 0.004, 0.02));
+  const tickM = keep(new THREE.MeshBasicMaterial({ color: "#f2ead7", transparent: true, opacity: 0.9, depthWrite: false, ...ON_GROUND }));
+  const tick = new THREE.Mesh(tickG, tickM);
+  group.add(tick);
+  // the roll is a few hundred steps: it is worked out again only when the aim or the power changes
+  let rollKey = "";
+  let rollG: Hole | null = null;
+  let roll: { pts: { x: number; y: number; s: number }[]; len: number } = { pts: [], len: 0 };
+  const noRot = new THREE.Quaternion();
 
   // ---- where the last putt went
   const trailPos = new Float32Array(TRAIL * 3);
@@ -109,7 +114,35 @@ export function createPutt3D(): Putt3D {
   const yAxis = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
 
   const hide = () => {
-    putter.visible = dots.visible = ring.visible = trail.visible = drops.visible = arrows.visible = false;
+    putter.visible = dots.visible = tick.visible = trail.visible = drops.visible = arrows.visible = false;
+  };
+
+  /** the aim the line shows: the putt's own while it is being lined up (live), else the suggested pace at the cup (faint) */
+  const lineAim = (p: Putt, t: number) => {
+    const aim = puttAim(p, t);
+    if (aim && aim.pow > 0.02) return { dx: aim.dx, dy: aim.dy, pow: aim.pow, live: true };
+    const dist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
+    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: puttPowerFor(dist), live: !!aim };
+  };
+
+  /** the ball's roll for this green, ball, aim and power; cached until one of them changes */
+  const rollFor = (H: Hole, x: number, y: number, dx: number, dy: number, pow: number) => {
+    const key = [x, y, dx, dy, pow].map((v) => v.toFixed(4)).join(",");
+    if (key !== rollKey || H !== rollG) {
+      rollKey = key;
+      rollG = H;
+      roll = puttRoll(H, x, y, dx, dy, pow);
+    }
+    return roll;
+  };
+
+  /** the green's point `s` metres along a roll */
+  const along = (pts: { x: number; y: number; s: number }[], s: number): [number, number] => {
+    let j = 0;
+    while (j < pts.length - 2 && pts[j + 1].s < s) j++;
+    const a = pts[j], c = pts[j + 1] ?? a;
+    const u = c.s > a.s ? Math.min(1, Math.max(0, (s - a.s) / (c.s - a.s))) : 0;
+    return [a.x + (c.x - a.x) * u, a.y + (c.y - a.y) * u];
   };
 
   /** the slope arrows for a hole's green, once: every 1.15 m on the putting surface, downhill, longer where it is steeper */
@@ -191,22 +224,33 @@ export function createPutt3D(): Putt3D {
       for (const mat of [steel, black, cream]) mat.opacity = pv.alpha;
     }
 
-    // ---- the line, as far as a flat putt would roll
-    dots.visible = ring.visible = !!aim && !p.putter;
-    if (aim && !p.putter) {
-      const L = aim.flat;
-      const n = Math.min(DOTS, Math.floor(L / DOT_GAP));
-      for (let i = 0; i < n; i++) {
-        const s = (i + 1) * DOT_GAP;
-        const [x, y, z] = ground(b.x + aim.dx * s, b.y + aim.dy * s, 0.004);
-        m4.makeTranslation(x, y, z);
-        dots.setMatrixAt(i, m4);
+    // ---- the line: the ball's own roll as far as its first half, fading over the last part of that, and a tick where it
+    // ends. Faint at address; full while it is being lined up or the power is pulled back.
+    const L = !b.moving && !b.sunk && !p.reading && !p.done && !p.putter && !p.tap ? lineAim(p, t) : null;
+    dots.visible = tick.visible = !!L && !p.putter;
+    if (L && !p.putter) {
+      dotM.opacity = tickM.opacity = L.live ? 0.9 : 0.4;
+      const r = rollFor(p.hole, b.x, b.y, L.dx, L.dy, L.pow);
+      const half = r.len / 2;
+      const fadeFrom = half * 0.6;
+      let n = 0;
+      for (let s = DOT_GAP; s <= half && n < DOTS; s += DOT_GAP) {
+        const [gx, gy] = along(r.pts, s);
+        const f = s > fadeFrom ? 1 - 0.8 * smooth((s - fadeFrom) / Math.max(1e-3, half - fadeFrom)) : 1;
+        const [x, y, z] = ground(gx, gy, 0.004);
+        m4.compose(at.set(x, y, z), noRot, sc.set(f, 1, f));
+        dots.setMatrixAt(n++, m4);
       }
       dots.count = n;
       dots.instanceMatrix.needsUpdate = true;
-      const [x, y, z] = ground(b.x + aim.dx * L, b.y + aim.dy * L, 0.005);
-      ring.position.set(x, y, z);
-      ringM.color.set(aim.pow > 0.9 ? "#e5484d" : "#8ad9a8");
+      // the tick: across the line where the shown part ends, square to the roll there (a green direction (dx, dy) is
+      // (dx, -dy) on the ground, and a box's long side along x turns to (cos, -sin) under a yaw)
+      const [ex, ey] = along(r.pts, half);
+      const [px0, py0] = along(r.pts, Math.max(0, half - 0.05)), [px1, py1] = along(r.pts, half + 0.05);
+      const tx = px1 - px0, ty = py1 - py0, tl = Math.hypot(tx, ty) || 1;
+      const ux = tx / tl, uz = -ty / tl;
+      tick.position.set(...ground(ex, ey, 0.005));
+      tick.quaternion.setFromAxisAngle(yAxis, Math.atan2(-ux, -uz));
     }
 
     // ---- the last putt's path, fading once the ball stops

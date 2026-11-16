@@ -22,7 +22,9 @@ export function puttView(hole: BuiltHole, ball: [number, number], yaw: number, w
   const [bx, bz] = hole.fromGreen(ball[0], ball[1]);
   const by = rel.yG(ball[0], ball[1]);
   const ux = Math.cos(yaw), uz = -Math.sin(yaw);
-  const back = 1.7 + 0.2 * dist, up = 0.95 + 0.11 * dist;
+  // a long putt (over ~5 m) stands a little further back and higher, so the green's tilt and the cup read
+  const long = Math.max(0, Math.min(1, (dist - 5) / 4));
+  const back = 1.7 + 0.2 * dist + 1.0 * long, up = 0.95 + 0.11 * dist + 0.5 * long;
   const F = puttF(w, h);
   // aim the camera so the ball sits about 70% of the way down the frame (the projection centre is at 40%)
   const down = Math.atan2(up, back) - Math.atan2(0.3 * h, F);

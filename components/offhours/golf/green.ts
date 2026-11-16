@@ -415,6 +415,28 @@ export function puttPowerFor(metres: number) {
   return powFor(Math.sqrt(2 * MU * Math.max(0, metres)));
 }
 
+/**
+ * The ball's whole roll struck from (x, y) in direction (dx, dy) at `pow`: the same ball step the putt uses (stepBall, at
+ * the same 1/240 s), so the line on the 3D green cannot disagree with the putt. `pts` carries each sample's distance
+ * along the roll `s`; `len` is the roll to rest (or to the cup), m. A cap on the steps keeps a long putt cheap.
+ */
+export function puttRoll(H: Hole, x: number, y: number, dx: number, dy: number, pow: number): { pts: { x: number; y: number; s: number }[]; len: number } {
+  const sp = pace(pow);
+  const b: Ball = { x, y, vx: dx * sp, vy: dy * sp, moving: true, sunk: false };
+  const pts = [{ x, y, s: 0 }];
+  let s = 0, px = x, py = y;
+  for (let i = 0; i < 6000 && b.moving; i++) {
+    const e = stepBall(H, b, 1 / 240);
+    s += Math.hypot(b.x - px, b.y - py);
+    px = b.x;
+    py = b.y;
+    const last = pts[pts.length - 1];
+    if (Math.hypot(b.x - last.x, b.y - last.y) >= 0.02 || e) pts.push({ x: b.x, y: b.y, s });
+    if (e === "sunk") break;
+  }
+  return { pts, len: s };
+}
+
 export function puttRead(p: Putt, on: boolean) {
   p.reading = on;
   p.aiming = false;
@@ -776,9 +798,7 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
   const Y = (x: number, y: number) => sy(v, x, y);
 
   if (env.hudOnly) {
-    // the scene is someone else's: the pace label where a flat putt would stop, and the HUD
-    const aim = play ? puttAim(p, t) : null;
-    if (aim) paceLabel(ctx, toScr(p, p.ball.x + aim.dx * aim.flat, p.ball.y + aim.dy * aim.flat), aim.flat, w);
+    // the scene is someone else's: only the HUD (the line on the 3D green is its own; no flat-green pace label)
     hud(ctx, p, w, h, t, play, pointer, !!env.touch);
     return;
   }
