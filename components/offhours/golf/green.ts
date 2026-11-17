@@ -278,6 +278,8 @@ export type Putt = {
   pickedUp: boolean;
   /** set when the green is seen through another camera than the top-down view */
   proj: PuttProj | null;
+  /** a read view is up over the 3D green (readview.ts): the HUD leaves the prompt to the page */
+  viewing: boolean;
 };
 
 export type PuttCourse = {
@@ -331,6 +333,7 @@ export function newPutt(): Putt {
     course: null,
     pickedUp: false,
     proj: null,
+    viewing: false,
   };
   setupHole(p, 1);
   return p;
@@ -1167,7 +1170,7 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   };
   if (p.reading) {
     chip(["READING · CLICK OR DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER · IT RUNS DOWNHILL", "READING · DRAG TO POUR WATER", "READING · DRAG"].slice(touch ? 1 : 0), "#a0dcff");
-  } else if (!p.course && H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && t - p.startT < 12) {
+  } else if (!p.course && H.n === 1 && p.strokes === 0 && !p.aiming && !p.kCharging && !p.viewing && t - p.startT < 12) {
     chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(touch ? 1 : 0), "#f2ead7");
   }
 

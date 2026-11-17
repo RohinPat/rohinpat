@@ -6,6 +6,7 @@ import { buildGolfer3D } from "./golfer3d";
 import { createFx3D } from "./fx3d";
 import type { View } from "./flyover";
 import { createPutt3D } from "./putt3d";
+import { createReadOverlay } from "./readview3d";
 import { replayBall } from "./replay";
 import { Governor, LEVELS } from "./quality";
 import { applySkin } from "./scenery";
@@ -151,6 +152,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
   root.add(dust.group);
   const putt = createPutt3D();
   root.add(putt.group);
+  // the hold-to-read view's terrain map and grid over the green (hidden, and drawn for nothing, when it is not up)
+  const readOverlay = createReadOverlay();
+  root.add(readOverlay.group);
   // a replay's flight line, drawn in the world so the replay's camera sees it
   const TRACE_MAX = 900;
   const tracePos = new Float32Array(TRACE_MAX * 3);
@@ -244,10 +248,11 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       size = { w, h, pr };
     }
     if (g.hole !== holeOf) setHole(g);
-    const c = view ?? g.cam;
+    const c: View = view ?? g.cam;
     // the game's camera, mirrored into three.js's frame
     camera.position.set(-c.x, c.y, c.z);
-    camera.up.set(0, 1, 0);
+    const up = c.up ?? { x: 0, y: 1, z: 0 };
+    camera.up.set(-up.x, up.y, up.z);
     camera.lookAt(-c.tx, c.ty, c.tz);
     camera.aspect = w / (1.2 * h);
     camera.fov = (2 * Math.atan((0.6 * h) / c.F) * 180) / Math.PI;
@@ -308,8 +313,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       if (pb.sunk) by -= Math.min(1, g.putt.dropT / 0.25) * BALL_R * 3;
       showBall = !pb.sunk || g.putt.dropT < 0.3;
       near = Math.hypot(pb.x - g.hole.green.cup[0], pb.y - g.hole.green.cup[1]) < 2.4 && !pb.sunk;
-      putt.update(g.hole, g.putt, g.t, !!opts.reduce, c);
+      putt.update(g.hole, g.putt, g.t, !!opts.reduce, c, c.look?.kind === "map" ? c.look.k : 0, c.look?.kind === "low");
     } else putt.hide();
+    readOverlay.update(g.hole, putting ? c : null, [g.putt.ball.x, g.putt.ball.y]);
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
     ball.position.set(bx, by, bz);
@@ -330,7 +336,10 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     if (hole) {
       const [px, pz] = g.hole.pin;
       const dFlag = Math.hypot(px - c.x, pz - c.z);
-      for (const m of flagMats) m.opacity = near ? 0.3 : 1;
+      // the map view draws the cup as a marker of its own, so the flag goes (and comes back) with it
+      const mapK = c.look?.kind === "map" ? c.look.k : 0;
+      hole.flag.visible = mapK < 0.98;
+      for (const m of flagMats) m.opacity = (near ? 0.3 : 1) * (1 - mapK);
       hole.flag.scale.setScalar(Math.max(1, (FLAG_MIN_PX * dFlag) / (c.F * 2.4)));
       for (const f of hole.targetFlags) f.scale.setScalar(Math.max(1, (FLAG_MIN_PX * 0.8 * Math.hypot(f.position.x - c.x, f.position.z - c.z)) / (c.F * 2.4)));
       const wa = Math.atan2(g.wind[0], g.wind[1]);
@@ -409,6 +418,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       golfer.dispose();
       dust.dispose();
       putt.dispose();
+      readOverlay.dispose();
       traceGeo.dispose();
       traceMat.dispose();
       skyMat.dispose();

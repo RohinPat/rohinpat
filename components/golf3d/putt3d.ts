@@ -31,7 +31,7 @@ const ARROWS = 260;
 export type Putt3D = {
   group: THREE.Group;
   /** place everything for this frame; `ball` is where the ball is drawn (course frame) */
-  update: (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }) => void;
+  update: (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }, mapArrows?: number, lowView?: boolean) => void;
   hide: () => void;
   dispose: () => void;
 };
@@ -193,7 +193,9 @@ export function createPutt3D(): Putt3D {
     if (arrows.instanceColor) arrows.instanceColor.needsUpdate = true;
   };
 
-  const update = (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }) => {
+  /** `mapArrows` is how far in the map view is (0 when it is not up): its slope arrows show without the water */
+  /** `lowView`: the low view looks along the line from behind the ball, so the putter is left out of the way */
+  const update = (hole: BuiltHole, p: Putt, t: number, reduce: boolean, eye?: { x: number; y: number; z: number }, mapArrows = 0, lowView = false) => {
     const rel = reliefOf(hole);
     const ground = (gx: number, gy: number, lift: number): [number, number, number] => {
       const [x, z] = hole.fromGreen(gx, gy);
@@ -225,7 +227,7 @@ export function createPutt3D(): Putt3D {
       const d = aim ?? { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: 0 };
       pv = { dx: d.dx, dy: d.dy, back: 0.05 + d.pow * 0.42, alpha: 1 };
     }
-    putter.visible = !!pv && pv.alpha > 0.02;
+    putter.visible = !!pv && pv.alpha > 0.02 && !lowView;
     if (pv && putter.visible) {
       // the face 2 cm behind the ball at address, square to the line; the shaft leans up to the golfer on its left
       const hx = (pv.x ?? b.x) - pv.dx * (pv.back + 0.035), hy = (pv.y ?? b.y) - pv.dy * (pv.back + 0.035);
@@ -298,16 +300,19 @@ export function createPutt3D(): Putt3D {
       trailM.opacity = fadeA;
     }
 
-    // ---- reading the green
-    drops.visible = arrows.visible = p.reading;
-    if (p.reading) {
+    // ---- reading the green: the arrows (and the water) of the old read mode; the map view shows the arrows alone
+    drops.visible = p.reading;
+    arrows.visible = p.reading || mapArrows > 0;
+    if (arrows.visible) {
       if (arrowsFor !== hole) buildArrows(hole);
       const key = `${b.x.toFixed(2)},${b.y.toFixed(2)}`;
       if (key !== arrowKey) {
         arrowKey = key;
         placeArrows(hole, b);
       }
-      arrowM.opacity = 0.72 * Math.min(1, p.readT * 2.5);
+      arrowM.opacity = 0.72 * (p.reading ? Math.min(1, p.readT * 2.5) : mapArrows);
+    }
+    if (p.reading) {
       let k = 0;
       for (const d of p.drops.slice(-DROPS)) {
         const al = Math.min(1, d.life) * 0.85;

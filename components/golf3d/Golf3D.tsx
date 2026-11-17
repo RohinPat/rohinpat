@@ -20,6 +20,7 @@ import { flyoverS, flyoverView, mixView, titleView, type View } from "./flyover"
 import { replayView } from "./replay";
 import { celebrated } from "./modes";
 import { PuttCam } from "./puttcam";
+import { canRead, ReadCam, ReadInput, readPose, type ReadKind } from "./readview";
 import { startLevel } from "./quality";
 import { isChallenge, modeName, onRange, setupFor, setupFromQuery, queryFor, today, type Mode, type Setup } from "./modes";
 import ChallengeEnd from "./ChallengeEnd";
@@ -68,7 +69,7 @@ export default function Golf3D() {
   return host ? createPortal(<Course />, host) : null;
 }
 
-const KEYS = "Space three times swings: start, power, strike. With sound on, a tick marks the power the shot needs. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt; the tick is the pace to the hole. R reads the green. Escape pauses.";
+const KEYS = "Space three times swings: start, power, strike. With sound on, a tick marks the power the shot needs. Up and down change club, left and right aim, M opens the map. On the green, hold Space and let go to putt; the tick is the pace to the hole. Hold Tab for a map of the green, or a low view along the line (1 and 2 pick which). R reads the green. Escape pauses.";
 
 const PRACTICE: { mode: Mode; label: string; sub: string }[] = [
   { mode: "range", label: "Range", sub: "60–250 yd" },
@@ -92,9 +93,25 @@ function Course() {
   const [phase, setPhase] = useState<Phase>("tee-card");
   const [mapOpen, setMapOpen] = useState(false);
   const [reading, setReading] = useState(false);
+  /** the hold-to-read view on the green (readview.ts): what the keys and chips ask for, and what is on screen */
+  const readIn = useRef(new ReadInput());
+  const [readView, setReadView] = useState<"off" | ReadKind>("off");
+  /** held (Tab or a chip) or latched (1 or 2): what the prompt says to do */
+  const [readHow, setReadHow] = useState<"held" | "latched" | null>(null);
+  const [coarse, setCoarse] = useState(false);
   // what the game says, read out in turn: a log, so two lines in one frame are both read, and a line said twice is
   const [said, setSaid] = useState<{ id: number; text: string }[]>([]);
   const say = useCallback((text: string) => setSaid((l) => [...l.slice(-2), { id: (l[l.length - 1]?.id ?? 0) + 1, text }]), []);
+  /** the read view's state into the page: the shown view is what the frame draws and what the game's keys see */
+  const viewShown = useRef<"off" | ReadKind>("off");
+  const syncRead = useCallback(() => {
+    const k = readIn.current.kind() ?? "off";
+    if (k === viewShown.current) return;
+    viewShown.current = k;
+    setReadView(k);
+    setReadHow(readIn.current.how());
+    if (k !== "off") say(k === "map" ? "Map of the green." : "Low view along the line.");
+  }, [say]);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [loadedSteps, setLoadedSteps] = useState(0);
@@ -111,7 +128,7 @@ function Course() {
   const expose = useRef(false);
   const live = useRef({ screen, paused });
   live.current = { screen, paused };
-  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0, putt: new PuttCam(), shown: false });
+  const fx = useRef({ confetti: createConfetti(), cheered: -1, leave: null as { from: View; t: number } | null, last: null as View | null, title: 0, putt: new PuttCam(), read: new ReadCam(), shown: false });
 
   // the page is the game: no scrolling under it
   useEffect(() => {
@@ -124,6 +141,7 @@ function Course() {
 
   useEffect(() => {
     touch.current = window.matchMedia("(pointer: coarse)").matches;
+    setCoarse(touch.current);
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     expose.current = process.env.NEXT_PUBLIC_LINK_MOCK === "1" || new URLSearchParams(location.search).has("linkmock");
     const q = new URLSearchParams(location.search);
@@ -186,6 +204,8 @@ function Course() {
     });
     game.touch = touch.current;
     L.game = game;
+    readIn.current.reset();
+    syncRead();
     fx.current.confetti.clear();
     fx.current.cheered = -1;
     fx.current.leave = null;
@@ -219,7 +239,8 @@ function Course() {
   const remote = useRemote("golf", {
     gesture: (name, data) => {
       const G = loaded.current?.game;
-      if (!G || live.current.paused) return;
+      // a view held on the green: no swing and no aim from a phone either
+      if (!G || live.current.paused || readIn.current.kind()) return;
       if (name === "golf-swing") {
         const swing = parseSwing(data);
         if (swing) G.remoteSwing(shotFromSwing(swing, G.club));
@@ -274,11 +295,21 @@ function Course() {
       if (!stop) g.advance(dt);
       // on the green the 3D camera is the putt's own, and the putt reads the pointer through it: drawn before the HUD
       const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
+      // the read view ends the moment the putt is not at address (a putt struck, a hole holed)
+      if (!canRead(g.putt, g.phase)) readIn.current.reset();
+      syncRead();
+      const look = readIn.current.kind();
+      // the page's prompt says how to leave the view, so the HUD's own prompt is left out
+      g.putt.viewing = !!look;
       if (L.gl && putting) {
-        L.gl.render(g, w, h, F.putt.step(g.hole, g.putt, w, h, stop ? 0 : dt, g.cam, reduce.current));
+        const pv = F.putt.step(g.hole, g.putt, w, h, stop ? 0 : dt, g.cam, reduce.current);
+        // the read view eases in from the putt's camera, and back to it on release
+        const rv = F.read.step(look, look ? readPose(g.hole, [g.putt.ball.x, g.putt.ball.y], look, w, h) : null, pv, stop ? 0 : dt, reduce.current);
+        L.gl.render(g, w, h, rv ?? pv);
         g.putt.proj ??= L.gl.puttProj(g);
       } else {
         F.putt.reset();
+        F.read.reset();
         g.putt.proj = null;
       }
       L.mods.paint(ctx, g, w, h, stop ? 0 : dt, p, { world: !L.gl, roundCard: false, teeHud: !L.gl || reduce.current });
@@ -317,9 +348,9 @@ function Course() {
       interactive: true,
       animateAlways: true,
       maxPixels: 3e6,
-      onDown: (p) => playing() && loaded.current?.game?.pointer("down", p.x, p.y),
-      onMove: (p) => playing() && loaded.current?.game?.pointer("move", p.x, p.y),
-      onUp: (p) => playing() && loaded.current?.game?.pointer("up", p.x, p.y),
+      onDown: (p) => aimable() && loaded.current?.game?.pointer("down", p.x, p.y),
+      onMove: (p) => aimable() && loaded.current?.game?.pointer("move", p.x, p.y),
+      onUp: (p) => aimable() && loaded.current?.game?.pointer("up", p.x, p.y),
       keys: (e, down) => {
         const G = loaded.current?.game;
         if (!G || live.current.screen !== "play") return false;
@@ -328,6 +359,30 @@ function Course() {
           return true;
         }
         if (!playing()) return false;
+        // Tab holds the view while the putt is at address on the green; only then is it kept from moving the focus
+        if (e.key === "Tab") {
+          if (!down) {
+            readIn.current.tab(false);
+            syncRead();
+            return true;
+          }
+          if (!canRead(G.putt, G.phase)) return false;
+          if (!e.repeat) {
+            readIn.current.tab(true);
+            syncRead();
+          }
+          return true;
+        }
+        // 1 and 2 switch the view (held), or latch it (not held) at address
+        if ((e.key === "1" || e.key === "2") && canRead(G.putt, G.phase)) {
+          if (down && !e.repeat) {
+            readIn.current.digit(e.key === "1" ? "map" : "low");
+            syncRead();
+          }
+          return true;
+        }
+        // while the view is up the aim and the swing wait, and the keys are kept (the arrows do not scroll the page)
+        if (readIn.current.kind()) return true;
         const handled = G.key(e, down);
         if (down && (e.key === "r" || e.key === "R")) setReading(G.putt.reading);
         return handled;
@@ -339,6 +394,34 @@ function Course() {
     const G = loaded.current?.game;
     return !!G && live.current.screen === "play" && !live.current.paused && G.phase !== "round-card";
   }
+  /** and the pointer aims and swings: a round is on and no read view is held */
+  function aimable() {
+    return playing() && !readIn.current.kind();
+  }
+  // a view ends with the pause, and with Tab let go off the canvas, or the window losing focus
+  useEffect(() => {
+    if (paused) {
+      readIn.current.reset();
+      syncRead();
+    }
+  }, [paused, syncRead]);
+  useEffect(() => {
+    const up = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !readIn.current.kind()) return;
+      readIn.current.tab(false);
+      syncRead();
+    };
+    const lost = () => {
+      readIn.current.reset();
+      syncRead();
+    };
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", lost);
+    return () => {
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", lost);
+    };
+  }, [syncRead]);
 
   // the keys: on the course while it is played; in the menu back on the title; the dialogs keep them while they are up
   const bar = useRef<HTMLDivElement>(null);
@@ -378,25 +461,56 @@ function Course() {
   );
 
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-[#0d100e] select-none">
+    <div className="fixed inset-0 z-[70] flex flex-col bg-[#0d100e] select-none" data-read-view={readView}>
       <div ref={bar} className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-[#0d100e]">
         {screen === "play" && phase !== "round-card" && (
           <div className="flex flex-wrap items-center gap-1">
             {phase === "putt" ? (
-              <button
-                type="button"
-                aria-pressed={reading}
-                onMouseDown={keep}
-                onClick={() => {
-                  if (!G) return;
-                  puttRead(G.putt, !G.putt.reading);
-                  setReading(G.putt.reading);
-                  say(G.putt.reading ? "Reading the green: tap or drag to pour water where you want to see the break." : "Back to putting.");
-                }}
-                className={sub(reading)}
-              >
-                Read green
-              </button>
+              <>
+                <button
+                  type="button"
+                  aria-pressed={reading}
+                  onMouseDown={keep}
+                  onClick={() => {
+                    if (!G) return;
+                    puttRead(G.putt, !G.putt.reading);
+                    setReading(G.putt.reading);
+                    say(G.putt.reading ? "Reading the green: tap or drag to pour water where you want to see the break." : "Back to putting.");
+                  }}
+                  className={sub(reading)}
+                >
+                  Read green
+                </button>
+                {/* hold to look: on a phone always; on the laptop while the view is up (Tab, or these) */}
+                {(coarse || readView !== "off") &&
+                  (["map", "low"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={readView === k}
+                      onContextMenu={keep}
+                      onPointerDown={(e) => {
+                        const game = loaded.current?.game;
+                        if (!game || !canRead(game.putt, game.phase)) return;
+                        e.preventDefault();
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        readIn.current.hold(k, true);
+                        syncRead();
+                      }}
+                      onPointerUp={() => {
+                        readIn.current.hold(k, false);
+                        syncRead();
+                      }}
+                      onPointerCancel={() => {
+                        readIn.current.hold(k, false);
+                        syncRead();
+                      }}
+                      className={`${sub(readView === k)} touch-none`}
+                    >
+                      {k === "map" ? "Map" : "Low"}
+                    </button>
+                  ))}
+              </>
             ) : (
               <>
                 {CLUBS.map((c, i) => (
@@ -448,6 +562,26 @@ function Course() {
         <p id="golf-keys" className="sr-only">
           {KEYS}
         </p>
+
+        {/* how to leave the view: where the HUD's own prompt was */}
+        {screen === "play" && readView !== "off" && (
+          <p aria-hidden="true" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]">
+            {readHow === "latched" ? "Tab to putt" : coarse ? "Let go to putt" : "Let go of Tab to putt"}
+          </p>
+        )}
+        {/* the map's legend: two swatches, the ends of the ramp */}
+        {screen === "play" && readView === "map" && (
+          <div aria-hidden="true" className="pointer-events-none absolute bottom-16 sm:bottom-3 left-3 flex items-center gap-3 rounded-full bg-[#0d100e]/70 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-sm" style={{ background: "#17465a" }} />
+              Low
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-sm" style={{ background: "#f6d966" }} />
+              High
+            </span>
+          </div>
+        )}
 
         {screen === "title" && (
           <div className="absolute inset-0 overflow-y-auto flex items-end sm:items-center justify-center sm:justify-start p-4 sm:p-10 [@media(max-height:500px)]:!items-start [@media(max-height:500px)]:!p-3 bg-gradient-to-t from-[#0d100e]/70 via-[#0d100e]/10 to-transparent sm:bg-gradient-to-r">

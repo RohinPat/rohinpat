@@ -6,7 +6,21 @@ import { terrainOf } from "@/components/offhours/golf/terrain";
 // green and glides back down the middle of the hole to the tee, looking ahead the
 // whole way, and settles behind the golfer where the game's own camera waits.
 
-export type View = { x: number; y: number; z: number; tx: number; ty: number; tz: number; F: number };
+/**
+ * A camera: where it is, what it looks at, and its focal length in px. `up` tilts the picture (the default is up in the
+ * course's frame); `look` is the hold-to-read view on the green (readview.ts), drawn over the ground with `k` how far in.
+ */
+export type View = {
+  x: number;
+  y: number;
+  z: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  F: number;
+  up?: { x: number; y: number; z: number };
+  look?: { kind: "map" | "low"; k: number };
+};
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
