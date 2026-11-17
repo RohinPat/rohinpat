@@ -502,8 +502,8 @@ export function puttSight(p: Putt, t: number): { dx: number; dy: number; pow: nu
 }
 
 /**
- * The meter's readings. `feet` is how far the ball really rolls along the line to the cup for the power on show, with
- * `word` SHORT, LONG or ON PACE (within 1 ft). The cup tick is `cupPow`; `plays` is the flat-green distance that power
+ * The meter's readings. `miss` is how far the ball really stops past (+) or short (-) of the cup on the line to it, for
+ * the power on show, with `word` SHORT, LONG or ON PACE (within 1 ft). The cup tick is `cupPow`; `plays` is the flat-green distance that power
  * stands for, so a cup uphill or downhill reads PLAYS further or nearer than it is.
  */
 export function puttMeter(p: Putt, t: number) {
@@ -512,7 +512,8 @@ export function puttMeter(p: Putt, t: number) {
   const cupPow = puttCupPow(p);
   const along = shownStop(p, s.dx, s.dy, s.pow);
   const word = Math.abs(along - cupDist) < 0.3048 ? "ON PACE" : along < cupDist ? "SHORT" : "LONG";
-  return { pow: s.pow, solid: s.solid, feet: ftOf(along), word, cupPow, cupFeet: ftOf(cupDist), plays: ftOf(flatRoll(cupPow)) };
+  // the miss: how far the ball stops past (+) or short (-) of the cup, in whole feet
+  return { pow: s.pow, solid: s.solid, miss: ftOf(along - cupDist), word, cupPow, cupFeet: ftOf(cupDist), plays: ftOf(flatRoll(cupPow)) };
 }
 
 /**
@@ -1266,8 +1267,8 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     ctx.textAlign = "center";
     ctx.fillText("CUP", tickAt, my - 8);
     ctx.textAlign = "left";
-    // the readout beside the fill's end: where the ball stops along the line, and short, long or on pace of the cup
-    const txt = `${m.feet} FT ${m.word}`;
+    // the readout beside the fill's end: the miss, how far the ball stops short of or past the cup
+    const txt = m.word === "ON PACE" ? "ON PACE" : `${Math.max(1, Math.abs(m.miss))} FT ${m.word}`;
     const tw = ctx.measureText(txt).width + 12;
     const tx = Math.min(w - tw - 6, fillX + 8);
     ctx.fillStyle = "rgba(13,16,14,0.78)";

@@ -349,7 +349,7 @@ describe("the meter reads the real roll, and the cup's tick is the power that ho
     }
   }, 60_000);
 
-  it("the readout is where the ball really stops on the line to the cup: SHORT, LONG or ON PACE within 1 ft", () => {
+  it("the readout is the miss: how far the ball really stops short of or past the cup, or ON PACE within 1 ft", () => {
     const H = holes[5].green;
     for (const b of spotsOn(H).slice(0, 8)) {
       const { ux, uy, d } = toCup(H, b);
@@ -362,7 +362,7 @@ describe("the meter reads the real roll, and the cup's tick is the power that ho
         p.kPower = pow;
         const m = puttMeter(p, 0);
         const real = realStop(H, b, ang, pow);
-        expect(Math.abs(m.feet - ftOf(real)), `pow ${pow}`).toBeLessThanOrEqual(1);
+        expect(Math.abs(m.miss - ftOf(real - d)), `pow ${pow}`).toBeLessThanOrEqual(1);
         const want = Math.abs(real - d) < SLOPE_M ? "ON PACE" : real < d ? "SHORT" : "LONG";
         expect(m.word, `pow ${pow} real ${real.toFixed(2)} cup ${d.toFixed(2)}`).toBe(want);
       }
