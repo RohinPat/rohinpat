@@ -76,6 +76,8 @@ export default function Stage({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
+  // the focus hand-off to the piece; cancelled on close, or it lands after the stage has started to close
+  const focusTimer = useRef(0);
   const [shown, setShown] = useState(false);
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
@@ -89,6 +91,7 @@ export default function Stage({
 
   const close = () => {
     if (closing) return;
+    window.clearTimeout(focusTimer.current);
     setClosing(true);
     window.setTimeout(onClose, reduce ? 0 : MS - 40);
   };
@@ -113,7 +116,7 @@ export default function Stage({
     body.style.width = "100%";
     const id = requestAnimationFrame(() => setShown(true));
     // focus the piece once it has grown in
-    const f = window.setTimeout(
+    focusTimer.current = window.setTimeout(
       () => (root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? closeBtn.current)?.focus({ preventScroll: true }),
       reduce ? 0 : MS,
     );
@@ -193,7 +196,7 @@ export default function Stage({
       [html.style.overflow, body.style.position, body.style.top, body.style.width] = prev;
       window.scrollTo({ top: y, behavior: "instant" });
       cancelAnimationFrame(id);
-      window.clearTimeout(f);
+      window.clearTimeout(focusTimer.current);
       window.removeEventListener("keydown", onKey, true);
       el?.removeEventListener("touchmove", onTouchMove);
       el?.removeEventListener("gesturestart", noGesture);
