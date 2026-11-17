@@ -414,6 +414,35 @@ export function puttShoot(p: Putt, angle: number, power: number, t: number, env:
 export function puttPowerFor(metres: number) {
   return powFor(Math.sqrt(2 * MU * Math.max(0, metres)));
 }
+/** how far a putt struck at `pow` rolls on a flat green, m: the distance the power meter and the ring read */
+export function flatRoll(pow: number) {
+  return (pace(pow) * pace(pow)) / (2 * MU);
+}
+/** metres as the HUD reads them, in whole feet */
+export const ftOf = (m: number) => Math.round(m * 3.281);
+/** a putt that can be lined up now: the ball is at rest off the cup and no stroke is under way */
+export const puttInPlay = (p: Putt) => !p.ball.moving && !p.ball.sunk && !p.reading && !p.done && !p.putter && !p.tap;
+
+/**
+ * The line the putt shows: its direction, and its power. `solid` while it is being set (a pull, a held Space, arrows
+ * with a power on it); otherwise the suggested pace, the one that rolls it to the cup on a flat green, shown faint.
+ */
+export function puttSight(p: Putt, t: number): { dx: number; dy: number; pow: number; solid: boolean } {
+  const aim = puttAim(p, t);
+  if (aim && aim.pow > 0.02) return { dx: aim.dx, dy: aim.dy, pow: aim.pow, solid: true };
+  const dist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
+  return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: Math.min(1, puttPowerFor(dist)), solid: false };
+}
+
+/**
+ * The power meter's readings: the power (0..1) with the feet a flat green rolls it, and the cup's place on the same
+ * scale (its power is the one that holes it on a flat green, so the tick reads the cup's own distance).
+ */
+export function puttMeter(p: Putt, t: number) {
+  const s = puttSight(p, t);
+  const cupDist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
+  return { pow: s.pow, solid: s.solid, feet: ftOf(flatRoll(s.pow)), cupPow: Math.min(1, puttPowerFor(cupDist)), cupFeet: ftOf(cupDist) };
+}
 
 /**
  * The ball's whole roll struck from (x, y) in direction (dx, dy) at `pow`: the same ball step the putt uses (stepBall, at
@@ -497,11 +526,11 @@ export function puttAim(p: Putt, t: number): { dx: number; dy: number; pow: numb
     const w0 = toGrn(p, p.aimFrom.x, p.aimFrom.y), wb = toGrn(p, p.aimTo.x, p.aimTo.y);
     if (!w0 || !wb) return null;
     const dx = w0.x - wb.x, dy = w0.y - wb.y, d = Math.hypot(dx, dy) || 1;
-    return { dx: dx / d, dy: dy / d, pow, flat: (pace(pow) * pace(pow)) / (2 * MU), drag: true };
+    return { dx: dx / d, dy: dy / d, pow, flat: flatRoll(pow), drag: true };
   }
   if (p.kCharging || t - p.kTouched < 3) {
     const pow = p.kPower;
-    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow, flat: p.kCharging && pow === 0 ? 3 : (pace(pow) * pace(pow)) / (2 * MU), drag: false };
+    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow, flat: p.kCharging && pow === 0 ? 3 : flatRoll(pow), drag: false };
   }
   return null;
 }
@@ -798,7 +827,15 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
   const Y = (x: number, y: number) => sy(v, x, y);
 
   if (env.hudOnly) {
-    // the scene is someone else's: only the HUD (the line on the 3D green is its own; no flat-green pace label)
+    // the scene is someone else's: the HUD, and the feet label at the ring on the 3D green (the ring is drawn there)
+    if (play && puttInPlay(p)) {
+      const s = puttSight(p, t);
+      if (s.solid) {
+        const flat = flatRoll(s.pow);
+        const q = toScr(p, p.ball.x + s.dx * flat, p.ball.y + s.dy * flat);
+        if (Number.isFinite(q.x) && Number.isFinite(q.y)) paceLabel(ctx, q, flat, w, " FLAT");
+      }
+    }
     hud(ctx, p, w, h, t, play, pointer, !!env.touch);
     return;
   }
@@ -1007,7 +1044,7 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
     if (show && !p.putter) {
       const d = Math.hypot(dx, dy) || 1;
       const ux = dx / d, uy = dy / d;
-      const flat = (pace(pow) * pace(pow)) / (2 * MU); // metres, on a flat green
+      const flat = flatRoll(pow); // metres, on a flat green
       const L = p.kCharging && pow === 0 ? 3 : flat;
       const ex = p.ball.x + ux * L, ey = p.ball.y + uy * L;
       ctx.strokeStyle = "rgba(242,234,215,0.85)";
@@ -1041,9 +1078,9 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
 }
 
 /** how far a flat putt would roll, in feet, by the point where it would stop */
-function paceLabel(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, flat: number, w: number) {
+function paceLabel(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, flat: number, w: number, tail = "") {
   mono(ctx, 10);
-  const txt = `${Math.round(flat * 3.281)} FT`;
+  const txt = `${ftOf(flat)} FT${tail}`;
   const tw = ctx.measureText(txt).width + 12;
   const tx = Math.max(6, Math.min(w - tw - 6, at.x + 10)), ty = Math.max(16, at.y - 8);
   ctx.fillStyle = "rgba(13,16,14,0.78)";
@@ -1171,13 +1208,44 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(touch ? 1 : 0), "#f2ead7");
   }
 
-  // power meter while charging by key
-  if (p.kCharging) {
-    const my = topFree(140) ? 46 : chipBottom + 8;
+  // the power meter: a distance gauge. The fill is the power, labelled with the feet a flat green rolls it; the tick is
+  // the cup's distance on the same scale. Faint at address (the suggested pace), solid while the putt is being set.
+  if (puttInPlay(p)) {
+    const my = topFree(140) ? 56 : chipBottom + 8;
+    const m = puttMeter(p, t);
+    const x0 = w / 2 - 70, fillX = x0 + 140 * m.pow, tickX = x0 + 140 * m.cupPow;
+    const tickAt = Math.max(x0 + 14, Math.min(x0 + 126, tickX));
+    ctx.save();
+    ctx.globalAlpha = m.solid ? 1 : 0.45;
     ctx.fillStyle = "rgba(13,16,14,0.7)";
-    ctx.fillRect(w / 2 - 70, my, 140, 8);
-    ctx.fillStyle = p.kPower > 0.9 ? "#e5484d" : "#8ad9a8";
-    ctx.fillRect(w / 2 - 70, my, 140 * p.kPower, 8);
+    ctx.fillRect(x0, my, 140, 8);
+    ctx.fillStyle = m.pow > 0.9 ? "#e5484d" : "#8ad9a8";
+    ctx.fillRect(x0, my, 140 * m.pow, 8);
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillRect(tickX - 1, my - 4, 2, 16);
+    // the cup's label sits on a dark backing: it is over the flag when the cup is far
+    mono(ctx, 10);
+    const cw = ctx.measureText("CUP").width + 10;
+    ctx.fillStyle = "rgba(13,16,14,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(tickAt - cw / 2, my - 19, cw, 14, 3);
+    ctx.fill();
+    ctx.fillStyle = "#f2ead7";
+    ctx.textAlign = "center";
+    ctx.fillText("CUP", tickAt, my - 8);
+    ctx.textAlign = "left";
+    // the readout beside the fill's end: how far this putt rolls on a flat green, and short or long of the cup
+    const d = m.feet - m.cupFeet;
+    const txt = `${m.feet} FT${!m.solid || Math.abs(d) < 1 ? "" : d < 0 ? " SHORT" : " LONG"}`;
+    const tw = ctx.measureText(txt).width + 12;
+    const tx = Math.min(w - tw - 6, fillX + 8);
+    ctx.fillStyle = "rgba(13,16,14,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(tx, my - 5, tw, 18, 4);
+    ctx.fill();
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillText(txt, tx + 6, my + 8);
+    ctx.restore();
   }
 
   // scorecard (the course draws its own)

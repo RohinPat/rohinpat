@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
-import { GH, GW, greenHeight, newPutt, puttAim, puttBegin, puttLayout, puttPointer, puttPowerFor, puttRoll, puttShoot, puttStep, zone, type Hole, type PuttProj } from "@/components/offhours/golf/green";
+import { GH, GW, flatRoll, ftOf, greenHeight, newPutt, puttAim, puttBegin, puttLayout, puttMeter, puttPointer, puttPowerFor, puttRoll, puttShoot, puttStep, zone, type Hole, type PuttProj } from "@/components/offhours/golf/green";
 import { reliefOf } from "@/components/golf3d/relief";
 import { createPutt3D } from "@/components/golf3d/putt3d";
 import { PuttCam, puttView } from "@/components/golf3d/puttcam";
@@ -13,6 +13,53 @@ import type { View } from "@/components/golf3d/flyover";
 
 const holes = HOLE_DEFS.map((d) => buildHole(d));
 const env = { play: true, say: () => {} };
+
+/** a spot 6 m from the cup on a straight line that stays on the green, where the break is biggest */
+function breakSpot(H: Hole) {
+  const [cx, cy] = H.cup;
+  let best: { b: [number, number]; ux: number; uy: number; lat: number } | null = null;
+  for (let a = 0; a < 360; a += 2) {
+    const r = (a * Math.PI) / 180;
+    const b: [number, number] = [cx + 6 * Math.cos(r), cy + 6 * Math.sin(r)];
+    let ok = true;
+    for (let k = 0; k <= 20 && ok; k++) {
+      const u = k / 20;
+      ok = zone(H, b[0] + (cx - b[0]) * u, b[1] + (cy - b[1]) * u) === 0;
+    }
+    if (!ok) continue;
+    const ux = (cx - b[0]) / 6, uy = (cy - b[1]) / 6;
+    const e = 0.01;
+    const gx = (greenHeight(H, b[0] + e, b[1]) - greenHeight(H, b[0] - e, b[1])) / (2 * e);
+    const gy = (greenHeight(H, b[0], b[1] + e) - greenHeight(H, b[0], b[1] - e)) / (2 * e);
+    // the ball is pulled downhill: its sideways push, along the line's left (-uy, ux)
+    const lat = -(gx * -uy + gy * ux);
+    if (!best || Math.abs(lat) > Math.abs(best.lat)) best = { b, ux, uy, lat };
+  }
+  return best!;
+}
+
+/** the putt struck for real (puttShoot, then puttStep at 60 fps), sampled once a frame: where it is at each distance along */
+function realPutt(H: Hole, ball: [number, number], ang: number, pow: number) {
+  const p = newPutt();
+  puttBegin(p, H, ball, 0, { pickUp: 9, onDone: () => {} }, 0, true);
+  puttShoot(p, ang, pow, 0, env);
+  const frames: { x: number; y: number; s: number }[] = [];
+  let s = 0, px = ball[0], py = ball[1], t = 0;
+  for (let i = 0; i < 4000; i++) {
+    puttStep(p, 1 / 60, t, env);
+    t += 1 / 60;
+    if (p.ball.moving || p.ball.sunk) {
+      s += Math.hypot(p.ball.x - px, p.ball.y - py);
+      px = p.ball.x;
+      py = p.ball.y;
+      frames.push({ x: px, y: py, s });
+    }
+    if (frames.length && !p.ball.moving) break;
+  }
+  return frames;
+}
+
+/** where a roll is at `s` along it */
 
 /** a point on screen through a view, the way render3d's camera sees it (projection centre at 40% of the height) */
 function project(v: View, p: [number, number, number], w: number, h: number) {
@@ -174,52 +221,6 @@ describe("the pull-back through another camera", () => {
 describe("the aim line is the ball's own roll", () => {
   const DOT_GAP = 0.15;
 
-  /** a spot 6 m from the cup on a straight line that stays on the green, where the break is biggest */
-  function breakSpot(H: Hole) {
-    const [cx, cy] = H.cup;
-    let best: { b: [number, number]; ux: number; uy: number; lat: number } | null = null;
-    for (let a = 0; a < 360; a += 2) {
-      const r = (a * Math.PI) / 180;
-      const b: [number, number] = [cx + 6 * Math.cos(r), cy + 6 * Math.sin(r)];
-      let ok = true;
-      for (let k = 0; k <= 20 && ok; k++) {
-        const u = k / 20;
-        ok = zone(H, b[0] + (cx - b[0]) * u, b[1] + (cy - b[1]) * u) === 0;
-      }
-      if (!ok) continue;
-      const ux = (cx - b[0]) / 6, uy = (cy - b[1]) / 6;
-      const e = 0.01;
-      const gx = (greenHeight(H, b[0] + e, b[1]) - greenHeight(H, b[0] - e, b[1])) / (2 * e);
-      const gy = (greenHeight(H, b[0], b[1] + e) - greenHeight(H, b[0], b[1] - e)) / (2 * e);
-      // the ball is pulled downhill: its sideways push, along the line's left (-uy, ux)
-      const lat = -(gx * -uy + gy * ux);
-      if (!best || Math.abs(lat) > Math.abs(best.lat)) best = { b, ux, uy, lat };
-    }
-    return best!;
-  }
-
-  /** the putt struck for real (puttShoot, then puttStep at 60 fps), sampled once a frame: where it is at each distance along */
-  function realPutt(H: Hole, ball: [number, number], ang: number, pow: number) {
-    const p = newPutt();
-    puttBegin(p, H, ball, 0, { pickUp: 9, onDone: () => {} }, 0, true);
-    puttShoot(p, ang, pow, 0, env);
-    const frames: { x: number; y: number; s: number }[] = [];
-    let s = 0, px = ball[0], py = ball[1], t = 0;
-    for (let i = 0; i < 4000; i++) {
-      puttStep(p, 1 / 60, t, env);
-      t += 1 / 60;
-      if (p.ball.moving || p.ball.sunk) {
-        s += Math.hypot(p.ball.x - px, p.ball.y - py);
-        px = p.ball.x;
-        py = p.ball.y;
-        frames.push({ x: px, y: py, s });
-      }
-      if (frames.length && !p.ball.moving) break;
-    }
-    return frames;
-  }
-
-  /** where a roll is at `s` along it */
   function at(pts: { x: number; y: number; s: number }[], s: number) {
     let j = 0;
     while (j < pts.length - 2 && pts[j + 1].s < s) j++;
@@ -299,6 +300,72 @@ describe("the aim line is the ball's own roll", () => {
     p.ball.moving = true;
     r3.update(hole, p, 0, true);
     expect(dots().visible).toBe(false);
+    r3.dispose();
+  });
+});
+
+describe("the power reads in feet, and the ring marks it on the green", () => {
+  // the green with no slope and its cup moved off the line of these putts, so a putt rolls as its power says
+  const flatOf = (H: Hole): Hole => ({ ...H, hills: [], tilt: [0, 0], cup: [GW - 0.5, GH - 0.5] });
+
+  it("the meter's feet are how far a flat green rolls the putt at that power", () => {
+    const F = flatOf(holes[5].green);
+    for (const pow of [0.45, 0.6, 0.75]) {
+      const p = newPutt();
+      puttBegin(p, F, [3, 6.25], 0, { pickUp: 9, onDone: () => {} }, 0, true);
+      p.kAngle = 0;
+      p.kCharging = true;
+      p.kPower = pow;
+      const m = puttMeter(p, 0);
+      expect(m.feet).toBe(ftOf(flatRoll(pow)));
+      // and the flat green's own physics agrees to a foot
+      const roll = puttRoll(F, 3, 6.25, 1, 0, pow);
+      expect(Math.abs(m.feet - ftOf(roll.len)), `pow ${pow}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("the cup's tick is at the cup's distance: the power that holes it on a flat green", () => {
+    const hole = holes[5];
+    const H = hole.green;
+    const { b } = breakSpot(H);
+    const p = newPutt();
+    puttBegin(p, H, b, 0, { pickUp: 9, onDone: () => {} }, 0, true);
+    const m = puttMeter(p, 0);
+    const cupDist = Math.hypot(H.cup[0] - b[0], H.cup[1] - b[1]);
+    expect(m.cupFeet).toBe(ftOf(cupDist));
+    expect(flatRoll(m.cupPow)).toBeCloseTo(cupDist, 6);
+    expect(m.cupPow).toBeGreaterThan(0);
+    expect(m.cupPow).toBeLessThan(1);
+    // a putt struck at the tick, on a flat copy of the green, drops at the cup's distance
+    const F = { ...H, hills: [], tilt: [0, 0] } as Hole;
+    const roll = puttRoll(F, b[0], b[1], (H.cup[0] - b[0]) / cupDist, (H.cup[1] - b[1]) / cupDist, m.cupPow);
+    expect(Math.abs(roll.len - cupDist)).toBeLessThan(0.15);
+  });
+
+  it("the ring is where a flat putt stops while the power is set, and hidden at address", () => {
+    const hole = holes[5];
+    const H = hole.green;
+    const { b, ux, uy } = breakSpot(H);
+    const r3 = createPutt3D();
+    const p = newPutt();
+    puttBegin(p, H, b, 0, { pickUp: 9, onDone: () => {} }, 0, true);
+    p.kAngle = Math.atan2(uy, ux);
+    const ring = () => r3.group.children.find((o) => (o as THREE.Mesh).geometry instanceof THREE.RingGeometry) as THREE.Mesh;
+    r3.update(hole, p, 0, true);
+    expect(ring().visible).toBe(false);
+    p.kCharging = true;
+    p.kPower = 0.6;
+    r3.update(hole, p, 0, true);
+    expect(ring().visible).toBe(true);
+    const flat = flatRoll(0.6);
+    const [ex, ez] = hole.fromGreen(b[0] + ux * flat, b[1] + uy * flat);
+    expect(ring().position.x).toBeCloseTo(ex, 6);
+    expect(ring().position.z).toBeCloseTo(ez, 6);
+    expect(puttMeter(p, 0).feet).toBe(ftOf(flat));
+    p.kCharging = false;
+    p.kPower = 0;
+    r3.update(hole, p, 0, true);
+    expect(ring().visible).toBe(false);
     r3.dispose();
   });
 });

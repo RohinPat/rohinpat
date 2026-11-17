@@ -1,13 +1,14 @@
 import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
-import { GH, GW, TAP_HIT, greenHeight, puttAim, puttPowerFor, puttRoll, zone, type Hole, type Putt } from "@/components/offhours/golf/green";
+import { GH, GW, TAP_HIT, flatRoll, greenHeight, puttAim, puttInPlay, puttRoll, puttSight, zone, type Hole, type Putt } from "@/components/offhours/golf/green";
 import { reliefOf } from "./relief";
 
 // Putting on the 3D green. The putt itself is green.ts's (its ball, its physics,
 // its controls); this is what you see of it: a camera low behind the ball looking
 // down the line, a putter that addresses the ball and swings through, a dotted line
 // along the ball's own predicted roll (its first half, so the break shows without
-// solving the putt), the path the last putt took, and when reading, water that runs
+// solving the putt), a ring where a flat green would stop it at this power (the feet
+// the meter reads), the path the last putt took, and when reading, water that runs
 // downhill and arrows down the slope.
 //
 // Everything here is in the course's frame (metres, x right, z downrange); the
@@ -73,6 +74,12 @@ export function createPutt3D(): Putt3D {
   const tickM = keep(new THREE.MeshBasicMaterial({ color: "#f2ead7", transparent: true, opacity: 0.9, depthWrite: false, ...ON_GROUND }));
   const tick = new THREE.Mesh(tickG, tickM);
   group.add(tick);
+  // the ring: where a flat green would stop the putt at this power (the distance the meter's feet label reads)
+  const ringG = keep(new THREE.RingGeometry(0.07, 0.092, 28));
+  ringG.rotateX(-Math.PI / 2);
+  const ringM = keep(new THREE.MeshBasicMaterial({ color: "#8ad9a8", transparent: true, opacity: 0.95, depthWrite: false, ...ON_GROUND, side: THREE.DoubleSide }));
+  const ring = new THREE.Mesh(ringG, ringM);
+  group.add(ring);
   // the roll is a few hundred steps: it is worked out again only when the aim or the power changes
   let rollKey = "";
   let rollG: Hole | null = null;
@@ -115,15 +122,7 @@ export function createPutt3D(): Putt3D {
   const yAxis = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
 
   const hide = () => {
-    putter.visible = dots.visible = tick.visible = trail.visible = drops.visible = arrows.visible = false;
-  };
-
-  /** the aim the line shows: the putt's own while it is being lined up (live), else the suggested pace at the cup (faint) */
-  const lineAim = (p: Putt, t: number) => {
-    const aim = puttAim(p, t);
-    if (aim && aim.pow > 0.02) return { dx: aim.dx, dy: aim.dy, pow: aim.pow, live: true };
-    const dist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
-    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: puttPowerFor(dist), live: !!aim };
+    putter.visible = dots.visible = tick.visible = ring.visible = trail.visible = drops.visible = arrows.visible = false;
   };
 
   /** the ball's roll for this green, ball, aim and power; cached until one of them changes */
@@ -247,11 +246,13 @@ export function createPutt3D(): Putt3D {
     }
 
     // ---- the line: the ball's own roll as far as its first half, fading over the last part of that, and a tick where it
-    // ends. Faint at address; full while it is being lined up or the power is pulled back.
-    const L = !b.moving && !b.sunk && !p.reading && !p.done && !p.putter && !p.tap ? lineAim(p, t) : null;
+    // ends. Faint at address; full while it is being lined up or the power is pulled back. The ring is where a flat
+    // green would stop it at that power: the distance the meter reads, so it shows only while the power is set.
+    const L = puttInPlay(p) ? puttSight(p, t) : null;
     dots.visible = tick.visible = !!L && !p.putter;
+    ring.visible = !!L && L.solid && !p.putter;
     if (L && !p.putter) {
-      dotM.opacity = tickM.opacity = L.live ? 0.9 : 0.6;
+      dotM.opacity = tickM.opacity = L.solid ? 0.9 : 0.6;
       const r = rollFor(p.hole, b.x, b.y, L.dx, L.dy, L.pow);
       const half = r.len / 2;
       const fadeFrom = half * 0.6;
@@ -278,6 +279,14 @@ export function createPutt3D(): Putt3D {
       tick.position.set(tkx, tky, tkz);
       tick.scale.setScalar(grow(tkx, tky, tkz));
       tick.quaternion.setFromAxisAngle(yAxis, Math.atan2(-ux, -uz));
+      if (ring.visible) {
+        const flat = flatRoll(L.pow);
+        const [rx, ry, rz] = ground(b.x + L.dx * flat, b.y + L.dy * flat, 0.005);
+        ring.position.set(rx, ry, rz);
+        // it grows with distance like the dots, so it reads at the far end of a long putt
+        ring.scale.setScalar(grow(rx, ry, rz));
+        ringM.color.set(L.pow > 0.9 ? "#e5484d" : "#8ad9a8");
+      }
     }
 
     // ---- the last putt's path, fading once the ball stops
