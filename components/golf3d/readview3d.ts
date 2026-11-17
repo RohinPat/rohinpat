@@ -2,27 +2,33 @@ import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { GH, GW, shapeR, zone } from "@/components/offhours/golf/green";
 import { reliefOf } from "./relief";
+import type { View } from "./flyover";
 
-// The hold-to-read view's ground: on the map, the green's height in bands (a calm ramp from deep blue-green, low, to warm
-// yellow, high) with a thin contour where each band ends, and on the low view a grid of 1 m squares draped on the
-// green. Two meshes at most (the map's bands and its contours, or the grid), built for a hole the first time they are
-// wanted, and hidden (no draw calls) when the view is not up.
+// The hold-to-read view's ground. On the map: the green's height in bands (a calm ramp from deep blue-green, low, to warm
+// yellow, high), a thin contour where each band ends, and a cup marker the same size on screen at any zoom. On the low
+// view: a grid of 1 m squares draped on the green, tinted by the same bands so the fall reads as colour, and bolder
+// near the ball. Two draw calls at most (the map's bands with the cup marker, and its contours; or the grid), built for
+// a hole (and a ball, for the grid) the first time they are wanted, and hidden (no draw calls) when the view is not up.
 
-export type ReadLook = { kind: "map" | "low"; k: number };
 export type ReadOverlay = {
   group: THREE.Group;
-  /** the overlay for this frame: null when the view is not up; `look.k` is how far in it is (its fade) */
-  update: (hole: BuiltHole, look: ReadLook | null) => void;
+  /** the overlay for this frame, from the camera: nothing unless it is a read view (`c.look`), `c.look.k` is how far in (its fade) */
+  update: (hole: BuiltHole, c: View | null, ball: [number, number]) => void;
   dispose: () => void;
 };
 
 /** the bands, low to high: deep blue-green to warm yellow */
 const RAMP = ["#17465a", "#1f6a6b", "#3a8a72", "#7aa86a", "#b9b962", "#e0c35e", "#f6d966"];
 const BANDS = RAMP.length;
+const RAMP_RGB = RAMP.map((c) => new THREE.Color(c));
 /** the grid of the map, m: 20 cm, fine enough that the bands follow the ground */
 const CELL = 0.2;
 /** how far each layer sits above the ground, m (the arrows are 1 cm above it) */
-const LIFT_BANDS = 0.003, LIFT_LINE = 0.005, LIFT_GRID = 0.004;
+const LIFT_BANDS = 0.003, LIFT_LINE = 0.005, LIFT_GRID = 0.004, LIFT_CUP = 0.006;
+/** the cup marker's radius on screen, px, and its ring: dark from 0.55 to 1 of that, white out to 1.2 */
+const CUP_PX = 9;
+const RING_SEG = 32;
+const RING_R = [0.55, 1, 1, 1.2];
 const ON_GROUND = { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 } as const;
 
 const sstep = (a: number, b: number, v: number) => {
@@ -64,12 +70,15 @@ export function createReadOverlay(): ReadOverlay {
   group.visible = false;
   const disposables: { dispose: () => void }[] = [];
   let built: BuiltHole | null = null;
+  // the band scale of the green (the map and the grid share it)
+  let lo = 0, span = 1;
+  const bandOf = (h: number) => Math.max(0, Math.min(BANDS - 1, Math.floor(((h - lo) / span) * BANDS)));
 
-  // the bands and their contours (the map)
+  // the bands, the cup marker and the contours (the map)
   const bandM = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, ...ON_GROUND });
   const lineM = new THREE.LineBasicMaterial({ color: "#0d2a2a", transparent: true, opacity: 0.5, depthWrite: false, ...ON_GROUND });
-  // the grid (the low view)
-  const gridM = new THREE.LineBasicMaterial({ color: "#f4fbf2", transparent: true, opacity: 0.5, depthWrite: false, ...ON_GROUND });
+  // the grid (the low view): its own colours by band, and its alpha by distance from the ball
+  const gridM = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 1, depthWrite: false, ...ON_GROUND });
   const bands = new THREE.Mesh(new THREE.BufferGeometry(), bandM);
   const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineM);
   const grid = new THREE.LineSegments(new THREE.BufferGeometry(), gridM);
@@ -79,13 +88,18 @@ export function createReadOverlay(): ReadOverlay {
   }
   disposables.push(bandM, lineM, gridM, bands.geometry, lines.geometry, grid.geometry);
 
-  /** the map's bands and contours of this hole's green */
+  // the cup marker: rings of RING_R around the cup, in the bands' own geometry (after its grid), redrawn for the zoom
+  let ringBase = 0;
+  let cupAt = [0, 0, 0] as [number, number, number];
+
+  /** the map's bands, the contours, and the cup's ring of this hole's green */
   const buildMap = (hole: BuiltHole) => {
     const rel = reliefOf(hole);
     const H = hole.green;
     const nx = Math.round(GW / CELL) + 1, nz = Math.round(GH / CELL) + 1;
     const hgt = new Float32Array(nx * nz), alp = new Float32Array(nx * nz);
-    let lo = Infinity, hi = -Infinity;
+    let hi = -Infinity;
+    let lowest = Infinity;
     for (let j = 0; j < nz; j++)
       for (let i = 0; i < nx; i++) {
         const gx = i * CELL, gy = j * CELL;
@@ -97,20 +111,20 @@ export function createReadOverlay(): ReadOverlay {
         alp[a] = 1 - sstep(0.02, 0.4, e);
         hgt[a] = rel.yG(gx, gy);
         if (alp[a] > 0.9) {
-          lo = Math.min(lo, hgt[a]);
+          lowest = Math.min(lowest, hgt[a]);
           hi = Math.max(hi, hgt[a]);
         }
       }
-    const span = Math.max(0.06, hi - lo);
-    const ramp = RAMP.map((c) => new THREE.Color(c));
+    lo = lowest;
+    span = Math.max(0.06, hi - lo);
     const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 4);
     for (let j = 0; j < nz; j++)
       for (let i = 0; i < nx; i++) {
         const a = j * nx + i;
         const [x, z] = hole.fromGreen(i * CELL, j * CELL);
         pos.set([x, hgt[a] + LIFT_BANDS, z], a * 3);
-        const band = Math.max(0, Math.min(BANDS - 1, Math.floor(((hgt[a] - lo) / span) * BANDS)));
-        col.set([ramp[band].r, ramp[band].g, ramp[band].b, alp[a]], a * 4);
+        const c = RAMP_RGB[bandOf(hgt[a])];
+        col.set([c.r, c.g, c.b, alp[a]], a * 4);
       }
     const idx: number[] = [];
     for (let j = 0; j < nz - 1; j++)
@@ -118,9 +132,33 @@ export function createReadOverlay(): ReadOverlay {
         const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
         idx.push(a, c, b, b, c, d);
       }
+    // the cup marker's rings after the grid: RING_SEG angles, RING_R radii, two quads per angle
+    ringBase = nx * nz;
+    const ringPos = new Float32Array(RING_SEG * RING_R.length * 3);
+    const ringCol = new Float32Array(RING_SEG * RING_R.length * 4);
+    const dark = [0.05, 0.1, 0.1], white = [0.96, 0.95, 0.88];
+    for (let s = 0; s < RING_SEG; s++)
+      for (let k = 0; k < RING_R.length; k++) {
+        const c = k < 2 ? dark : white;
+        ringCol.set([c[0], c[1], c[2], 1], (s * RING_R.length + k) * 4);
+      }
+    for (let s = 0; s < RING_SEG; s++) {
+      const p = (a: number, k: number) => ringBase + a * RING_R.length + k;
+      for (const k of [0, 2]) {
+        const s1 = (s + 1) % RING_SEG;
+        idx.push(p(s, k), p(s1, k), p(s, k + 1), p(s, k + 1), p(s1, k), p(s1, k + 1));
+      }
+    }
+    const [cx0, cz0] = hole.fromGreen(H.cup[0], H.cup[1]);
+    cupAt = [cx0, rel.yG(H.cup[0], H.cup[1]) + LIFT_CUP, cz0];
     const g = bands.geometry;
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(col, 4));
+    const allPos = new Float32Array(pos.length + ringPos.length);
+    allPos.set(pos, 0);
+    g.setAttribute("position", new THREE.BufferAttribute(allPos, 3));
+    const allCol = new Float32Array(col.length + ringCol.length);
+    allCol.set(col, 0);
+    allCol.set(ringCol, col.length);
+    g.setAttribute("color", new THREE.BufferAttribute(allCol, 4));
     g.setIndex(idx);
 
     // the contours at the band edges, each point on the ground at its own level
@@ -134,42 +172,68 @@ export function createReadOverlay(): ReadOverlay {
     lines.geometry.setAttribute("position", new THREE.BufferAttribute(lp, 3));
   };
 
-  /** the grid of 1 m squares on the green, drawn in 25 cm pieces so it follows the ground */
-  const buildGrid = (hole: BuiltHole) => {
+  /** the cup's ring, the same size on screen at any zoom: its radius is CUP_PX at the distance from the camera */
+  const placeRing = (c: View) => {
+    const eyeD = Math.hypot(cupAt[0] - c.x, cupAt[1] - c.y, cupAt[2] - c.z);
+    const R = (eyeD * CUP_PX) / c.F;
+    const pa = bands.geometry.attributes.position as THREE.BufferAttribute;
+    for (let s = 0; s < RING_SEG; s++) {
+      const th = (s / RING_SEG) * Math.PI * 2;
+      for (let k = 0; k < RING_R.length; k++) {
+        const r = R * RING_R[k];
+        pa.setXYZ(ringBase + s * RING_R.length + k, cupAt[0] + Math.cos(th) * r, cupAt[1], cupAt[2] + Math.sin(th) * r);
+      }
+    }
+    pa.needsUpdate = true;
+  };
+
+  /** the grid of 1 m squares on the green, drawn in 25 cm pieces so it follows the ground; tinted by band, bolder near the ball */
+  const buildGrid = (hole: BuiltHole, ball: [number, number]) => {
     const rel = reliefOf(hole);
     const H = hole.green;
-    const out: number[] = [];
+    const pos: number[] = [], col: number[] = [];
     const piece = 0.25;
-    const pt = (gx: number, gy: number) => {
+    const pt = (gx: number, gy: number): void => {
       const [x, z] = hole.fromGreen(gx, gy);
-      return [x, rel.yG(gx, gy) + LIFT_GRID, z];
+      const h = rel.yG(gx, gy);
+      const c = RAMP_RGB[bandOf(h)];
+      const d = Math.hypot(gx - ball[0], gy - ball[1]);
+      // bold enough that the bands read on the grass, and a touch bolder by the ball, fading out by 6 m
+      const a = 0.6 + 0.4 * Math.exp(-d / 3);
+      pos.push(x, h + LIFT_GRID, z);
+      col.push(c.r, c.g, c.b, a);
     };
     const inside = (gx: number, gy: number) => zone(H, gx, gy) === 0;
     // lines along y at each whole metre of x, and along x at each whole metre of y
     for (let k = 0; k <= GW; k++)
       for (let s = 0; s < GH; s += piece) {
         if (!inside(k, s) || !inside(k, s + piece)) continue;
-        out.push(...pt(k, s), ...pt(k, s + piece));
+        pt(k, s);
+        pt(k, s + piece);
       }
     for (let k = 0; k <= GH; k++)
       for (let s = 0; s < GW; s += piece) {
         if (!inside(s, k) || !inside(s + piece, k)) continue;
-        out.push(...pt(s, k), ...pt(s + piece, k));
+        pt(s, k);
+        pt(s + piece, k);
       }
-    grid.geometry.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
+    grid.geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    grid.geometry.setAttribute("color", new THREE.Float32BufferAttribute(col, 4));
   };
 
+  let gridKey = "";
   return {
     group,
-    update: (hole, look) => {
-      if (!look) {
+    update: (hole, c, ball) => {
+      const look = c?.look;
+      if (!c || !look) {
         group.visible = false;
         return;
       }
       if (built !== hole) {
         built = hole;
         buildMap(hole);
-        buildGrid(hole);
+        gridKey = "";
       }
       group.visible = true;
       const map = look.kind === "map";
@@ -177,7 +241,16 @@ export function createReadOverlay(): ReadOverlay {
       grid.visible = !map;
       bandM.opacity = 0.9 * look.k;
       lineM.opacity = 0.5 * look.k;
-      gridM.opacity = 0.5 * look.k;
+      gridM.opacity = look.k;
+      if (map) placeRing(c);
+      else {
+        // the grid is redone when the ball has moved (it is the same at address)
+        const key = `${ball[0].toFixed(2)},${ball[1].toFixed(2)}`;
+        if (key !== gridKey) {
+          gridKey = key;
+          buildGrid(hole, ball);
+        }
+      }
     },
     dispose: () => {
       disposables.forEach((d) => d.dispose());

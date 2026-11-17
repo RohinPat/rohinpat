@@ -315,7 +315,7 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       near = Math.hypot(pb.x - g.hole.green.cup[0], pb.y - g.hole.green.cup[1]) < 2.4 && !pb.sunk;
       putt.update(g.hole, g.putt, g.t, !!opts.reduce, c, c.look?.kind === "map" ? c.look.k : 0, c.look?.kind === "low");
     } else putt.hide();
-    readOverlay.update(g.hole, putting ? (c.look ?? null) : null);
+    readOverlay.update(g.hole, putting ? c : null, [g.putt.ball.x, g.putt.ball.y]);
     ball.visible = showBall;
     const dBall = Math.hypot(bx - c.x, by - c.y, bz - c.z);
     ball.position.set(bx, by, bz);
@@ -336,7 +336,10 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
     if (hole) {
       const [px, pz] = g.hole.pin;
       const dFlag = Math.hypot(px - c.x, pz - c.z);
-      for (const m of flagMats) m.opacity = near ? 0.3 : 1;
+      // the map view draws the cup as a marker of its own, so the flag goes (and comes back) with it
+      const mapK = c.look?.kind === "map" ? c.look.k : 0;
+      hole.flag.visible = mapK < 0.98;
+      for (const m of flagMats) m.opacity = (near ? 0.3 : 1) * (1 - mapK);
       hole.flag.scale.setScalar(Math.max(1, (FLAG_MIN_PX * dFlag) / (c.F * 2.4)));
       for (const f of hole.targetFlags) f.scale.setScalar(Math.max(1, (FLAG_MIN_PX * 0.8 * Math.hypot(f.position.x - c.x, f.position.z - c.z)) / (c.F * 2.4)));
       const wa = Math.atan2(g.wind[0], g.wind[1]);

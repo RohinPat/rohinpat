@@ -34,6 +34,10 @@ export class ReadInput {
   kind(): ReadKind | null {
     return this.held || this.latched ? this.pref : null;
   }
+  /** how it is up: held (Tab or a chip), latched (1 or 2), or not at all */
+  how(): "held" | "latched" | null {
+    return this.held ? "held" : this.latched ? "latched" : null;
+  }
   /** Tab: held opens the view; a press while latched closes it (Tab is never a way out of the page) */
   tab(down: boolean) {
     if (!down) this.held = false;

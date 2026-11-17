@@ -96,6 +96,8 @@ function Course() {
   /** the hold-to-read view on the green (readview.ts): what the keys and chips ask for, and what is on screen */
   const readIn = useRef(new ReadInput());
   const [readView, setReadView] = useState<"off" | ReadKind>("off");
+  /** held (Tab or a chip) or latched (1 or 2): what the prompt says to do */
+  const [readHow, setReadHow] = useState<"held" | "latched" | null>(null);
   const [coarse, setCoarse] = useState(false);
   // what the game says, read out in turn: a log, so two lines in one frame are both read, and a line said twice is
   const [said, setSaid] = useState<{ id: number; text: string }[]>([]);
@@ -107,6 +109,7 @@ function Course() {
     if (k === viewShown.current) return;
     viewShown.current = k;
     setReadView(k);
+    setReadHow(readIn.current.how());
     if (k !== "off") say(k === "map" ? "Map of the green." : "Low view along the line.");
   }, [say]);
   const [failed, setFailed] = useState(false);
@@ -296,6 +299,8 @@ function Course() {
       if (!canRead(g.putt, g.phase)) readIn.current.reset();
       syncRead();
       const look = readIn.current.kind();
+      // the page's prompt says how to leave the view, so the HUD's own prompt is left out
+      g.putt.viewing = !!look;
       if (L.gl && putting) {
         const pv = F.putt.step(g.hole, g.putt, w, h, stop ? 0 : dt, g.cam, reduce.current);
         // the read view eases in from the putt's camera, and back to it on release
@@ -558,6 +563,12 @@ function Course() {
           {KEYS}
         </p>
 
+        {/* how to leave the view: where the HUD's own prompt was */}
+        {screen === "play" && readView !== "off" && (
+          <p aria-hidden="true" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#0d100e]/80 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]">
+            {readHow === "latched" ? "Tab to putt" : coarse ? "Let go to putt" : "Let go of Tab to putt"}
+          </p>
+        )}
         {/* the map's legend: two swatches, the ends of the ramp */}
         {screen === "play" && readView === "map" && (
           <div aria-hidden="true" className="pointer-events-none absolute bottom-16 sm:bottom-3 left-3 flex items-center gap-3 rounded-full bg-[#0d100e]/70 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#f2ead7]">

@@ -806,7 +806,8 @@ function puttPrompt(ctx: CanvasRenderingContext2D, g: CourseGame, w: number, h: 
     pill(ctx, fit(ctx, ["PRESS R OR READ GREEN TO PUTT", "READ GREEN TO PUTT"].slice(g.touch ? 1 : 0), w - 40), w / 2, h - 36);
     return;
   }
-  if (g.scores.length > 0 || g.phaseT > 12 || g.putt.strokes > g.strokes || g.putt.tap || pb.moving || pb.sunk) return;
+  // a read view is up: the page says how to leave it
+  if (g.putt.viewing || g.scores.length > 0 || g.phaseT > 12 || g.putt.strokes > g.strokes || g.putt.tap || pb.moving || pb.sunk) return;
   mono(ctx, 10);
   const msg = fit(ctx, ["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(g.touch ? 1 : 0), w - 40);
   pill(ctx, msg, w / 2, h - 36);
