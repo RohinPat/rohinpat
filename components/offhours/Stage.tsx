@@ -155,11 +155,12 @@ export default function Stage({
     };
     const onClick = (e: MouseEvent) => e.detail > 0 && refocus(e);
     const onPointerUp = (e: PointerEvent) => (e.target as HTMLElement).matches?.("input[type=range]") && refocus(e);
-    // and if focus has fallen out to the page, the next key goes to the game
+    // and if focus is outside the stage (the page, or the tile that opened it, which the stage's
+    // focus has not reached yet), the next key goes to the game
     const onStray = (e: KeyboardEvent) => {
       const a = document.activeElement;
       if (e.key === "Escape" || e.key === "Tab" || !root.current) return;
-      if (a === document.body || a === root.current) {
+      if (a === root.current || !(a instanceof Node) || !root.current.contains(a)) {
         const g = game();
         if (!g) return;
         e.preventDefault();
