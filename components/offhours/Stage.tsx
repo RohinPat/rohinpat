@@ -76,6 +76,8 @@ export default function Stage({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
+  // the focus hand-off to the piece; cancelled on close, or it lands after the stage has started to close
+  const focusTimer = useRef(0);
   const [shown, setShown] = useState(false);
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
@@ -89,6 +91,7 @@ export default function Stage({
 
   const close = () => {
     if (closing) return;
+    window.clearTimeout(focusTimer.current);
     setClosing(true);
     window.setTimeout(onClose, reduce ? 0 : MS - 40);
   };
@@ -113,7 +116,7 @@ export default function Stage({
     body.style.width = "100%";
     const id = requestAnimationFrame(() => setShown(true));
     // focus the piece once it has grown in
-    const f = window.setTimeout(
+    focusTimer.current = window.setTimeout(
       () => (root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? closeBtn.current)?.focus({ preventScroll: true }),
       reduce ? 0 : MS,
     );
@@ -155,11 +158,12 @@ export default function Stage({
     };
     const onClick = (e: MouseEvent) => e.detail > 0 && refocus(e);
     const onPointerUp = (e: PointerEvent) => (e.target as HTMLElement).matches?.("input[type=range]") && refocus(e);
-    // and if focus has fallen out to the page, the next key goes to the game
+    // and if focus is outside the stage (the page, or the tile that opened it, which the stage's
+    // focus has not reached yet), the next key goes to the game
     const onStray = (e: KeyboardEvent) => {
       const a = document.activeElement;
       if (e.key === "Escape" || e.key === "Tab" || !root.current) return;
-      if (a === document.body || a === root.current) {
+      if (a === root.current || !(a instanceof Node) || !root.current.contains(a)) {
         const g = game();
         if (!g) return;
         e.preventDefault();
@@ -192,7 +196,7 @@ export default function Stage({
       [html.style.overflow, body.style.position, body.style.top, body.style.width] = prev;
       window.scrollTo({ top: y, behavior: "instant" });
       cancelAnimationFrame(id);
-      window.clearTimeout(f);
+      window.clearTimeout(focusTimer.current);
       window.removeEventListener("keydown", onKey, true);
       el?.removeEventListener("touchmove", onTouchMove);
       el?.removeEventListener("gesturestart", noGesture);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AIM_STEP, CUP_R, HOLES, MU, TAP_IN, makeHole, newPutt, puttDraw, puttKey, puttPowerFor, stepBall, type Putt, type PuttEnv } from "@/components/offhours/golf/green";
+import { AIM_STEP, CUP_R, HOLES, MU, TAP_IN, makeHole, newPutt, puttCupPow, puttDraw, puttKey, puttPowerFor, stepBall, type Putt, type PuttEnv } from "@/components/offhours/golf/green";
 import { fakeCtx, recordingCtx, stubScratchCanvas } from "./golf-headless";
 
 // Putting, with the ball model the game itself runs.
@@ -124,7 +124,7 @@ describe("the keyboard putt's tick", () => {
     puttKey(p, key(" "), true, 1, e);
     expect(p.kCharging).toBe(true);
     const d = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
-    expect(p.kMark).toBeCloseTo(puttPowerFor(d), 6);
+    expect(p.kMark).toBeCloseTo(puttCupPow(p), 6);
     expect(p.kMark).toBeGreaterThan(0.05);
     expect(p.kMark).toBeLessThan(1);
     let t = 1;

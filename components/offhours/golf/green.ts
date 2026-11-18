@@ -398,6 +398,7 @@ export function puttBegin(p: Putt, hole: Hole, ball: [number, number], strokes: 
   p.startT = t;
   p.fade = reduce ? 1 : 0;
   p.cache = null;
+  p.kMark = puttCupPow(p);
   // a ball that comes to rest this close to the cup is a tap-in: so is one that lands there
   if (Math.hypot(hole.cup[0] - ball[0], hole.cup[1] - ball[1]) < TAP_IN) {
     p.tap = { t: 0, x: ball[0], y: ball[1] };
@@ -416,6 +417,106 @@ export function puttShoot(p: Putt, angle: number, power: number, t: number, env:
 /** the power that rolls a putt this far on a flat green */
 export function puttPowerFor(metres: number) {
   return powFor(Math.sqrt(2 * MU * Math.max(0, metres)));
+}
+/** how far a putt struck at `pow` rolls on a flat green, m: the distance the power meter and the ring read */
+export function flatRoll(pow: number) {
+  return (pace(pow) * pace(pow)) / (2 * MU);
+}
+/** metres as the HUD reads them, in whole feet */
+export const ftOf = (m: number) => Math.round(m * 3.281);
+/** a putt that can be lined up now: the ball is at rest off the cup and no stroke is under way */
+export const puttInPlay = (p: Putt) => !p.ball.moving && !p.ball.sunk && !p.reading && !p.done && !p.putter && !p.tap;
+
+// The real roll is a few hundred steps, and the meter asks every frame: the stop and the cup's power are cached by the
+// ball's place, the aim and the power, and the cup's power is not worked out again while the ball is moving.
+const keyOf = (...v: number[]) => v.map((x) => x.toFixed(4)).join(",");
+let stopKey = "", stopH: Hole | null = null, stopVal = 0;
+let cupKey = "", cupH: Hole | null = null, cupVal = 0;
+
+/** how far along the line to the cup the ball comes to rest, rolled for real from (x, y) at (dx, dy) and pow, m */
+function stopAlong(H: Hole, x: number, y: number, dx: number, dy: number, pow: number) {
+  const r = puttRoll(H, x, y, dx, dy, pow);
+  const last = r.pts[r.pts.length - 1];
+  const ux = H.cup[0] - x, uy = H.cup[1] - y, d = Math.hypot(ux, uy) || 1;
+  return ((last.x - x) * ux + (last.y - y) * uy) / d;
+}
+
+/** the stop of the line on show, cached */
+function shownStop(p: Putt, dx: number, dy: number, pow: number) {
+  const key = keyOf(p.ball.x, p.ball.y, dx, dy, pow);
+  if (key !== stopKey || p.hole !== stopH) {
+    stopKey = key;
+    stopH = p.hole;
+    stopVal = stopAlong(p.hole, p.ball.x, p.ball.y, dx, dy, pow);
+  }
+  return stopVal;
+}
+
+/**
+ * The power that rolls the ball, aimed at the cup, to stop at the cup on the green's real break (a bisection on the
+ * roll; 1 if even a full pull falls short). This is the meter's cup tick, and the suggested pace at address.
+ */
+export function puttCupPow(p: Putt): number {
+  if (p.ball.moving && cupH === p.hole) return cupVal;
+  const key = keyOf(p.ball.x, p.ball.y);
+  if (key === cupKey && p.hole === cupH) return cupVal;
+  const H = p.hole, cupDist = Math.hypot(H.cup[0] - p.ball.x, H.cup[1] - p.ball.y);
+  const ux = (H.cup[0] - p.ball.x) / (cupDist || 1), uy = (H.cup[1] - p.ball.y) / (cupDist || 1);
+  const stop = (pow: number) => stopAlong(H, p.ball.x, p.ball.y, ux, uy, pow);
+  // the first power, going up from a tap, that rolls the ball to the cup. A hard hit can curve off the line before it gets
+  // there, so when no power does, the tick is the one that gets furthest along the line (the readout then says SHORT)
+  const N = 40;
+  let v = 1, best = -Infinity, bestPow = 1, prev = 0;
+  for (let i = 1; i <= N; i++) {
+    const hi = i / N;
+    const reach = stop(hi);
+    if (reach >= cupDist) {
+      let lo = prev, top = hi;
+      for (let k = 0; k < 14; k++) {
+        const mid = (lo + top) / 2;
+        if (stop(mid) >= cupDist) top = mid;
+        else lo = mid;
+      }
+      v = top;
+      best = Infinity;
+      break;
+    }
+    if (reach > best) {
+      best = reach;
+      bestPow = hi;
+    }
+    prev = hi;
+  }
+  if (best !== Infinity) v = bestPow;
+  cupKey = key;
+  cupH = H;
+  cupVal = v;
+  return v;
+}
+
+/**
+ * The line the putt shows: its direction, and its power. `solid` while it is being set (a pull, a held Space, arrows
+ * with a power on it); otherwise the suggested pace, the one that rolls it to the cup on the real break, shown faint.
+ */
+export function puttSight(p: Putt, t: number): { dx: number; dy: number; pow: number; solid: boolean } {
+  const aim = puttAim(p, t);
+  if (aim && aim.pow > 0.02) return { dx: aim.dx, dy: aim.dy, pow: aim.pow, solid: true };
+  return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: puttCupPow(p), solid: false };
+}
+
+/**
+ * The meter's readings. `miss` is how far the ball really stops past (+) or short (-) of the cup on the line to it, for
+ * the power on show, with `word` SHORT, LONG or ON PACE (within 1 ft). The cup tick is `cupPow`; `plays` is the flat-green distance that power
+ * stands for, so a cup uphill or downhill reads PLAYS further or nearer than it is.
+ */
+export function puttMeter(p: Putt, t: number) {
+  const s = puttSight(p, t);
+  const cupDist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
+  const cupPow = puttCupPow(p);
+  const along = shownStop(p, s.dx, s.dy, s.pow);
+  const word = Math.abs(along - cupDist) < 0.3048 ? "ON PACE" : along < cupDist ? "SHORT" : "LONG";
+  // the miss: how far the ball stops past (+) or short (-) of the cup, in whole feet
+  return { pow: s.pow, solid: s.solid, miss: ftOf(along - cupDist), word, cupPow, cupFeet: ftOf(cupDist), plays: ftOf(flatRoll(cupPow)) };
 }
 
 /**
@@ -500,11 +601,11 @@ export function puttAim(p: Putt, t: number): { dx: number; dy: number; pow: numb
     const w0 = toGrn(p, p.aimFrom.x, p.aimFrom.y), wb = toGrn(p, p.aimTo.x, p.aimTo.y);
     if (!w0 || !wb) return null;
     const dx = w0.x - wb.x, dy = w0.y - wb.y, d = Math.hypot(dx, dy) || 1;
-    return { dx: dx / d, dy: dy / d, pow, flat: (pace(pow) * pace(pow)) / (2 * MU), drag: true };
+    return { dx: dx / d, dy: dy / d, pow, flat: flatRoll(pow), drag: true };
   }
   if (p.kCharging || t - p.kTouched < 3) {
     const pow = p.kPower;
-    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow, flat: p.kCharging && pow === 0 ? 3 : (pace(pow) * pace(pow)) / (2 * MU), drag: false };
+    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow, flat: p.kCharging && pow === 0 ? 3 : flatRoll(pow), drag: false };
   }
   return null;
 }
@@ -583,7 +684,7 @@ export function puttKey(p: Putt, e: KeyboardEvent, down: boolean, t: number, env
     if (down && !e.repeat && !p.ball.moving && !p.ball.sunk && !p.putter && !p.tap) {
       p.kCharging = true;
       p.kPower = 0;
-      p.kMark = puttPowerFor(Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y));
+      p.kMark = puttCupPow(p);
       p.kMarked = false;
       p.kTouched = t;
     } else if (!down && p.kCharging) {
@@ -801,7 +902,7 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
   const Y = (x: number, y: number) => sy(v, x, y);
 
   if (env.hudOnly) {
-    // the scene is someone else's: only the HUD (the line on the 3D green is its own; no flat-green pace label)
+    // the scene is someone else's: only the HUD (the line on the 3D green is its own)
     hud(ctx, p, w, h, t, play, pointer, !!env.touch);
     return;
   }
@@ -991,46 +1092,23 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
     ctx.globalAlpha = 1;
   }
 
-  // ---- aim line and pace: flat ground, no break
-  if (play && !p.ball.moving && !p.ball.sunk && !p.reading && !p.done) {
-    let dx = 0, dy = 0, pow = 0, show = false;
-    if (p.aiming) {
-      const sdx = p.aimFrom.x - p.aimTo.x, sdy = p.aimFrom.y - p.aimTo.y;
-      pow = Math.min(1, Math.hypot(sdx, sdy) / dragMax(v));
-      const w0 = toWorld(v, p.aimFrom.x, p.aimFrom.y), w1 = toWorld(v, p.aimFrom.x + sdx, p.aimFrom.y + sdy);
-      dx = w1.x - w0.x;
-      dy = w1.y - w0.y;
-      show = pow > 0.02;
-    } else if (p.kCharging || t - p.kTouched < 3) {
-      dx = Math.cos(p.kAngle);
-      dy = Math.sin(p.kAngle);
-      pow = p.kPower;
-      show = true;
+  // ---- the line: the ball's real roll as far as its first half, the same line the 3D green draws
+  if (play && puttInPlay(p)) {
+    const sg = puttSight(p, t);
+    const r = puttRoll(p.hole, p.ball.x, p.ball.y, sg.dx, sg.dy, sg.pow);
+    const half = r.len / 2;
+    ctx.strokeStyle = sg.solid ? "rgba(242,234,215,0.85)" : "rgba(242,234,215,0.5)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 7]);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    for (const q of r.pts) {
+      if (q.s > half) break;
+      ctx.lineTo(X(q.x, q.y), Y(q.x, q.y));
     }
-    if (show && !p.putter) {
-      const d = Math.hypot(dx, dy) || 1;
-      const ux = dx / d, uy = dy / d;
-      const flat = (pace(pow) * pace(pow)) / (2 * MU); // metres, on a flat green
-      const L = p.kCharging && pow === 0 ? 3 : flat;
-      const ex = p.ball.x + ux * L, ey = p.ball.y + uy * L;
-      ctx.strokeStyle = "rgba(242,234,215,0.85)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([2, 7]);
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.lineTo(X(ex, ey), Y(ex, ey));
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // the pace marker where a flat putt would stop
-      const mx = X(ex, ey), my = Y(ex, ey);
-      ctx.strokeStyle = pow > 0.9 ? "#e5484d" : "#8ad9a8";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(mx, my, 6, 0, 7);
-      ctx.stroke();
-      paceLabel(ctx, { x: mx, y: my }, flat, w);
-    }
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // ---- HUD
@@ -1041,20 +1119,6 @@ export function puttPaint(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: 
     ctx.fillStyle = `rgba(13,16,14,${1 - p.fade})`;
     ctx.fillRect(0, 0, w, h);
   }
-}
-
-/** how far a flat putt would roll, in feet, by the point where it would stop */
-function paceLabel(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, flat: number, w: number) {
-  mono(ctx, 10);
-  const txt = `${Math.round(flat * 3.281)} FT`;
-  const tw = ctx.measureText(txt).width + 12;
-  const tx = Math.max(6, Math.min(w - tw - 6, at.x + 10)), ty = Math.max(16, at.y - 8);
-  ctx.fillStyle = "rgba(13,16,14,0.78)";
-  ctx.beginPath();
-  ctx.roundRect(tx, ty - 13, tw, 18, 4);
-  ctx.fill();
-  ctx.fillStyle = "#f2ead7";
-  ctx.fillText(txt, tx + 6, ty);
 }
 
 function drawPutterAt(ctx: CanvasRenderingContext2D, p: Putt, X: (x: number, y: number) => number, Y: (x: number, y: number) => number, sc: number, dx: number, dy: number, pow: number, fwd: number) {
@@ -1134,7 +1198,12 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     ctx.fill();
   };
   // hole card
-  const cw = play ? (compact ? 150 : 190) : 124;
+  // the cup's line: PLAYS joins it when the break makes the cup play a foot or more off its flat distance
+  const cupFt = Math.round(dist * 3.281);
+  const plays = play ? ftOf(flatRoll(puttCupPow(p))) : cupFt;
+  const cupLine = `${cupFt} FT TO THE CUP${Math.abs(plays - cupFt) >= 1 ? ` · PLAYS ${plays}` : ""}`;
+  mono(ctx, 10);
+  const cw = play ? Math.max(compact ? 150 : 190, Math.ceil(ctx.measureText(cupLine).width) + 30) : 124;
   const ch = play ? 62 : 36;
   panel(10, 10, cw, ch);
   ctx.fillStyle = "#f2ead7";
@@ -1143,12 +1212,12 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
   if (play) {
     mono(ctx, 10);
     ctx.fillStyle = "#b5b6ab";
-    ctx.fillText(`${Math.round(dist * 3.281)} FT TO THE CUP`, 20, 52);
+    ctx.fillText(cupLine, 20, 52);
     ctx.fillText(p.course?.practice ? `PUTTS ${p.strokes}` : `STROKES ${p.strokes}`, 20, 66);
   }
   if (!play) return;
 
-  // The hint / reading chip and the key power meter sit top centre only while
+  // The hint / reading chip sits top centre only while
   // that clears the hole card. On a narrow canvas they go to the bottom, just
   // above the scorecard, so they never cover the HUD box at any width.
   const topFree = (width: number) => w / 2 - width / 2 >= 10 + cw + 8;
@@ -1174,13 +1243,44 @@ function hud(ctx: CanvasRenderingContext2D, p: Putt, w: number, h: number, t: nu
     chip(["PULL BACK AND LET GO · OR ← → AND HOLD SPACE", "PULL BACK AND LET GO", "PULL BACK, LET GO"].slice(touch ? 1 : 0), "#f2ead7");
   }
 
-  // power meter while charging by key
-  if (p.kCharging) {
-    const my = topFree(140) ? 46 : chipBottom + 8;
+  // the power meter: a distance gauge along the bottom, under the play and above the prompt. The fill is the power; the
+  // readout beside its end is how far the ball really rolls to the cup, SHORT, LONG or ON PACE; the CUP tick is the power
+  // that holes it. Faint at address (the suggested pace), solid while the putt is being set.
+  if (puttInPlay(p)) {
+    const my = chipBottom + 8;
+    const m = puttMeter(p, t);
+    const x0 = w / 2 - 70, fillX = x0 + 140 * m.pow, tickX = x0 + 140 * m.cupPow;
+    const tickAt = Math.max(x0 + 14, Math.min(x0 + 126, tickX));
+    ctx.save();
+    ctx.globalAlpha = m.solid ? 1 : 0.45;
     ctx.fillStyle = "rgba(13,16,14,0.7)";
-    ctx.fillRect(w / 2 - 70, my, 140, 8);
-    ctx.fillStyle = p.kPower > 0.9 ? "#e5484d" : "#8ad9a8";
-    ctx.fillRect(w / 2 - 70, my, 140 * p.kPower, 8);
+    ctx.fillRect(x0, my, 140, 8);
+    ctx.fillStyle = m.pow > 0.9 ? "#e5484d" : "#8ad9a8";
+    ctx.fillRect(x0, my, 140 * m.pow, 8);
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillRect(tickX - 1, my - 4, 2, 16);
+    // the cup's label sits on a dark backing: it is over the flag when the cup is far
+    mono(ctx, 10);
+    const cw = ctx.measureText("CUP").width + 10;
+    ctx.fillStyle = "rgba(13,16,14,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(tickAt - cw / 2, my - 19, cw, 14, 3);
+    ctx.fill();
+    ctx.fillStyle = "#f2ead7";
+    ctx.textAlign = "center";
+    ctx.fillText("CUP", tickAt, my - 8);
+    ctx.textAlign = "left";
+    // the readout beside the fill's end: the miss, how far the ball stops short of or past the cup
+    const txt = m.word === "ON PACE" ? "ON PACE" : `${Math.max(1, Math.abs(m.miss))} FT ${m.word}`;
+    const tw = ctx.measureText(txt).width + 12;
+    const tx = Math.min(w - tw - 6, fillX + 8);
+    ctx.fillStyle = "rgba(13,16,14,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(tx, my - 5, tw, 18, 4);
+    ctx.fill();
+    ctx.fillStyle = "#f2ead7";
+    ctx.fillText(txt, tx + 6, my + 8);
+    ctx.restore();
   }
 
   // scorecard (the course draws its own)

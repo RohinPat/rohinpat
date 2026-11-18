@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { BuiltHole } from "@/components/offhours/golf/course";
-import { GH, GW, TAP_HIT, greenHeight, puttAim, puttPowerFor, puttRoll, zone, type Hole, type Putt } from "@/components/offhours/golf/green";
+import { GH, GW, TAP_HIT, greenHeight, puttAim, puttInPlay, puttRoll, puttSight, zone, type Hole, type Putt } from "@/components/offhours/golf/green";
 import { reliefOf } from "./relief";
 
 // Putting on the 3D green. The putt itself is green.ts's (its ball, its physics,
@@ -116,14 +116,6 @@ export function createPutt3D(): Putt3D {
 
   const hide = () => {
     putter.visible = dots.visible = tick.visible = trail.visible = drops.visible = arrows.visible = false;
-  };
-
-  /** the aim the line shows: the putt's own while it is being lined up (live), else the suggested pace at the cup (faint) */
-  const lineAim = (p: Putt, t: number) => {
-    const aim = puttAim(p, t);
-    if (aim && aim.pow > 0.02) return { dx: aim.dx, dy: aim.dy, pow: aim.pow, live: true };
-    const dist = Math.hypot(p.hole.cup[0] - p.ball.x, p.hole.cup[1] - p.ball.y);
-    return { dx: Math.cos(p.kAngle), dy: Math.sin(p.kAngle), pow: puttPowerFor(dist), live: !!aim };
   };
 
   /** the ball's roll for this green, ball, aim and power; cached until one of them changes */
@@ -250,10 +242,10 @@ export function createPutt3D(): Putt3D {
 
     // ---- the line: the ball's own roll as far as its first half, fading over the last part of that, and a tick where it
     // ends. Faint at address; full while it is being lined up or the power is pulled back.
-    const L = !b.moving && !b.sunk && !p.reading && !p.done && !p.putter && !p.tap ? lineAim(p, t) : null;
+    const L = puttInPlay(p) ? puttSight(p, t) : null;
     dots.visible = tick.visible = !!L && !p.putter;
     if (L && !p.putter) {
-      dotM.opacity = tickM.opacity = L.live ? 0.9 : 0.6;
+      dotM.opacity = tickM.opacity = L.solid ? 0.9 : 0.6;
       const r = rollFor(p.hole, b.x, b.y, L.dx, L.dy, L.pow);
       const half = r.len / 2;
       const fadeFrom = half * 0.6;

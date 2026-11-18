@@ -143,14 +143,12 @@ test.describe("Click for sound", () => {
     await page.goto("/interests");
     await page.locator('[data-piece="keyboard"]').click();
     await expect(stage(page)).toBeVisible(SLOW);
-    // typing is the click's successor: the browser lets the sound through.
-    // The keyboard only sounds once its model has loaded, so keep typing.
-    await expect
-      .poll(async () => {
-        await page.keyboard.press("a");
-        return audioState(page);
-      }, { timeout: 30_000, intervals: [1000] })
-      .toEqual(["running"]);
+    // the stage hands focus to the keyboard once it has grown in: that is when keys reach it
+    await expect(stage(page).locator("[data-autofocus]")).toBeFocused(SLOW);
+    // typing is the click's successor: the browser lets the sound through. The keys are
+    // not waiting on the 3D model (the sound is synthesized on the key press itself).
+    await page.keyboard.press("a");
+    await expect.poll(() => audioState(page), SLOW).toEqual(["running"]);
     await expect(page.getByTestId("sound-prompt")).toHaveCount(0);
     await context.close();
   });
