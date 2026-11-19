@@ -53,17 +53,13 @@ describe("the ground's shape", () => {
       const b = h.shape.box;
       for (let z = b.z0; z <= b.z1; z += 2.3)
         for (let x = b.x0; x <= b.x1; x += 2.3) {
-          // (the ground is checked first: the water and the rock below are exempt, so only a point the ground fails needs them, and
-          // a water search is about 170 reads a point, which the flat ground's 2.3 m grid cannot afford)
-          const [sx, sz] = t.slope(x, z);
-          const step = Math.abs(t.y(x + 0.3, z) - t.y(x, z));
-          if (Math.hypot(sx, sz) < 0.6 && step < 0.15) continue;
           // (the banks of a pond or a creek are steep: a ball there is in the water a moment later)
           if (h.surfaceAt(x, z) === "out" || waterWithin(h.surfaceAt, x, z, 2.5) !== null) continue;
           // (a pot's face, a bank and a ravine's wall are steep on purpose: features.ts, with their own tests)
           if (t.fx.fine(x, z, 0) > 0) continue;
+          const [sx, sz] = t.slope(x, z);
           expect(Math.hypot(sx, sz), `hole ${h.def.n} at ${x.toFixed(0)}, ${z.toFixed(0)}`).toBeLessThan(0.6);
-          expect(step).toBeLessThan(0.15);
+          expect(Math.abs(t.y(x + 0.3, z) - t.y(x, z))).toBeLessThan(0.15);
         }
     }
   });

@@ -300,6 +300,9 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       // the flag ghosts as the ball reaches the cup, so it can be seen to drop
       near = Math.hypot(bx - g.hole.pin[0], bz - g.hole.pin[1]) < 2.5;
     }
+    // in the air the ball's height is the sim's (true); over the green it is drawn on the exaggerated surface, so its height
+    // there is lifted by the same amount the surface is (0 off the green, and at the collar's edge)
+    if (air !== null && hole) air += hole.lift(bx, bz);
     // on the green the ball is the putt's, and the golfer steps away: the putter addresses it
     const putting = g.phase === "putt" || (g.phase === "hole-card" && !!g.putt.course && g.putt.ball.sunk);
     let ground = hole ? hole.surfaceY(bx, bz) : 0;
@@ -394,17 +397,24 @@ export function createCourseRenderer(canvas: HTMLCanvasElement, opts: { maxPixel
       return { x: ((v3.x + 1) / 2) * size.w, y: ((1 - v3.y) / 2) * size.h };
     },
     toGreen: (px, py) => {
-      // the ground at the ball's height under the pointer
+      // the ground under the pointer: the ray meets the drawn surface, which the green's exaggerated relief lifts off the
+      // ball's own height, so the plane is found again at the height where the ray met it (a few steps settle it)
       const pb = g.putt.ball;
       const [bx, bz] = g.hole.fromGreen(pb.x, pb.y);
-      const y0 = hole ? hole.surfaceY(bx, bz) : 0;
+      let y0 = hole ? hole.surfaceY(bx, bz) : 0;
       ndc.set((px / size.w) * 2 - 1, 1 - (py / size.h) * 2);
       ray.setFromCamera(ndc, camera);
       const d = ray.ray.direction, o = ray.ray.origin;
       if (d.y > -1e-4) return null;
-      const t = (y0 - o.y) / d.y;
-      if (t <= 0) return null;
-      const [gx, gy] = g.hole.toGreen(-(o.x + d.x * t), o.z + d.z * t);
+      let hx = 0, hz = 0;
+      for (let k = 0; k < 4; k++) {
+        const t = (y0 - o.y) / d.y;
+        if (t <= 0) return null;
+        hx = -(o.x + d.x * t);
+        hz = o.z + d.z * t;
+        y0 = hole ? hole.surfaceY(hx, hz) : 0;
+      }
+      const [gx, gy] = g.hole.toGreen(hx, hz);
       return { x: gx, y: gy };
     },
   });
