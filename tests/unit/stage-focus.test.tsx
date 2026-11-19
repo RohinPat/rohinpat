@@ -127,4 +127,70 @@ describe("Stage focus hand-off", () => {
     expect(screen.getByRole("dialog")).toHaveAttribute("data-stage", "open");
     expect(screen.getByText("game")).toHaveFocus();
   });
+
+  it("settles when the grow finishes even if no transitionend reaches the stage", async () => {
+    // a frame has to run for the settle to be checked: real timers, the stage is waited on by state
+    vi.useRealTimers();
+    // the grow's own animation finishes and drops out of the element's animations, but its event never comes:
+    // the settle must come from the animation's `finished`, not from catching one event
+    let running: Animation[] = [];
+    let finish!: () => void;
+    const fin = new Promise<void>((r) => (finish = r));
+    HTMLElement.prototype.getAnimations = () => running;
+    running = [{ playState: "running", finished: fin } as unknown as Animation];
+    render(
+      <Stage meta={meta} origin={origin} onClose={() => {}}>
+        <Piece />
+      </Stage>,
+    );
+    const dialog = screen.getByRole("dialog");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(dialog).toHaveAttribute("data-stage", "opening");
+    running = [];
+    await act(async () => finish());
+    await waitFor(() => expect(dialog).toHaveAttribute("data-stage", "open"));
+    expect(screen.getByText("game")).toHaveFocus();
+  });
+
+  it("a grow the browser cancels with no event still settles (its finished promise rejects)", async () => {
+    // a frame has to run for the settle to be checked: real timers, the stage is waited on by state
+    vi.useRealTimers();
+    let running: Animation[] = [];
+    HTMLElement.prototype.getAnimations = () => running;
+    const cancelled = Promise.reject(new DOMException("cancelled", "AbortError"));
+    cancelled.catch(() => {}); // the test awaits the stage, not the rejection: keep it from reading as unhandled
+    running = [{ playState: "idle", finished: cancelled } as unknown as Animation];
+    render(
+      <Stage meta={meta} origin={origin} onClose={() => {}}>
+        <Piece />
+      </Stage>,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveAttribute("data-stage", "open"));
+    expect(screen.getByText("game")).toHaveFocus();
+  });
+
+  it("a close during a grow that then finishes never hands focus over", async () => {
+    // a frame has to run for the settle to be checked: real timers, the stage is waited on by state
+    vi.useRealTimers();
+    let running: Animation[] = [];
+    let finish!: () => void;
+    const fin = new Promise<void>((r) => (finish = r));
+    HTMLElement.prototype.getAnimations = () => running;
+    running = [{ playState: "running", finished: fin } as unknown as Animation];
+    render(
+      <Stage meta={meta} origin={origin} onClose={() => {}}>
+        <Piece />
+      </Stage>,
+    );
+    const dialog = screen.getByRole("dialog");
+    await new Promise((r) => setTimeout(r, 0));
+    act(() => {
+      dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    running = [];
+    await act(async () => finish());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(dialog).toHaveAttribute("data-stage", "closing");
+    expect(screen.getByText("game")).not.toHaveFocus();
+  });
 });

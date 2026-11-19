@@ -212,10 +212,29 @@ export default function Stage({
   const open = shown && !closing;
   const phase = closing ? "closing" : settled ? "open" : "opening";
 
-  // The piece gets focus when the grow has actually ended, not after a guessed delay. A stage with no
-  // clip-path transition to run (no origin rect) has nothing to wait for, so it settles at once.
+  // The piece gets focus when the grow has actually ended, not after a guessed delay. The grow is the root's own
+  // animation, so wait on its `finished` (a cancel or a replacement settles it too), and re-check on each frame for
+  // one started or replaced meanwhile. No animation at the next frame means no grow to wait for (no origin rect,
+  // zero duration, reduced motion). Nothing here is a timer, and a close never settles it.
   useEffect(() => {
-    if (shown && !settled && !root.current?.getAnimations?.().length) setSettled(true);
+    if (!shown || settled) return;
+    const el = root.current;
+    let raf = 0;
+    let dead = false;
+    const running = () => (el?.getAnimations?.() ?? []).filter((a) => a.playState !== "finished" && a.playState !== "idle");
+    const check = () => {
+      if (dead || closingRef.current) return;
+      const list = running();
+      if (!list.length) return setSettled(true);
+      void Promise.allSettled(list.map((a) => a.finished)).then(() => {
+        if (!dead) raf = requestAnimationFrame(check);
+      });
+    };
+    raf = requestAnimationFrame(check);
+    return () => {
+      dead = true;
+      cancelAnimationFrame(raf);
+    };
   }, [shown, settled]);
   useEffect(() => {
     if (!settled || closingRef.current) return;
