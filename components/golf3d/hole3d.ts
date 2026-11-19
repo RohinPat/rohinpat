@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { seeded } from "@/components/offhours/useCanvas";
-import { treeClear, type BuiltHole } from "@/components/offhours/golf/course";
+import { TEE_BOX, treeClear, type BuiltHole } from "@/components/offhours/golf/course";
 import { YD } from "@/components/offhours/golf/scene";
-import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
+import { outsideGreen, teeMarkers, terrainOf } from "@/components/offhours/golf/terrain";
 import { withDecks } from "@/components/offhours/golf/solids";
 import { buildGreen, buildPin, greenSink } from "./green3d";
 import { buildProps3D } from "./props3d";
@@ -157,7 +157,7 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     c.translate(tx(0), tz(0));
     c.rotate(-yaw);
     c.fillStyle = COL.tee;
-    c.fillRect(-3.5 * s, -4 * s, 7 * s, 9 * s);
+    c.fillRect(-TEE_BOX.half * s, -TEE_BOX.back * s, 2 * TEE_BOX.half * s, (TEE_BOX.back + TEE_BOX.front) * s);
     c.restore();
   }
   // fescue, gorse, waste and out of bounds (areas3d.ts), under the sand and the water
@@ -481,17 +481,13 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     }
   }
 
-  // ---------------------------------------------------------------- tee markers
+  // ---------------------------------------------------------------- tee markers (terrain.ts teeMarkers: on the tee pad, on level ground)
   {
-    const [lx, lz] = hole.line[Math.min(2, hole.line.length - 1)];
-    const yaw = Math.atan2(lx, lz);
     const mg = new THREE.CylinderGeometry(0.05, 0.07, 0.14, 8);
     const mm = new THREE.MeshLambertMaterial({ color: "#3b6fd1" });
     disposables.push(mg, mm);
-    const half = hole.def.teeHalf ?? 2.6;
-    for (const side of [-1, 1]) {
+    for (const [mx, mz] of teeMarkers(hole)) {
       const m = new THREE.Mesh(mg, mm);
-      const mx = Math.cos(yaw) * side * half + Math.sin(yaw) * 1.2, mz = -Math.sin(yaw) * side * half + Math.cos(yaw) * 1.2;
       m.position.set(mx, ground.y(mx, mz) + 0.07, mz);
       m.castShadow = true;
       group.add(m);

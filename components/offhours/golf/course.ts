@@ -82,6 +82,8 @@ export type Area = { kind: AreaKind; poly: [number, number][]; stakes?: [number,
 export type AreaM = { kind: AreaKind; ring: [number, number][]; stakes: [number, number][] };
 /** the stakes stand this far apart along the boundary line, m */
 export const STAKE_GAP = 6;
+/** the mown tee box, m: half its width either side of the line, and how far it runs behind the tee (back) and past it (front). hole3d.ts draws it; terrain.ts places the tee markers on it */
+export const TEE_BOX = { half: 3.5, back: 4, front: 5 };
 /** which kind wins where areas overlap (first in the list wins) */
 const AREA_ORDER: AreaKind[] = ["oob", "gorse", "waste", "fescue"];
 /** true if a tree may stand at (x, z) m: outside every `trees.clear` polygon */
@@ -113,8 +115,6 @@ const along = (path: [number, number][], gap: number): [number, number][] => {
 };
 
 export type HoleDef = {
-  /** the tee markers stand this far either side of the line, m (default 2.6): hole 9's cliff top is narrow, so its pair stand nearer */
-  teeHalf?: number;
   n: number;
   name: string;
   par: 3 | 4 | 5;
@@ -553,6 +553,8 @@ export const HOLE_DEFS: HoleDef[] = [
     // left of the far bank to the green (its level is the flats': the water lies in them)
     water: [
       {
+        // the arm's west bank falls to the coast 12 m out: held up to its level, so the water does not stand over the drop
+        held: true,
         shore: [
           [82, 150], [56, 144], [30, 140], [8, 142], [-14, 160], [-40, 192], [-66, 236], [-92, 258], [-112, 268],
           [-125, 285], [-136, 316], [-148, 353], [-154, 375], [-159, 400], [-164, 430],
@@ -700,6 +702,8 @@ export const BACK_DEFS: HoleDef[] = [
       // the channel on the island's west side, which the footbridge crosses
       {
         shore: [[2, 438], [10, 446], [15, 458], [15, 472], [14, 488], [13, 504], [12, 516], [10, 526], [1, 530], [-7, 522], [-8, 496], [-8, 472], [-4, 454], [-2, 443]],
+        // the channel's west bank falls to the lowland: held up to the lake's level, as the lake beside it is
+        held: true,
         level: 16.8,
         depth: 2.2,
       },
@@ -732,7 +736,6 @@ export const BACK_DEFS: HoleDef[] = [
     name: "Homeward",
     par: 4,
     yards: 367,
-    teeHalf: 1.6,
     line: [[0, 0], [10, 185], [-92, 338]],
     half: [16, 20, 17],
     rough: 14,

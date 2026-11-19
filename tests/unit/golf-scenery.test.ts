@@ -109,11 +109,13 @@ describe("a hole without a scene is drawn as it always was", () => {
   const oldHeight = (n: number, hole: ReturnType<typeof buildHole>, ground: (x: number, z: number) => number) => {
     const rough = hole.def.rough * YD;
     const noise = (x: number, z: number) => 0.5 + 0.22 * Math.sin(x * 0.013 + 1.7) * Math.cos(z * 0.011 - 0.4) + 0.18 * Math.sin((x + z) * 0.021 + n) + 0.1 * Math.cos((x - z) * 0.047);
+    // (beyond 30 m the held lake's bank is held as well, as makeHeight does: terrain.ts berm)
+    const berm = terrainOf(hole).berm;
     return (x: number, z: number) => {
       const m = hole.margin(x, z) - rough;
       const y = ground(x, z);
       if (m < 30) return y;
-      return y + smooth(30, 150, m) * (5 + 26 * noise(x, z));
+      return berm(x, z, y + smooth(30, 150, m) * (5 + 26 * noise(x, z)));
     };
   };
   for (const def of NINE_DEFS) {
