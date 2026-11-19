@@ -58,8 +58,8 @@ describe("modes", () => {
     expect(t).toContain(`https://example.test/golf?quick=5`);
   });
 
-  // (ten rounds take about a second alone, but a full run in parallel can take longer than the 5 s default: a CPU timeout, not a wait)
-  it("the skilled bot finishes the next ten daily rounds near par", { timeout: 60_000 }, () => {
+  // (ten rounds take 1.2 s alone and 3.1 s in a full run, 7 s on a saturated box: the repo's standard 20 s)
+  it("the skilled bot finishes the next ten daily rounds near par", { timeout: 20_000 }, () => {
     for (let i = 0; i < 10; i++) {
       const day = `2026-12-${String(i + 1).padStart(2, "0")}`;
       const s = setupFor("daily", { day });
