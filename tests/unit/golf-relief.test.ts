@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
 import { GH, GW } from "@/components/offhours/golf/green";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
-import { EXAG_MAX, EXAG_MIN, EXAG_TARGET, designOf, reliefOf } from "@/components/golf3d/relief";
+import { EXAG_MAX, EXAG_MIN, EXAG_TARGET, designOf, drawnReachOf, reliefOf } from "@/components/golf3d/relief";
+import { greenSink } from "@/components/golf3d/green3d";
 
 // The drawn green (relief.ts): its relief about its mean height is drawn K times as tall, full across the putting surface, and an
 // apron blends that back into the ground past the collar. Physics is the terrain's (terrain.ts): off the apron the drawn ground is
@@ -194,6 +195,41 @@ describe("what is drawn on the green sits on the drawn surface", () => {
           prev = cur;
         }
       }
+    }
+  });
+});
+
+describe("the drawn green's box and the terrain under it", () => {
+  // the mesh's box is the drawn reach (the bank or the apron, whichever is wider): past it the drawing lifts nothing and the
+  // terrain is not sunk, so the edge of the box is no step
+  it("lifts and sinks nothing past the drawn box, on every hole", () => {
+    for (const hole of holes) {
+      const rel = reliefOf(hole);
+      const sink = greenSink(hole);
+      const R = drawnReachOf(hole);
+      for (let gy = -R - 2; gy <= GH + R + 2; gy += 0.5)
+        for (let gx = -R - 2; gx <= GW + R + 2; gx += 0.5) {
+          if (gx > -R && gx < GW + R && gy > -R && gy < GH + R) continue;
+          const [x, z] = hole.fromGreen(gx, gy);
+          expect(rel.lift(x, z), `${hole.def.n} ${gx} ${gy}`).toBe(0);
+          expect(sink(x, z), `${hole.def.n} ${gx} ${gy}`).toBe(0);
+        }
+    }
+  });
+  // where the drawn green dips under the true ground (its low side, and the apron past it), the terrain sinks by at least as much,
+  // so the drawn surface is never hidden under the ground: the sink covers the apron's dip, not just the bank
+  it("sinks the terrain at least as far as the drawn green dips under it, on every hole", () => {
+    for (const hole of holes) {
+      const rel = reliefOf(hole);
+      const sink = greenSink(hole);
+      const R = drawnReachOf(hole);
+      for (let gy = -R; gy <= GH + R; gy += 0.25)
+        for (let gx = -R; gx <= GW + R; gx += 0.25) {
+          const [x, z] = hole.fromGreen(gx, gy);
+          if (hole.surfaceAt(x, z) === "water") continue;
+          const dip = Math.max(0, -rel.lift(x, z));
+          expect(sink(x, z), `${hole.def.n} ${gx.toFixed(2)} ${gy.toFixed(2)}`).toBeGreaterThanOrEqual(dip - 1e-9);
+        }
     }
   });
 });

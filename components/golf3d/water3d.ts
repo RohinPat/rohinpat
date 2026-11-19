@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { seeded } from "@/components/offhours/useCanvas";
 import { polyOf, ringSd, type BuiltHole, type Creek, type CreekPt } from "@/components/offhours/golf/course";
-import type { Terrain } from "@/components/offhours/golf/terrain";
+import { terrainOf, type Terrain } from "@/components/offhours/golf/terrain";
 import type { Tier } from "./scenery";
 
 // The water in play. The ground under it is dug by terrain.ts (a creek in a banked trench, a pond in a hollow with a
@@ -116,15 +116,16 @@ export function riffles(poly: CreekPt[]): number[] {
 }
 
 /**
- * Where the hazard stakes stand: along each bank, a little outside the waterline, on ground in play or the rough.
- * (data, for the stakes drawn here and for anything else that marks the hazard)
+ * Where the hazard stakes stand: along each bank, a little outside the waterline, on dry ground that is not water, out of
+ * bounds, sand or green: fairway, rough, fescue, waste, or the ground beyond them (a cliff top, the woods). Every water
+ * hazard gets some, or its edge is not marked. (data, for the stakes drawn here and for anything else that marks the hazard)
  */
 export function waterStakes(hole: BuiltHole, every = 14): { x: number; z: number; water: number }[] {
   const out: { x: number; z: number; water: number }[] = [];
-  const ok = (x: number, z: number) => {
-    const sf = hole.surfaceAt(x, z);
-    return sf === "rough" || sf === "fairway";
-  };
+  const ground = terrainOf(hole);
+  const STAND = new Set(["fairway", "rough", "fescue", "waste", "out"]);
+  // (a stake stands on the bank: above the surface of the water it marks, at the point it is set from)
+  const ok = (x: number, z: number, px: number, pz: number) => STAND.has(hole.surfaceAt(x, z)) && ground.y(x, z) > ground.waterY(px, pz);
   hole.def.water.forEach((w, wi) => {
     if ("path" in w) {
       const poly = polyOf(w as Creek);
@@ -135,7 +136,7 @@ export function waterStakes(hole: BuiltHole, every = 14): { x: number; z: number
         const [nx, nz] = normalAt(poly, i);
         for (const sg of [-1, 1]) {
           const x = p.x + nx * sg * (p.hw + 1.1), z = p.z + nz * sg * (p.hw + 1.1);
-          if (ok(x, z)) out.push({ x, z, water: wi });
+          if (ok(x, z, p.x, p.z)) out.push({ x, z, water: wi });
         }
       });
     } else {
@@ -150,7 +151,7 @@ export function waterStakes(hole: BuiltHole, every = 14): { x: number; z: number
         let nx = -(bz - z) / l, nz = (bx - x) / l;
         if (ringSd(ring, x + nx * 0.5, z + nz * 0.5) < 0) (nx = -nx), (nz = -nz);
         const sx = x + nx * 1.1, sz = z + nz * 1.1;
-        if (ok(sx, sz)) out.push({ x: sx, z: sz, water: wi });
+        if (ok(sx, sz, x, z)) out.push({ x: sx, z: sz, water: wi });
       });
     }
   });
@@ -237,8 +238,9 @@ export function buildWater(o: WaterOpts) {
 
   // ------------------------------------------------------------------ each body of water
   def.water.forEach((w, wi) => {
-    // (the sea is the scenery's ocean at its own level: no sheet of its own, or it would show a seam at the hole's box)
-    if ("shore" in w && w.sea) return;
+    // (the sea is the scenery's ocean at its own level: no sheet of its own, or it would show a seam at the hole's box. Its
+    // bank and its stakes are still drawn, below and by waterStakes; only the sheet is skipped)
+    const sheet = !("shore" in w && w.sea);
     const ring = hole.world.water[wi] as P[];
     let cx = 0, cz = 0;
     ring.forEach(([x, z]) => ((cx += x), (cz += z)));
@@ -246,106 +248,108 @@ export function buildWater(o: WaterOpts) {
     cz /= ring.length;
     const poly: CreekPt[] | null = "path" in w ? polyOf(w as Creek) : null;
 
-    // ---- the sheet
-    let g: THREE.BufferGeometry;
     const rif = poly ? riffles(poly) : [];
-    if (poly) {
-      const pos: number[] = [], fl: number[] = [], idx: number[] = [];
-      poly.forEach((p, i) => {
-        const [nxx, nzz] = normalAt(poly, i);
-        const y = ground.waterY(p.x, p.z);
-        for (const sgn of [-1, 0, 1]) {
-          // the outer verts reach a little past the waterline, under the bank
-          const off = sgn * (p.hw + (sgn ? 0.35 : 0));
-          pos.push(p.x + nxx * off, y, p.z + nzz * off);
-          fl.push(p.s, sgn, rif[i]);
-        }
-        if (i) {
-          const q = i * 3, r = (i - 1) * 3;
-          idx.push(r, r + 1, q, q, r + 1, q + 1, r + 1, r + 2, q + 1, q + 1, r + 2, q + 2);
-        }
-      });
-      g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute("flowUV", new THREE.Float32BufferAttribute(fl, 3));
-      g.setIndex(idx);
-    } else {
-      const grown = ring.map(([x, z]) => [cx + (x - cx) * 1.03, cz + (z - cz) * 1.03] as P);
-      // (a shape is counter-clockwise in its own plane; the ring may wind either way)
-      const shape = new THREE.Shape(grown.map(([x, z]) => new THREE.Vector2(x, -z)));
-      g = new THREE.ShapeGeometry(shape);
-      g.rotateX(-Math.PI / 2);
-      g.translate(0, ground.waterY(cx, cz), 0);
-      g.setAttribute("flowUV", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
-    }
-
-    if (tier === "soft") {
-      const mat = new THREE.MeshBasicMaterial({ color: tones.mid, fog: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-      const mesh = new THREE.Mesh(g, mat);
-      mesh.frustumCulled = false;
-      group.add(mesh);
-      disposables.push(g, mat);
-    } else {
-      // ---- the depth map: R is the water's depth, G its distance from the shore
-      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-      for (const [x, z] of ring) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
-      x0 -= 3; z0 -= 3; x1 += 3; z1 += 3;
-      const texel = Math.max(0.5, Math.max(x1 - x0, z1 - z0) / MAP_CAP[tier]);
-      const nx = Math.ceil((x1 - x0) / texel), nz = Math.ceil((z1 - z0) / texel);
-      const pondY = poly ? 0 : ground.waterY(cx, cz);
-      const mask = new Uint8Array(nx * nz), depth = new Float32Array(nx * nz);
-      for (let j = 0; j < nz; j++)
-        for (let i = 0; i < nx; i++) {
-          const x = x0 + (i + 0.5) * texel, z = z0 + (j + 0.5) * texel;
-          if (hole.surfaceAt(x, z) === "water") {
-            mask[j * nx + i] = 1;
-            depth[j * nx + i] = Math.max(0.02, (poly ? ground.waterY(x, z) : pondY) - ground.y(x, z));
+    if (sheet) {
+      // ---- the sheet
+      let g: THREE.BufferGeometry;
+      if (poly) {
+        const pos: number[] = [], fl: number[] = [], idx: number[] = [];
+        poly.forEach((p, i) => {
+          const [nxx, nzz] = normalAt(poly, i);
+          const y = ground.waterY(p.x, p.z);
+          for (const sgn of [-1, 0, 1]) {
+            // the outer verts reach a little past the waterline, under the bank
+            const off = sgn * (p.hw + (sgn ? 0.35 : 0));
+            pos.push(p.x + nxx * off, y, p.z + nzz * off);
+            fl.push(p.s, sgn, rif[i]);
           }
-        }
-      // a lake's shore distance is the exact one from its ring: the texel grid's steps would show as a saw along the foam
-      const dist = distance(mask, nx, nz);
-      if (!poly)
+          if (i) {
+            const q = i * 3, r = (i - 1) * 3;
+            idx.push(r, r + 1, q, q, r + 1, q + 1, r + 1, r + 2, q + 1, q + 1, r + 2, q + 2);
+          }
+        });
+        g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute("flowUV", new THREE.Float32BufferAttribute(fl, 3));
+        g.setIndex(idx);
+      } else {
+        const grown = ring.map(([x, z]) => [cx + (x - cx) * 1.03, cz + (z - cz) * 1.03] as P);
+        // (a shape is counter-clockwise in its own plane; the ring may wind either way)
+        const shape = new THREE.Shape(grown.map(([x, z]) => new THREE.Vector2(x, -z)));
+        g = new THREE.ShapeGeometry(shape);
+        g.rotateX(-Math.PI / 2);
+        g.translate(0, ground.waterY(cx, cz), 0);
+        g.setAttribute("flowUV", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+      }
+
+      if (tier === "soft") {
+        const mat = new THREE.MeshBasicMaterial({ color: tones.mid, fog: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+        const mesh = new THREE.Mesh(g, mat);
+        mesh.frustumCulled = false;
+        group.add(mesh);
+        disposables.push(g, mat);
+      } else {
+        // ---- the depth map: R is the water's depth, G its distance from the shore
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (const [x, z] of ring) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+        x0 -= 3; z0 -= 3; x1 += 3; z1 += 3;
+        const texel = Math.max(0.5, Math.max(x1 - x0, z1 - z0) / MAP_CAP[tier]);
+        const nx = Math.ceil((x1 - x0) / texel), nz = Math.ceil((z1 - z0) / texel);
+        const pondY = poly ? 0 : ground.waterY(cx, cz);
+        const mask = new Uint8Array(nx * nz), depth = new Float32Array(nx * nz);
         for (let j = 0; j < nz; j++)
           for (let i = 0; i < nx; i++) {
-            const k = j * nx + i;
-            if (mask[k]) dist[k] = Math.max(0, -ringSd(ring, x0 + (i + 0.5) * texel, z0 + (j + 0.5) * texel)) / texel;
+            const x = x0 + (i + 0.5) * texel, z = z0 + (j + 0.5) * texel;
+            if (hole.surfaceAt(x, z) === "water") {
+              mask[j * nx + i] = 1;
+              depth[j * nx + i] = Math.max(0.02, (poly ? ground.waterY(x, z) : pondY) - ground.y(x, z));
+            }
           }
-      const data = new Uint8Array(nx * nz * 4);
-      for (let k = 0; k < nx * nz; k++) {
-        data[k * 4] = mask[k] ? Math.min(255, (depth[k] / DEPTH_MAX) * 255) : 0;
-        data[k * 4 + 1] = mask[k] ? Math.min(255, ((dist[k] * texel) / SHORE_MAX) * 255) : 0;
-        data[k * 4 + 3] = 255;
-      }
-      const tex = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat);
-      tex.magFilter = tex.minFilter = THREE.LinearFilter;
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.generateMipmaps = false;
-      tex.needsUpdate = true;
-      disposables.push(tex);
+        // a lake's shore distance is the exact one from its ring: the texel grid's steps would show as a saw along the foam
+        const dist = distance(mask, nx, nz);
+        if (!poly)
+          for (let j = 0; j < nz; j++)
+            for (let i = 0; i < nx; i++) {
+              const k = j * nx + i;
+              if (mask[k]) dist[k] = Math.max(0, -ringSd(ring, x0 + (i + 0.5) * texel, z0 + (j + 0.5) * texel)) / texel;
+            }
+        const data = new Uint8Array(nx * nz * 4);
+        for (let k = 0; k < nx * nz; k++) {
+          data[k * 4] = mask[k] ? Math.min(255, (depth[k] / DEPTH_MAX) * 255) : 0;
+          data[k * 4 + 1] = mask[k] ? Math.min(255, ((dist[k] * texel) / SHORE_MAX) * 255) : 0;
+          data[k * 4 + 3] = 255;
+        }
+        const tex = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat);
+        tex.magFilter = tex.minFilter = THREE.LinearFilter;
+        tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.generateMipmaps = false;
+        tex.needsUpdate = true;
+        disposables.push(tex);
 
-      // a creek is a shade deeper and greener than the bay; a pond or lake is the bay's own
-      const tone = poly ? { shallow: "#86cbb4", mid: tones.mid, deep: tones.deep } : { shallow: tones.shallow, mid: tones.mid, deep: tones.deep };
-      const U = {
-        ...THREE.UniformsUtils.clone(fogU),
-        map: { value: tex },
-        region: { value: new THREE.Vector4(x0, z0, 1 / (nx * texel), 1 / (nz * texel)) },
-        cShallow: { value: new THREE.Color(tone.shallow) },
-        cMid: { value: new THREE.Color(tone.mid) },
-        cDeep: { value: new THREE.Color(tone.deep) },
-        cBed: { value: new THREE.Color(BED) },
-        foam: { value: new THREE.Color(tones.foam) },
-        sun: { value: o.sun },
-        t: { value: 0 },
-        flow: { value: poly ? 1 : 0 },
-        glit: { value: 0.55 },
-      };
-      if (animate) clock.push(U.t);
-      const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: U, fog: true, side: THREE.DoubleSide, defines: tier === "low" ? { LOW: "" } : {}, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-      const mesh = new THREE.Mesh(g, mat);
-      mesh.frustumCulled = false;
-      group.add(mesh);
-      sheets.push(mesh);
-      disposables.push(g, mat);
+        // a creek is a shade deeper and greener than the bay; a pond or lake is the bay's own
+        const tone = poly ? { shallow: "#86cbb4", mid: tones.mid, deep: tones.deep } : { shallow: tones.shallow, mid: tones.mid, deep: tones.deep };
+        const U = {
+          ...THREE.UniformsUtils.clone(fogU),
+          map: { value: tex },
+          region: { value: new THREE.Vector4(x0, z0, 1 / (nx * texel), 1 / (nz * texel)) },
+          cShallow: { value: new THREE.Color(tone.shallow) },
+          cMid: { value: new THREE.Color(tone.mid) },
+          cDeep: { value: new THREE.Color(tone.deep) },
+          cBed: { value: new THREE.Color(BED) },
+          foam: { value: new THREE.Color(tones.foam) },
+          sun: { value: o.sun },
+          t: { value: 0 },
+          flow: { value: poly ? 1 : 0 },
+          glit: { value: 0.55 },
+        };
+        if (animate) clock.push(U.t);
+        const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: U, fog: true, side: THREE.DoubleSide, defines: tier === "low" ? { LOW: "" } : {}, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+        const mesh = new THREE.Mesh(g, mat);
+        mesh.frustumCulled = false;
+        group.add(mesh);
+        sheets.push(mesh);
+        disposables.push(g, mat);
+      }
     }
 
     // ---- stones in the stream, where the creek runs narrow and quick

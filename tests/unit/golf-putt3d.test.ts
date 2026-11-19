@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
 import { GH, GW, ftOf, flatRoll, greenHeight, newPutt, puttAim, puttBegin, puttCupPow, puttLayout, puttMeter, puttPointer, puttPowerFor, puttRoll, puttShoot, puttStep, zone, type Hole, type PuttProj } from "@/components/offhours/golf/green";
 import { designOf, reliefOf } from "@/components/golf3d/relief";
-import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
+import { HOLD, outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { createPutt3D } from "@/components/golf3d/putt3d";
 import { PuttCam, puttView } from "@/components/golf3d/puttcam";
 import type { View } from "@/components/golf3d/flyover";
@@ -103,6 +103,28 @@ describe("the green's relief", () => {
           const px = (greenHeight(hole.green, gx + e, gy) - greenHeight(hole.green, gx - e, gy)) / (2 * e);
           expect(dx).toBeCloseTo((K - 1) * px, 5);
         }
+    }
+    // (it builds every hole's ground: about a second alone, several on a loaded CI box)
+  }, 20_000);
+  it("rises gently: no step at the bank's foot, and none past it", () => {
+    for (const hole of holes) {
+      const rel = reliefOf(hole);
+      // the drawn ground is flat past both the terrain's bank and the apron, whichever is wider on this green (the bank is
+      // wider where a green's rim rises more, and the apron is sized by the slope budget), so the foot is found, not fixed
+      const edge = Math.max(HOLD + terrainOf(hole).greenBank, designOf(hole).W);
+      // walk out from the middle of the green along a few rays, to two metres past that foot
+      for (let a = 0; a < 6.28; a += 0.7) {
+        const at = (s: number) => [GW / 2 + Math.cos(a) * s, GH / 2 + Math.sin(a) * s] as const;
+        let foot = 0;
+        while (outsideGreen(hole, ...at(foot)) < edge) foot += 0.05;
+        let prev = rel.yG(GW / 2, GH / 2);
+        for (let s = 0; s < foot + 2; s += 0.05) {
+          const y = rel.yG(...at(s));
+          expect(Math.abs(y - prev)).toBeLessThan(0.03);
+          prev = y;
+        }
+        expect(rel.rise(...at(foot + 2))).toBe(0);
+      }
     }
   });
   it("rises gently: the exaggeration adds no step at the bank's foot", () => {

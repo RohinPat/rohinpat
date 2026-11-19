@@ -188,3 +188,18 @@ export function reliefOf(hole: BuiltHole): Relief {
     lift,
   };
 }
+
+/**
+ * How far past its box the drawn green reaches, m: the terrain's bank (where its relief runs out) or the apron (where the drawn
+ * lift runs out, W from the outline), whichever is wider. The apron is measured from the outline, and the outline can stand past
+ * the box itself (a green's oval is wider than its box on some holes), so the reach adds that overhang too. The mesh and the
+ * terrain's sink both stop at this reach, so the drawing has no edge inside its box and no step at its edge.
+ */
+export function drawnReachOf(hole: BuiltHole): number {
+  let overhang = 0;
+  for (let i = 0; i < RIM_STEPS; i++) {
+    const [x, y] = rimPoint(hole, (i / RIM_STEPS) * Math.PI * 2);
+    overhang = Math.max(overhang, -x, x - GW, -y, y - GH);
+  }
+  return Math.max(terrainOf(hole).greenReach, designOf(hole).W + overhang + 1);
+}

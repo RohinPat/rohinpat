@@ -1,4 +1,4 @@
-import { creekSd, lakeOf, lobeK, polyOf, ringSd, type BuiltHole, type CreekPt } from "./course";
+import { TEE_BOX, creekSd, lakeOf, lobeK, polyOf, ringSd, type BuiltHole, type CreekPt } from "./course";
 import { compileFeatures, type Compiled } from "./features";
 import { GH, GW, greenHeight, shapeR } from "./green";
 import { YD } from "./scene";
@@ -54,6 +54,9 @@ export type Terrain = {
   pad: number;
   /** the green's own rise above its pad at a point of the green, m (0 off its raised ground) */
   rise: (gx: number, gy: number) => number;
+  /** the green's bank: its width, m (BANK, or wider where the rim rises more), and how far its relief reaches past its box, m */
+  greenBank: number;
+  greenReach: number;
   /** the hole's features (features.ts), for the 3D mesh to refine round */
   fx: Compiled;
   /** the ground round the green is shaped by the hole (a short ease, a tilted pad or a feature near): the mesh is refined there */
@@ -74,14 +77,24 @@ const TILT_REACH = 40;
 const TEE_FLAT = 7, TEE_EASE = 9, GREEN_EASE = 14;
 /** depths, m: a pond's bed, a creek's, a bunker's */
 const POND_DIP = 1.1, CREEK_DIP = 0.95, SAND_DIP = 0.35;
-/** a creek's or lake's bank run from the level ground to the waterline, m */
+/** a creek's or lake's bank run from the level ground to the waterline, m (at least): a dug bank is run out at most 1 in 3 (see bankRun) */
 const BANK_RUN = 2.4;
+/** the steepest a dug bank may be, rise per run: 1 in 4, so the ground's own slope (the rise, the swell) keeps the rest of the 1 in 3 limit. A smoothstep dig peaks at 1.5 times its average slope, so the run is 6 times the depth */
+const BANK_SLOPE = 1 / 4;
+/** the run a bank of this depth needs to stay under BANK_SLOPE, m */
+const bankRun = (depth: number) => Math.max(BANK_RUN, (1.5 * depth) / BANK_SLOPE);
 /** how far a pond's surface lies under the ground it is dug into (the bank's lip), m */
 const POND_LIP = 0.22;
 /** a creek's surface under the ground beside it, as a share of CREEK_DIP (the bank's waterline) */
 const CREEK_LINE = 0.6;
 /** a lake's bank: the lip over its level, and how far out from the shore it is held (m), then how far it eases back to the ground */
-export const BERM_LIP = 0.3, BERM_IN = 4, BERM_OUT = 12;
+export const BERM_LIP = 0.3, BERM_IN = 4, BERM_OUT = 20;
+/** how far in past the shore (m) the held lip tapers out (see berm) */
+const BERM_SHORE = 1.5;
+/** how near a lake's shore (m) the ground is baked on fine tiles, not the coarse grid (the bank's dig reaches this far) */
+const LAKE_NEAR = 12;
+/** the fine tile near a lake's shore: its cell and its size, m (the bank is 1 in 3 at the steepest, so a cell of 0.75 m reads it clean) */
+const LAKE_CELL = 0.75, LAKE_TILE = 12, LAKE_TN = LAKE_TILE / LAKE_CELL;
 /** how far across a waterfall's notch the bank's lift ramps back in, m (a steep lift would be a cliff) */
 export const NOTCH_FADE = 16;
 /** the baked grid's cell, m (Ground.cell) */
@@ -92,6 +105,8 @@ const CELL_DEFAULT = 1.5;
  * coarse grid of the exact distance beyond that (a lake's ring has a point every 2.5 m, and the bake asks for every cell)
  */
 const SD_CELL = 6, SD_FAR = 8;
+/** what a lake's distance reads outside its grid: far, past any reach a caller has (the berm's ease, the dig, the wet ground) */
+const FAR_SD = 1e3;
 function lakeSd(ring: [number, number][]) {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const [x, z] of ring) [x0, x1, z0, z1] = [Math.min(x0, x), Math.max(x1, x), Math.min(z0, z), Math.max(z1, z)];
@@ -101,8 +116,7 @@ function lakeSd(ring: [number, number][]) {
   let grid: Float32Array | null = null;
   return (x: number, z: number) => {
     const fi = (x - x0) / SD_CELL, fj = (z - z0) / SD_CELL;
-    // (outside the grid, which reaches 2 * SD_FAR past the shore, the shore is at least that far: nothing reads further)
-    if (fi < 0 || fj < 0 || fi >= nx - 1 || fj >= nz - 1) return SD_FAR * 2;
+    if (fi < 0 || fj < 0 || fi >= nx - 1 || fj >= nz - 1) return FAR_SD;
     if (!grid) {
       grid = new Float32Array(nx * nz);
       for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) grid[j * nx + i] = ringSd(ring, x0 + i * SD_CELL, z0 + j * SD_CELL);
@@ -158,6 +172,46 @@ export function outsideGreen(hole: BuiltHole, gx: number, gy: number) {
   // the green is an oval: a step in rho is longer along its long axis
   return ((rho - shapeR(hole.green, Math.atan2(v, u)) - 0.085) * Math.hypot(dx, dy)) / rho;
 }
+
+/**
+ * The tee markers: the pair either side of the line, on the mown tee box (course.ts TEE_BOX) and on level ground. The default
+ * spacing is MARK_HALF, m. A marker keeps MARK_FOOT (m) in from the box's sides, is level to MARK_SLOPE, and stands MARK_WATER m
+ * from any water: the painted bank reaches 2 m past a waterline (hole3d.ts), and a golfer addresses the ball between the pair,
+ * so a metre beyond that. A hole whose pad or ground does not allow the default steps in until both sides fit.
+ */
+const MARK_HALF = 2.6, MARK_AHEAD = 1.2, MARK_FOOT = 0.5, MARK_WATER = 3, MARK_SLOPE = 0.02, MARK_STEP = 0.1, MARK_MIN = 0.5;
+export function teeMarkers(hole: BuiltHole): [number, number][] {
+  const L = hole.def.line;
+  const [lx, lz] = [L[Math.min(2, L.length - 1)][0] * YD, L[Math.min(2, L.length - 1)][1] * YD];
+  const yaw = Math.atan2(lx, lz);
+  const across = [Math.cos(yaw), -Math.sin(yaw)], ahead = [Math.sin(yaw), Math.cos(yaw)];
+  const ground = terrainOf(hole);
+  const at = (side: number, half: number): [number, number] => [side * half * across[0] + MARK_AHEAD * ahead[0], side * half * across[1] + MARK_AHEAD * ahead[1]];
+  const fits = (side: number, half: number) => {
+    if (half > TEE_BOX.half - MARK_FOOT) return false;
+    const [x, z] = at(side, half);
+    if (hole.world.water.some((ring) => ringSd(ring as [number, number][], x, z) < MARK_WATER)) return false;
+    // level: the marker's own spot and the ground a foot round it
+    for (let k = 0; k < 5; k++) {
+      const a = (k * Math.PI) / 2;
+      const px = k ? x + Math.cos(a) * MARK_FOOT : x, pz = k ? z + Math.sin(a) * MARK_FOOT : z;
+      const [sx, sz] = ground.slope(px, pz);
+      if (Math.hypot(sx, sz) >= MARK_SLOPE) return false;
+    }
+    return true;
+  };
+  let half = MARK_MIN;
+  for (let h = MARK_HALF; h >= MARK_MIN - 1e-9; h = Math.round((h - MARK_STEP) * 10) / 10) {
+    if (fits(-1, h) && fits(1, h)) {
+      half = h;
+      break;
+    }
+  }
+  return [at(-1, half), at(1, half)];
+}
+
+/** what baking the ground costs, counted for the tests (golf-cost.test.ts): full() evaluations and the fine tiles made. Plain adds, not timed */
+export const bakeCost = { full: 0, tiles: 0 };
 
 const cache = new WeakMap<BuiltHole, Terrain>();
 /** no ground at all: every hole without a `ground` (and every hole in a flat game) */
@@ -227,6 +281,33 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return y;
   };
 
+  // the green's bank: BANK m, or wider where the green rises more at its rim. The bank is a smoothstep, which peaks at 1.5 times
+  // its average slope, and the green's own slope adds to it: 1 in 3 needs a run of 1.5 times the rise over (1 in 3 less that
+  // slope). Read from the green's own height, not a per-hole width (a rim 0.6 m above its surround banked 2.5 m was 1 in 2.5)
+  const H = hole.green;
+  const greenRim = (w: number, withSlope: boolean) => {
+    let low = Infinity, hi = -Infinity, slope = 0;
+    const P = Math.max(PAD, HOLD + w + 0.5);
+    for (let gy = -P; gy <= GH + P; gy += 0.25)
+      for (let gx = -P; gx <= GW + P; gx += 0.25) {
+        const o = outsideGreen(hole, gx, gy);
+        if (o >= HOLD + w) continue;
+        low = Math.min(low, greenHeight(H, gx, gy));
+        if (o > HOLD - 0.5) hi = Math.max(hi, greenHeight(H, gx, gy));
+        if (!withSlope) continue;
+        const e = 0.05;
+        const sx = (greenHeight(H, gx + e, gy) - greenHeight(H, gx - e, gy)) / (2 * e);
+        const sy = (greenHeight(H, gx, gy + e) - greenHeight(H, gx, gy - e)) / (2 * e);
+        slope = Math.max(slope, Math.hypot(sx, sy));
+      }
+    return { low: Number.isFinite(low) ? low : 0, hi: Number.isFinite(hi) ? hi : 0, slope };
+  };
+  const r0 = greenRim(BANK, true);
+  const bankW = Math.max(BANK, (1.5 * (r0.hi - r0.low + 0.03)) / (1 / 3 - r0.slope));
+  const low = greenRim(bankW, false).low;
+  // the relief's reach past the green's box: out to where the bank has run out, so no step at its edge
+  const reach = Math.max(PAD, HOLD + bankW + 0.5);
+
   // levelled: the tee, the green's pad
   const teeY = line(0, 0) + fx.y(0, 0);
   const [gcx, gcz] = hole.fromGreen(GW / 2, GH / 2);
@@ -236,7 +317,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const onPad = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
     if (gx < -40 || gx > GW + 40 || gy < -40 || gy > GH + 40) return 0;
-    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + BANK + 0.5)) / EASE);
+    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + bankW + 0.5)) / EASE);
   };
   const levelled = (x: number, z: number) => {
     const y = lerp(raw(x, z), teeY, 1 - smooth((Math.hypot(x, z) - T_FLAT) / T_EASE));
@@ -249,7 +330,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const ponds: Pond[] = [];
   const creeks: CreekPt[][] = [];
   const creekDeep: number[] = [];
-  const lakes: { ring: [number, number][]; level: number; depth: number; sd: (x: number, z: number) => number; held: boolean }[] = [];
+  const lakes: { ring: [number, number][]; level: number; depth: number; sd: (x: number, z: number) => number; held: boolean; sea: boolean }[] = [];
   for (const w of def.water) {
     if ("path" in w) {
       creeks.push(polyOf(w));
@@ -258,7 +339,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     else if ("shore" in w) {
       const ring = lakeOf(w);
       const mx = ring.reduce((a, p) => a + p[0], 0) / ring.length, mz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
-      lakes.push({ ring, level: w.level ?? levelled(mx, mz), depth: w.depth ?? POND_DIP, sd: lakeSd(ring), held: !!w.held });
+      lakes.push({ ring, level: w.level ?? levelled(mx, mz), depth: w.depth ?? POND_DIP, sd: lakeSd(ring), held: !!w.held, sea: !!w.sea });
     } else ponds.push({ x: w.x * YD, z: w.z * YD, rx: w.rx * YD, rz: w.rz * YD, c: Math.cos(w.rot ?? 0), s: Math.sin(w.rot ?? 0), level: levelled(w.x * YD, w.z * YD), lobe: w.lobe });
   }
   const blobR = (b: { x: number; z: number; rx: number; rz: number; c: number; s: number; lobe?: number }, x: number, z: number) => {
@@ -314,10 +395,14 @@ export function terrainOf(hole: BuiltHole): Terrain {
     for (const l of lakes) {
       if (!l.held) continue;
       const sd = l.sd(x, z);
-      if (sd < 0 || sd > BERM_OUT) continue;
+      if (sd < -BERM_SHORE || sd > BERM_OUT) continue;
       const w = notch ? smooth((pathDist([notch.a, notch.b], x, z) - notch.r) / NOTCH_FADE) : 1;
       if (w <= 0) continue;
-      v = lerp(v, lerp(Math.max(v, l.level + BERM_LIP), v, smooth((sd - BERM_IN) / (BERM_OUT - BERM_IN))), w);
+      // the lift is full at the shore and tapers to nothing BERM_SHORE m out in the water, so the held lip has no step at the
+      // waterline (a step there was up to 0.3 m over a few cm: a wall); outside it eases back to the ground over BERM_IN..BERM_OUT,
+      // which is long enough for a drop of about 3 m at 1 in 4 (the ground's own slope keeps the rest of 1 in 3)
+      const inK = sd < 0 ? smooth((sd + BERM_SHORE) / BERM_SHORE) : 1;
+      v = lerp(v, lerp(Math.max(v, l.level + BERM_LIP), v, smooth((sd - BERM_IN) / (BERM_OUT - BERM_IN))), w * inK);
     }
     return v;
   };
@@ -327,14 +412,18 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return false;
   };
   const full = (x: number, z: number) => {
+    bakeCost.full++;
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
     for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
-    for (const l of lakes) dig += l.depth * smooth((0.67 - l.sd(x, z)) / BANK_RUN);
+    for (const l of lakes) dig += l.depth * smooth((0.67 - l.sd(x, z)) / bankRun(l.depth));
     creeks.forEach((c, i) => {
       const sd = creekSd(c, x, z);
       // the bed dips a little more toward the middle (a pool), the bank runs up in BANK_RUN
-      dig += creekDeep[i] * smooth((BANK_RUN * 0.55 - sd) / BANK_RUN) + (sd < 0 ? 0.35 * smooth(-sd / 3) : 0);
+      const run = bankRun(creekDeep[i]);
+      // (the pool's extra depth starts 1.5 m out in the water: from the bank edge it would stack on the bank's own slope and
+      // make it steeper than 1 in 3)
+      dig += creekDeep[i] * smooth((run * 0.55 - sd) / run) + 0.35 * smooth((-sd - 1.5) / 3);
     });
     sand.forEach((b, i) => {
       // a pot bunker is its own shape (features.ts); any other is a bowl as deep as the bunker says
@@ -371,7 +460,58 @@ export function terrainOf(hole: BuiltHole): Terrain {
       // (the distance out from the brink changes no faster than the distance moved, so a tile whose middle is this far off has none of it)
       return (a.along > 0 && a.along < 1) || (a.c > -g.run * 4 - TR && a.c < g.run + g.talus + TR);
     });
+  // a lake's bed is dug steeper than a coarse grid cell: read from the grid, a node in the bed would pull the bank down to the
+  // waterline (a wall of water a metre high at the shore). Within LAKE_NEAR of a shore the ground is baked on a fine tile
+  // (LAKE_CELL), lazily like the cliffs' tiles, and a bounding box rules out the lakes a point cannot be near before any distance
+  const lakeBox = lakes.map((l) => {
+    const r = l.ring;
+    let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
+    for (const [x, z] of r) (a = Math.min(a, x)), (b = Math.max(b, x)), (c = Math.min(c, z)), (d = Math.max(d, z));
+    return { x0: a - LAKE_NEAR, x1: b + LAKE_NEAR, z0: c - LAKE_NEAR, z1: d + LAKE_NEAR };
+  });
+  const lakeTiles = new Map<number, Float32Array>();
+  /** whether a tile is near a shore, decided once: the tile centre within LAKE_NEAR plus the tile's half diagonal */
+  const lakeMode = new Map<number, boolean>();
+  const tileKey = (ti: number, tj: number) => (ti + 65536) * 131072 + (tj + 65536);
+  const nearTile = (ti: number, tj: number) => {
+    const cx = ti * LAKE_TILE + LAKE_TILE / 2, cz = tj * LAKE_TILE + LAKE_TILE / 2;
+    // (the sea's bed is 1 m deep: the grid reads its shore as well as a tile, and a tile per metre of a cove is slow)
+    return lakes.some((l, i) => {
+      if (l.sea) return false;
+      const b = lakeBox[i];
+      const reach = LAKE_NEAR + LAKE_TILE * 0.71;
+      if (cx < b.x0 - LAKE_TILE || cx > b.x1 + LAKE_TILE || cz < b.z0 - LAKE_TILE || cz > b.z1 + LAKE_TILE) return false;
+      return Math.abs(l.sd(cx, cz)) < reach;
+    });
+  };
+  const lakeRead = (x: number, z: number, ti: number, tj: number) => {
+    const key = tileKey(ti, tj);
+    let g = lakeTiles.get(key);
+    if (!g) {
+      // (nodes are baked as a read first reaches them, as the grid's are: a NaN is a node not yet baked)
+      g = new Float32Array((LAKE_TN + 1) * (LAKE_TN + 1)).fill(NaN);
+      bakeCost.tiles++;
+      lakeTiles.set(key, g);
+    }
+    const node = (i: number, j: number) => {
+      const k = j * (LAKE_TN + 1) + i;
+      if (Number.isNaN(g![k])) g![k] = full(ti * LAKE_TILE + i * LAKE_CELL, tj * LAKE_TILE + j * LAKE_CELL);
+      return g![k];
+    };
+    const ui = (x - ti * LAKE_TILE) / LAKE_CELL, uj = (z - tj * LAKE_TILE) / LAKE_CELL;
+    const i = Math.min(LAKE_TN - 1, Math.max(0, Math.floor(ui))), j = Math.min(LAKE_TN - 1, Math.max(0, Math.floor(uj)));
+    const u = ui - i, v = uj - j;
+    return lerp(lerp(node(i, j), node(i + 1, j), u), lerp(node(i, j + 1), node(i + 1, j + 1), u), v);
+  };
+  // (checked once: a hole whose only water is the sea pays nothing per read)
+  const lakeLive = lakes.some((l) => !l.sea);
   const base = (x: number, z: number) => {
+    if (lakeLive) {
+      const ti = Math.floor(x / LAKE_TILE), tj = Math.floor(z / LAKE_TILE), key = tileKey(ti, tj);
+      let near = lakeMode.get(key);
+      if (near === undefined) (near = nearTile(ti, tj)), lakeMode.set(key, near);
+      if (near) return lakeRead(x, z, ti, tj);
+    }
     const fi = (x - X0) / COARSE, fj = (z - Z0) / COARSE;
     if (fi < 0 || fj < 0 || fi >= nx - 1 || fj >= nz - 1) return full(x, z);
     if (tileFine) {
@@ -381,6 +521,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
         let g = tiles.get(t);
         if (!g) {
           g = new Float32Array((TN + 1) * (TN + 1));
+          bakeCost.tiles++;
           const ox = X0 + ti * TILE, oz = Z0 + tj * TILE;
           for (let j = 0; j <= TN; j++) for (let i = 0; i <= TN; i++) g[j * (TN + 1) + i] = full(ox + i * CELL, oz + j * CELL);
           tiles.set(t, g);
@@ -396,15 +537,12 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
 
   // the green: the putt's height field raised on the pad, held past the fringe, then banked down
-  const H = hole.green;
-  const fade = (gx: number, gy: number) => 1 - smooth((outsideGreen(hole, gx, gy) - HOLD) / BANK);
-  let low = Infinity;
-  for (let gy = -PAD; gy <= GH + PAD; gy += 0.25) for (let gx = -PAD; gx <= GW + PAD; gx += 0.25) if (fade(gx, gy) > 0) low = Math.min(low, greenHeight(H, gx, gy));
-  if (!Number.isFinite(low)) low = 0;
+  // (cut off where the bank has run out, measured from the green's outline: the outline can reach past its box, so a box
+  // cut would leave a step there)
   const relief = (gx: number, gy: number) => {
-    if (gx < -PAD || gx > GW + PAD || gy < -PAD || gy > GH + PAD) return 0;
-    const f = fade(gx, gy);
-    return f > 0 ? f * (greenHeight(H, gx, gy) - low + 0.03) : 0;
+    const o = outsideGreen(hole, gx, gy);
+    if (o >= HOLD + bankW) return 0;
+    return (1 - smooth((o - HOLD) / bankW)) * (greenHeight(H, gx, gy) - low + 0.03);
   };
 
   const anyPot = potted.some(Boolean);
@@ -428,6 +566,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
       return wet(x, z) - POND_LIP;
     },
     pad,
+    greenBank: bankW,
+    greenReach: reach,
     rise: relief,
     fx,
     greenShaped: G.greenEase !== undefined || !!G.padTilt || fx.near(gcx, gcz, 30),
