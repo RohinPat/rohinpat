@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOLE_DEFS, buildHole, type BuiltHole } from "@/components/offhours/golf/course";
+import { NINE_DEFS, RANGE_DEF, buildHole, type BuiltHole } from "@/components/offhours/golf/course";
 import { reliefOf } from "@/components/golf3d/relief";
 import type { View } from "@/components/golf3d/flyover";
 import { ReadCam, ReadInput, readPose } from "@/components/golf3d/readview";
@@ -8,7 +8,8 @@ import { ReadCam, ReadInput, readPose } from "@/components/golf3d/readview";
 // with the ball low and the cup high in the frame; the low view sits a metre behind the ball, a little above the green,
 // looking along the line to the cup.
 
-const holes = HOLE_DEFS.map((d) => buildHole(d));
+// every green of the course: the nine holes and the range's (its own green, with its own K)
+const holes = [...NINE_DEFS, RANGE_DEF].map((d) => buildHole(d));
 /** hole 6 and hole 3 (the ones the screenshots are of) */
 const pick = (n: number) => holes.find((h) => h.def.n === n)!;
 

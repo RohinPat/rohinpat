@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { HOLE_DEFS, buildHole } from "@/components/offhours/golf/course";
+import { NINE_DEFS, RANGE_DEF, buildHole } from "@/components/offhours/golf/course";
 import { GH, GW, ftOf, flatRoll, greenHeight, newPutt, puttAim, puttBegin, puttCupPow, puttLayout, puttMeter, puttPointer, puttPowerFor, puttRoll, puttShoot, puttStep, zone, type Hole, type PuttProj } from "@/components/offhours/golf/green";
-import { reliefOf } from "@/components/golf3d/relief";
+import { designOf, reliefOf } from "@/components/golf3d/relief";
+import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { createPutt3D } from "@/components/golf3d/putt3d";
 import { PuttCam, puttView } from "@/components/golf3d/puttcam";
 import type { View } from "@/components/golf3d/flyover";
@@ -11,7 +12,8 @@ import type { View } from "@/components/golf3d/flyover";
 // camera behind the ball frames the ball and the cup, and a pull-back reads the
 // same through the 3D camera as through the top-down view.
 
-const holes = HOLE_DEFS.map((d) => buildHole(d));
+// every green of the course: the nine holes and the range's (its own green, with its own K)
+const holes = [...NINE_DEFS, RANGE_DEF].map((d) => buildHole(d));
 const env = { play: true, say: () => {} };
 
 /** a spot 6 m from the cup on a straight line that stays on the green, where the break is biggest */
@@ -76,44 +78,56 @@ function project(v: View, p: [number, number, number], w: number, h: number) {
 }
 
 describe("the green's relief", () => {
-  it("rises off its pad and nowhere else", () => {
+  it("rises off its pad and nowhere else: the drawn relief is the true one past its apron", () => {
     for (const hole of holes) {
       const rel = reliefOf(hole);
-      for (let gy = -8; gy <= GH + 8; gy += 0.7) for (let gx = -8; gx <= GW + 8; gx += 0.7) expect(rel.rise(gx, gy)).toBeGreaterThanOrEqual(0);
+      const t = terrainOf(hole);
+      const W = designOf(hole).W;
+      for (let gy = -8; gy <= GH + 8; gy += 0.7)
+        for (let gx = -8; gx <= GW + 8; gx += 0.7)
+          if (outsideGreen(hole, gx, gy) >= W) expect(rel.rise(gx, gy)).toBe(t.rise(gx, gy));
       expect(rel.rise(-8, -8)).toBe(0);
-      expect(rel.rise(GW / 2, GH / 2)).toBeGreaterThan(0);
     }
   });
-  it("slopes exactly as the putt's green does wherever a putt is played", () => {
+  it("slopes as the putt's green does, drawn K times as steep across the putting surface (the apron's own slope aside)", () => {
     for (const hole of holes) {
       const rel = reliefOf(hole);
+      const t = terrainOf(hole);
+      const K = designOf(hole).K;
       const e = 0.01;
       for (let gy = 0.5; gy < GH; gy += 0.9)
         for (let gx = 0.5; gx < GW; gx += 0.9) {
-          if (zone(hole.green, gx, gy) === 2) continue;
-          const sx = (rel.yG(gx + e, gy) - rel.yG(gx - e, gy)) / (2 * e);
+          if (outsideGreen(hole, gx, gy) > -0.85) continue;
+          // the drawn slope less the true one, against the physics green's own slope: K-1 times it, in the middle of the surface
+          const dx = (rel.yG(gx + e, gy) - rel.yG(gx - e, gy) - (t.yG(gx + e, gy) - t.yG(gx - e, gy))) / (2 * e);
           const px = (greenHeight(hole.green, gx + e, gy) - greenHeight(hole.green, gx - e, gy)) / (2 * e);
-          expect(sx).toBeCloseTo(px, 6);
+          expect(dx).toBeCloseTo((K - 1) * px, 5);
         }
     }
-    // (it builds every hole's ground: about a second alone, several on a loaded CI box)
-  }, 20_000);
-  it("rises gently: no step at the bank's foot", () => {
+  });
+  it("rises gently: the exaggeration adds no step at the bank's foot", () => {
+    // (the terrain's own bank past the green can be steep: that is the ground's, and the ball's; only what the drawing adds is checked here)
     for (const hole of holes) {
       const rel = reliefOf(hole);
+      const t = terrainOf(hole);
       // walk out from the middle of the green along a few rays
       for (let a = 0; a < 6.28; a += 0.7) {
-        let prev = rel.yG(GW / 2, GH / 2);
+        let prev = rel.yG(GW / 2, GH / 2), prevT = t.yG(GW / 2, GH / 2);
         for (let s = 0; s < 18; s += 0.05) {
           const y = rel.yG(GW / 2 + Math.cos(a) * s, GH / 2 + Math.sin(a) * s);
-          expect(Math.abs(y - prev)).toBeLessThan(0.03);
+          const yt = t.yG(GW / 2 + Math.cos(a) * s, GH / 2 + Math.sin(a) * s);
+          expect(Math.abs((y - yt) - (prev - prevT))).toBeLessThan(0.03);
           prev = y;
+          prevT = yt;
         }
-        expect(rel.rise(GW / 2 + Math.cos(a) * 18, GH / 2 + Math.sin(a) * 18)).toBe(0);
+        // (past its apron the rise is the true one: 0 out here, and a point in the apron is not checked)
+        const rx = GW / 2 + Math.cos(a) * 18, ry = GH / 2 + Math.sin(a) * 18;
+        if (outsideGreen(hole, rx, ry) >= designOf(hole).W) expect(rel.rise(rx, ry)).toBe(0);
       }
     }
   });
 });
+
 
 describe("the putting camera", () => {
   it("puts the ball low in the frame and the cup in view, at any length of putt", () => {

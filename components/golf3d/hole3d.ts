@@ -6,6 +6,7 @@ import { YD } from "@/components/offhours/golf/scene";
 import { outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
 import { withDecks } from "@/components/offhours/golf/solids";
 import { buildGreen, buildPin, greenSink } from "./green3d";
+import { reliefOf } from "./relief";
 import { buildProps3D } from "./props3d";
 import { buildGorse } from "./gorse3d";
 import { prepareScenery, type Skin } from "./scenery";
@@ -51,8 +52,10 @@ export type Hole3D = {
   group: THREE.Group;
   /** the ground's height as drawn (m): the hole's, and the wooded hills beyond it */
   heightAt: (x: number, z: number) => number;
-  /** the height of the ground the ball plays on, m */
+  /** the height of the ground as drawn (the ball's surface, m): the ground the ball plays on, with the green's exaggerated relief (relief.ts) */
   surfaceY: (x: number, z: number) => number;
+  /** the drawn height less the true one at a point (m, 0 off the green): added to a ball's height in the air over it */
+  lift: (x: number, z: number) => number;
   /** the height of a pond's or creek's surface, m */
   waterY: (x: number, z: number) => number;
   /** the flag's group, scaled from the outside so it can be found from far away */
@@ -504,7 +507,10 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
   const targetCloth = new THREE.PlaneGeometry(0.62, 0.4).translate(0.31, 0, 0);
   const targetMat = new THREE.MeshLambertMaterial({ color: "#edbb00", side: THREE.DoubleSide });
   disposables.push(targetPole, poleMat, targetCloth, targetMat);
-  const { flag, cloth } = buildPin(hole, ground.y, group, disposables);
+  // the green's drawn surface (exaggerated, relief.ts): the pin and cup stand on it, not on the true ground
+  const relief = reliefOf(hole);
+  const decked = withDecks(ground, hole.def.props);
+  const { flag, cloth } = buildPin(hole, relief.y, group, disposables);
 
   // a flag on each target: gold, so they are not taken for the hole's
   const targetFlags = hole.world.greens.slice(1).map((tg) => {
@@ -524,7 +530,8 @@ export function buildHole3D(hole: BuiltHole, opts: { tier?: Tier; reduce?: boole
     group,
     targetFlags,
     heightAt,
-    surfaceY: withDecks(ground, hole.def.props).y,
+    surfaceY: (x, z) => decked.y(x, z) + relief.lift(x, z),
+    lift: relief.lift,
     waterY: ground.waterY,
     flag,
     cloth,

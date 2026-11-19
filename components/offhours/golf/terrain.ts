@@ -159,9 +159,6 @@ export function outsideGreen(hole: BuiltHole, gx: number, gy: number) {
   return ((rho - shapeR(hole.green, Math.atan2(v, u)) - 0.085) * Math.hypot(dx, dy)) / rho;
 }
 
-/** what baking the ground costs, counted for the tests (golf-cost.test.ts): full() evaluations and the fine tiles made. Plain adds, not timed */
-export const bakeCost = { full: 0, tiles: 0 };
-
 const cache = new WeakMap<BuiltHole, Terrain>();
 /** no ground at all: every hole without a `ground` (and every hole in a flat game) */
 export const FLAT: Pick<Terrain, "y" | "slope"> = { y: () => 0, slope: () => [0, 0] };
@@ -330,7 +327,6 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return false;
   };
   const full = (x: number, z: number) => {
-    bakeCost.full++;
     let dig = 0;
     // (a pond's waterline is where the bed has dropped POND_LIP under its level: r = 1, the edge the ball is lost at)
     for (const p of ponds) dig += POND_DIP * smooth((1.085 - blobR(p, x, z)) / 0.3);
@@ -385,7 +381,6 @@ export function terrainOf(hole: BuiltHole): Terrain {
         let g = tiles.get(t);
         if (!g) {
           g = new Float32Array((TN + 1) * (TN + 1));
-          bakeCost.tiles++;
           const ox = X0 + ti * TILE, oz = Z0 + tj * TILE;
           for (let j = 0; j <= TN; j++) for (let i = 0; i <= TN; i++) g[j * (TN + 1) + i] = full(ox + i * CELL, oz + j * CELL);
           tiles.set(t, g);
