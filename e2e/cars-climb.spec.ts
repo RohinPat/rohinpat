@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openPiece } from "./helpers/stage";
 
 // Night run's second road, the climb, end to end: a two-way choice on the ready screen and the end card (keys, Tab, taps), its own
 // run, its own words, and a picture that draws from the first gate to the summit without an error. The mock link
@@ -26,8 +27,7 @@ const nightEval = <T,>(p: Page, fn: (g: Hook, ...a: number[]) => T, ...a: number
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }

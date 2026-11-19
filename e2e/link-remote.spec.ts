@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { genGolf } from "../tests/unit/lab-swing-traces";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // The phone as a game controller, end to end, on the BroadcastChannel mock
 // session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1, or the pages with
@@ -55,7 +56,7 @@ const status = (host: Page) => host.locator('[role="dialog"] p[aria-live="polite
 
 async function openGolfRange(host: Page, phone: Page) {
   await phone.locator('[data-piece="golf"]').click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await expect(phone.getByTestId("golf-controller")).toBeVisible();
   await stage(host).getByRole("button", { name: "Driving range" }).click();
   await expect(host.getByTestId("golf-phone-hint")).toBeVisible();
@@ -73,7 +74,7 @@ test.describe("phone controllers: opening games", () => {
     await expect(stage(host)).toHaveCount(0, SLOW);
 
     await list.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(stage(host).getByRole("heading", { name: "Range and green" })).toBeVisible();
     // it grew out of the tile: the stage opens with a clip-path animation
     await expect(phone.getByTestId("golf-controller")).toBeVisible();
@@ -104,7 +105,7 @@ test.describe("phone controllers: opening games", () => {
   test("from a game, the phone takes both screens home, and can come back again", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await phone.getByTestId("phone-back").click();
     await phone.getByTestId("phone-list-back").click();
     await host.waitForURL((u) => new URL(u).pathname === "/", SLOW);
@@ -120,7 +121,7 @@ test.describe("phone controllers: opening games", () => {
   test("Esc on the laptop puts the phone back on the list", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await host.keyboard.press("Escape");
     await expect(stage(host)).toHaveCount(0, SLOW);
     await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
@@ -172,7 +173,7 @@ test.describe("phone controllers: golf's driving range", () => {
     test.setTimeout(75_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await phone.getByRole("group", { name: "Game" }).getByRole("button", { name: "Play" }).click();
     await host.waitForURL(/\/golf\?/, SLOW);
     // a round of nine starts by itself; its tee card goes on a press, then the ball is waiting and the phone can swing
@@ -239,7 +240,7 @@ test.describe("phone controllers: golf's driving range", () => {
   test("the hint shows only on the range, and putting says so on the phone", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     // the laptop opens on the range, where the phone swings; on Putt it does not
     await expect(host.getByTestId("golf-phone-hint")).toBeVisible(SLOW);
     await stage(host).getByRole("button", { name: "Putt", exact: true }).click();
@@ -254,7 +255,7 @@ test.describe("phone controllers: golf's driving range", () => {
   test("the phone switches the laptop between putting and the driving range", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="golf"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     const game = phone.getByRole("group", { name: "Game" });
     // the laptop opens on the range: the phone shows its swing, and its Putt switch takes the laptop to putting
     await game.getByRole("button", { name: "Putt" }).click();
@@ -287,8 +288,7 @@ test.describe("no phone linked: golf is exactly as it was", () => {
     const linkRequests: string[] = [];
     page.on("request", (r) => /relay|link\/client|\/api\/link/i.test(r.url()) && linkRequests.push(r.url()));
     await page.goto("/interests");
-    await page.locator('[data-piece="golf"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "golf");
     await stage(page).getByRole("button", { name: "Driving range" }).click();
     await expect(page.getByTestId("golf-phone-hint")).toHaveCount(0);
 

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { openPiece } from "./helpers/stage";
 
 // Cars, tuning pass, end to end: a mouse can hold the throttle and shift on the strip, the strip's buttons work from the keyboard,
 // and on a phone the Drift pad is a good size and a run can be restarted. The mock link gives the page `window.__night` / `__drag`.
@@ -17,8 +18,7 @@ const drag = (p: Page) => p.evaluate(() => {
 
 async function openStrip(p: Page) {
   await p.goto("/interests?linkmock");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await p.getByTestId("engine-mode-drag").click();
   const dash = stage(p).getByRole("img", { name: /race dashboard/i });
   await expect(dash).toBeVisible();
@@ -73,8 +73,7 @@ test.describe("Night run on a phone", () => {
     const context = await browser.newContext({ baseURL, viewport: PHONE, hasTouch: true, isMobile: true });
     const page = await context.newPage();
     await page.goto("/interests?linkmock");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     const canvas = page.getByTestId("night-canvas");
     await expect(canvas).toHaveAttribute("data-phase", "ready", SLOW);
     const drift = (await page.getByTestId("night-pad-hand").boundingBox())!;

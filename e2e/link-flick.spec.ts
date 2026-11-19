@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { genFlick } from "../tests/unit/lab-swing-traces";
 import { pairCode } from "./pair-code";
+import { stageReady } from "./helpers/stage";
 
 // The phone as the basketball and penalty controllers, end to end, on the
 // BroadcastChannel mock session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1):
@@ -48,7 +49,7 @@ const status = (host: Page) => host.locator('[role="dialog"] p[aria-live="polite
 
 async function openGame(host: Page, phone: Page, piece: "hoops" | "penalty") {
   await phone.locator(`[data-piece="${piece}"]`).click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await expect(phone.getByTestId(`${piece}-controller`)).toBeVisible(SLOW);
   await expect(host.getByTestId(`${piece}-phone-hint`)).toBeVisible(SLOW);
 }
@@ -228,7 +229,7 @@ test.describe("no phone linked: both games are exactly as they were", () => {
       page.on("pageerror", (e) => errors.push(e.message));
       await page.goto("/interests");
       await page.locator(`[data-piece="${piece}"]`).click();
-      await expect(stage(page)).toBeVisible(SLOW);
+      await stageReady(page);
       await expect(page.getByTestId(`${piece}-phone-hint`)).toHaveCount(0);
 
       const box = (await stage(page).locator("canvas").boundingBox())!;

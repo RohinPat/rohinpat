@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // The phone as the maze's tray and the slalom's handlebars, end to end, on the
 // BroadcastChannel mock session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1):
@@ -95,7 +96,7 @@ test.describe("phone controllers: the maze", () => {
     test.setTimeout(90_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(phone.getByTestId("maze-controller")).toBeVisible();
     await expect(host.getByTestId("maze-phone-hint")).toHaveText(/tilt your phone/i);
     // the laptop opens on a solver; the phone says so
@@ -123,7 +124,7 @@ test.describe("phone controllers: the maze", () => {
     test.setTimeout(90_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(phone.getByTestId("maze-controller")).toBeVisible();
     await stage(host).getByRole("button", { name: "You", exact: true }).click();
     const canvas = stage(host).locator("canvas");
@@ -148,7 +149,7 @@ test.describe("phone controllers: the maze", () => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await phone.locator('[data-mode-btn="touch"]').click();
     await expect(phone.getByTestId("maze-controller")).toHaveAttribute("data-mode", "touch");
     const spy = await spyAxes(host);
@@ -173,7 +174,7 @@ test.describe("phone controllers: the maze", () => {
   test("New maze on the phone makes a new maze on the laptop", async ({ browser, baseURL }) => {
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await stage(host).getByRole("button", { name: "You", exact: true }).click();
     const canvas = stage(host).locator("canvas");
     await host.waitForTimeout(400);
@@ -190,7 +191,7 @@ test.describe("phone controllers: one game after another", () => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="maze"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await phone.getByTestId("phone-back").click();
     await expect(stage(host)).toHaveCount(0, SLOW);
     await expect(phone.getByTestId("phone-piece-list")).toBeVisible();
@@ -208,7 +209,7 @@ test.describe("phone controllers: the slalom", () => {
     test.setTimeout(90_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="powder"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(phone.getByTestId("powder-controller")).toBeVisible();
     await expect(host.getByTestId("powder-phone-hint")).toHaveText(/steer with your phone/i);
     await expect(phone.getByTestId("powder-status")).toContainText(/ready/i);
@@ -251,7 +252,7 @@ test.describe("phone controllers: the slalom", () => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
     await phone.locator('[data-piece="powder"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await phone.locator('[data-mode-btn="touch"]').click();
     await expect(phone.getByTestId("powder-controller")).toHaveAttribute("data-mode", "touch");
     const spy = await spyAxes(host);
@@ -278,8 +279,7 @@ test.describe("no phone linked: the games are as they were", () => {
     page.on("request", (r) => /relay|link\/client|\/api\/link/i.test(r.url()) && linkRequests.push(r.url()));
     await page.goto("/interests");
 
-    await page.locator('[data-piece="maze"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "maze");
     await expect(page.getByTestId("maze-phone-hint")).toHaveCount(0);
     await stage(page).getByRole("button", { name: "You", exact: true }).click();
     const canvas = stage(page).locator("canvas");
@@ -293,8 +293,7 @@ test.describe("no phone linked: the games are as they were", () => {
     await page.keyboard.press("Escape");
     await expect(stage(page)).toHaveCount(0, SLOW);
 
-    await page.locator('[data-piece="powder"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "powder");
     await expect(page.getByTestId("powder-phone-hint")).toHaveCount(0);
     await page.waitForTimeout(500);
     await page.keyboard.press("Enter");

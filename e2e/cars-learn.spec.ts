@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { openPiece } from "./helpers/stage";
 
 // Cars, Learn mode, end to end: 24 cars learn the canyon in a worker while the page plays them back. A seed in the
 // address (?learnseed=1) makes the learning the same each time; that seed's best car finishes in about 30 generations.
@@ -14,8 +15,7 @@ const gen = async (p: Page) => Number((await learn(p).getAttribute("data-gen")) 
 
 async function openLearn(p: Page) {
   await p.goto("/interests?learnseed=1");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await p.getByTestId("engine-mode-learn").click();
   await expect(learn(p)).toBeVisible(SLOW);
 }
@@ -77,8 +77,8 @@ test.describe("Cars: Learn", () => {
     await openLearn(page);
     await expect.poll(() => gen(page), SLOW).toBeGreaterThanOrEqual(1);
     const a = await picture(page);
-    await page.waitForTimeout(600);
-    expect(await picture(page)).not.toBe(a);
+    // the learner's picture moves on its own: wait for it to change, not for a fixed time
+    await expect.poll(() => picture(page), SLOW).not.toBe(a);
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     const summary = results.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length} node(s) - ${v.help}`);
     expect(summary, summary.join("\n")).toEqual([]);

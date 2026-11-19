@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openPiece } from "./helpers/stage";
 
 // Cars, third pass, end to end: the world has to draw all the way down the road
 // (the tunnel's mouth, the bridge's towers, the gates, the finish) at both
@@ -32,8 +33,7 @@ const nightEval = <T,>(p: Page, fn: (g: NightHook) => T) => p.evaluate(`(${fn.to
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }

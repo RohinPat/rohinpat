@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // Night run's steering assist, end to end: a button beside the gearbox switch cycles Off, Light and Full (Light to start with),
 // the keys keep working after a click, the screen reader hears the change, and a linked phone (a wheel, analogue) gets none of it.
@@ -17,8 +18,7 @@ const level = (p: Page) => p.evaluate(() => (window as unknown as { __night: { a
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }
@@ -123,7 +123,7 @@ test.describe("Night run: the steering assist", () => {
     await phone.locator('[data-app="offhours"]').click();
     await host.waitForURL("**/interests");
     await phone.locator('[data-piece="engine"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(host.getByTestId("night-phone-hint")).toBeVisible(SLOW);
     await expect(canvas(host)).toHaveAttribute("data-phase", "ready", SLOW);
     // the button still says what it was set to; the game is not using it

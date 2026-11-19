@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { openPiece } from "./helpers/stage";
 
 // Cars, second polish pass, end to end: the keys must still work after a click
 // on one of the game's own switches, the strip must keep your best run as a
@@ -26,8 +27,7 @@ const nightEval = <T,>(p: Page, fn: (g: NightHook) => T) => p.evaluate(`(${fn.to
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // Cars: Night run and the Drag strip, end to end. The keys, the checkpoints and
 // the end screen with no phone at all; then the phone as a steering wheel with
@@ -82,7 +83,7 @@ const nightEval = <T,>(host: Page, fn: (g: NightHook) => T) => host.evaluate(`($
 
 async function openNight(host: Page, phone: Page) {
   await phone.locator('[data-piece="engine"]').click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await expect(phone.getByTestId("night-controller")).toBeVisible(SLOW);
   await expect(host.getByTestId("night-phone-hint")).toHaveText(/steer with your phone/i, SLOW);
 }
@@ -165,8 +166,7 @@ test.describe("Night run: the keyboard", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await startRun(page);
     await page.keyboard.down("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
@@ -198,8 +198,7 @@ test.describe("Night run: the keyboard", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await startRun(page);
     await page.keyboard.down("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
@@ -226,8 +225,7 @@ test.describe("Night run: the keyboard", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await startRun(page);
     await page.keyboard.down("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
@@ -260,8 +258,7 @@ test.describe("Night run: the keyboard", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await startRun(page);
     await page.keyboard.down("ArrowUp");
     await expect(canvas(page)).toHaveAttribute("data-phase", "run", { timeout: 20_000 });
@@ -286,8 +283,7 @@ test.describe("Drag strip", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await page.getByTestId("engine-mode-drag").click();
     await expect(page.getByTestId("engine-mode-drag")).toHaveAttribute("aria-pressed", "true");
     const dash = stage(page).getByRole("img", { name: /race dashboard/i });
@@ -551,8 +547,7 @@ test.describe("Drag strip: the launch and the end card", () => {
     const context = await newContext(browser, baseURL);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await page.getByTestId("engine-mode-drag").click();
     const dash = stage(page).getByRole("img", { name: /race dashboard/i });
     await expect(dash).toBeVisible();
@@ -594,7 +589,7 @@ test.describe("Drag strip: the launch and the end card", () => {
     const page = await context.newPage();
     await page.goto("/interests");
     await page.locator('[data-piece="engine"]').tap();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await stageReady(page);
     await page.getByTestId("engine-mode-drag").tap();
     const dash = stage(page).getByRole("img", { name: /race dashboard/i });
     await expect(dash).toBeVisible();
@@ -613,7 +608,7 @@ test.describe("Night run on a phone-sized touch screen", () => {
       const page = await context.newPage();
       await page.goto("/interests");
       await page.locator('[data-piece="engine"]').tap();
-      await expect(stage(page)).toBeVisible(SLOW);
+      await stageReady(page);
       await startRun(page);
       const cv = (await canvas(page).boundingBox())!;
       for (const id of ["left", "right", "brake", "hand", "gas"]) {
@@ -645,8 +640,7 @@ test.describe("no phone linked: Night run is as it was", () => {
     const linkRequests: string[] = [];
     page.on("request", (r) => /relay|link\/client|\/api\/link/i.test(r.url()) && linkRequests.push(r.url()));
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await expect(page.getByTestId("night-phone-hint")).toHaveCount(0);
     await expect(page.getByTestId("engine-phone-hint")).toHaveCount(0);
     await startRun(page);

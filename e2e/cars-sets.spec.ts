@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { openPiece } from "./helpers/stage";
 
 // The Drag strip as a best of three, end to end: three runs make a set with its own conditions, the cards after runs 1 and 2
 // say which run it was, the third run gives the set card, and a key, a tap or the button starts a new set with new conditions.
@@ -27,8 +28,7 @@ const snap = (p: Page) =>
 
 async function openStrip(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await p.getByTestId("engine-mode-drag").click();
   const dash = stage(p).getByRole("img", { name: /race dashboard/i });
   await expect(dash).toBeVisible();
