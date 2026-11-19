@@ -6,6 +6,7 @@ import { isMuted, onMuteChange, setMuted } from "./audio";
 import PairChip from "@/components/link/PairChip";
 import SoundPrompt from "./SoundPrompt";
 import { forTouch } from "./hints";
+import { StagePhaseContext } from "./stagePhase";
 
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
 // (a clip-path from the tile's rect to the whole window) and shrinks back on
@@ -328,9 +329,11 @@ export default function Stage({
         ))}
       </ul>
       <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 [@media(max-height:500px)]:!mx-1.5 [@media(max-height:500px)]:!mb-1.5 rounded-[14px] overflow-hidden border border-white/10">
-        <StageLabelContext.Provider value={setLabel}>
-          <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
-        </StageLabelContext.Provider>
+        <StagePhaseContext.Provider value={phase}>
+          <StageLabelContext.Provider value={setLabel}>
+            <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
+          </StageLabelContext.Provider>
+        </StagePhaseContext.Provider>
       </div>
     </div>,
     document.body,
