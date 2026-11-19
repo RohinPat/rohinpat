@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openPiece } from "./helpers/stage";
 
 // Cars, third pass (how it plays), end to end: a touch of the rail costs time and is counted, the second run counts down
 // quickly, and the strip's end card measures the reaction, the sixty feet and the shifts, against a par. The mock link
@@ -28,8 +29,7 @@ const dragCar = (p: Page) => p.evaluate(() => ({ ...(window as unknown as { __dr
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }

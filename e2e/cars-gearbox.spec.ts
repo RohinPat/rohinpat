@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // Night run's manual gearbox, end to end: an upshift in the green window pays (the dash says SHIFT, the car gets a boost), an
 // early one does not, and a downshift with the handbrake held is a clutch kick that starts a slide. The phone's paddles are the
@@ -23,8 +24,7 @@ const nightEval = <T,>(p: Page, fn: (g: Hook) => T) => p.evaluate(`(${fn.toStrin
 
 async function openCars(p: Page) {
   await p.goto("/interests");
-  await p.locator('[data-piece="engine"]').click();
-  await expect(stage(p)).toBeVisible(SLOW);
+  await openPiece(p, "engine");
   await expect(canvas(p)).toHaveAttribute("data-phase", "ready", SLOW);
   await expect(canvas(p)).toBeFocused(SLOW);
 }
@@ -143,7 +143,7 @@ test.describe("Night run: the manual gearbox pays", () => {
     await phone.locator('[data-app="offhours"]').click();
     await host.waitForURL("**/interests");
     await phone.locator('[data-piece="engine"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(phone.getByTestId("night-controller")).toBeVisible(SLOW);
     await expect(phone.getByTestId("night-controller")).toHaveAttribute("data-mode", "touch", { timeout: 12_000 });
     await expect(canvas(host)).toHaveAttribute("data-phase", "ready", SLOW);

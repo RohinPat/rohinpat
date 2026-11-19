@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // Three small things around the phone-as-controller, on the BroadcastChannel
 // mock session (run the dev server with NEXT_PUBLIC_LINK_MOCK=1): the "Click
@@ -112,7 +113,7 @@ test.describe("Click for sound", () => {
     const { context, host, phone } = await pair(browser, baseURL, autoplayPolicy);
     await forgetGesture(host);
     await phone.locator('[data-piece="watch"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await turnCrown(phone);
     const pill = host.getByTestId("sound-prompt");
     await expect(pill).toBeVisible(SLOW);
@@ -127,7 +128,7 @@ test.describe("Click for sound", () => {
     const b = await pair(browser, baseURL, autoplayPolicy);
     await forgetGesture(b.host);
     await b.phone.locator('[data-piece="watch"]').click();
-    await expect(stage(b.host)).toBeVisible(SLOW);
+    await stageReady(b.host);
     await turnCrown(b.phone);
     await expect(b.host.getByTestId("sound-prompt")).toBeVisible(SLOW);
     await b.host.keyboard.press("ArrowRight");
@@ -141,8 +142,7 @@ test.describe("Click for sound", () => {
     await context.addInitScript(autoplayPolicy);
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="keyboard"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "keyboard");
     // the stage hands focus to the keyboard once it has grown in: that is when keys reach it
     await expect(stage(page).locator("[data-autofocus]")).toBeFocused(SLOW);
     // typing is the click's successor: the browser lets the sound through. The keys are
@@ -159,7 +159,7 @@ test.describe("Cars: the title follows the mode", () => {
     test.setTimeout(90_000);
     const { context, host, phone } = await pair(browser, baseURL);
     await phone.locator('[data-piece="engine"]').click();
-    await expect(stage(host)).toBeVisible(SLOW);
+    await stageReady(host);
     await expect(stage(host).getByRole("heading", { level: 2 })).toHaveText("Night run");
     await expect(phone.getByTestId("phone-piece-mode")).toHaveText(/night run/i, SLOW);
     await host.getByTestId("engine-mode-drag").click();
@@ -176,8 +176,7 @@ test.describe("Cars: the title follows the mode", () => {
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await page.getByTestId("engine-mode-drag").click();
     await expect(stage(page).getByRole("heading", { level: 2 })).toHaveText("Drag strip");
     await page.getByRole("button", { name: "Close" }).click();

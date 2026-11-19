@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LabelPoint, Model, Viewer } from "./three/viewer";
 import { afterSettle, whenIdle } from "./tileSchedule";
+import { useStagePhase } from "./stagePhase";
 
 // Mounts a 3D exploded model (three.js is loaded only when this mounts, and a
 // tile preview waits until it is near the screen) and
@@ -46,6 +47,11 @@ export default function Exploded3D({
   readyRef.current = onReady;
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  // a stage's piece boots when the stage has opened: the grow has the main thread to itself, not a shader compile
+  const phase = useStagePhase();
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const pendingBoot = useRef<(() => void) | null>(null);
   // a tile whose turn came while a stage was open: it boots when the stage closes
   const lateBoot = useRef<(() => void) | null>(null);
 
@@ -68,8 +74,10 @@ export default function Exploded3D({
         setFailed(true);
       }
     };
-    if (!preview) void boot();
-    else if (host.current) {
+    if (!preview) {
+      if (phaseRef.current === "open") void boot();
+      else pendingBoot.current = () => void boot();
+    } else if (host.current) {
       // a tile loads three.js and builds its model only when it is about to be
       // seen (on a phone, a few seconds after the page has loaded), and then
       // waits its turn behind the other tiles (tileSchedule)
@@ -95,11 +103,19 @@ export default function Exploded3D({
       cancelSettle?.();
       cancelWait?.();
       lateBoot.current = null;
+      pendingBoot.current = null;
       v?.dispose();
       viewer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (phase !== "open" || !pendingBoot.current) return;
+    const go = pendingBoot.current;
+    pendingBoot.current = null;
+    go();
+  }, [phase]);
 
   useEffect(() => viewer.current?.setExplode(explode), [explode]);
   useEffect(() => viewer.current?.setSolo(solo), [solo, parts]);

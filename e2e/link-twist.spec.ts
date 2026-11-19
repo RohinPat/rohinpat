@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // The phone as the drag strip's throttle grip and the watch's crown, end to end,
 // on the BroadcastChannel mock session (run the dev server with
@@ -66,7 +67,7 @@ const pushMotion = (phone: Page, samples: unknown[]) =>
 // Cars opens on Night run (e2e/link-nightrun.spec.ts); the throttle grip is the Drag strip's
 async function openEngine(host: Page, phone: Page) {
   await phone.locator('[data-piece="engine"]').click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await host.getByTestId("engine-mode-drag").click();
   await expect(phone.getByTestId("engine-controller")).toBeVisible(SLOW);
   await expect(host.getByTestId("engine-phone-hint")).toHaveText(/twist your phone/i, SLOW);
@@ -74,7 +75,7 @@ async function openEngine(host: Page, phone: Page) {
 
 async function openWatch(host: Page, phone: Page) {
   await phone.locator('[data-piece="watch"]').click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await expect(phone.getByTestId("watch-controller")).toBeVisible(SLOW);
   await expect(host.getByTestId("watch-phone-hint")).toHaveText(/twist your phone to wind/i, SLOW);
 }
@@ -221,8 +222,7 @@ test.describe("no phone linked: the dash and the watch are as they were", () => 
     page.on("request", (r) => /relay|link\/client|\/api\/link/i.test(r.url()) && linkRequests.push(r.url()));
     await page.goto("/interests");
 
-    await page.locator('[data-piece="engine"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "engine");
     await expect(page.getByTestId("engine-phone-hint")).toHaveCount(0);
     await page.keyboard.down(" ");
     await page.waitForTimeout(700);
@@ -230,8 +230,7 @@ test.describe("no phone linked: the dash and the watch are as they were", () => 
     await page.keyboard.press("Escape");
     await expect(stage(page)).toHaveCount(0, SLOW);
 
-    await page.locator('[data-piece="watch"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "watch");
     await expect(page.getByTestId("watch-phone-hint")).toHaveCount(0);
     const slider = stage(page).getByRole("slider", { name: /crown/i });
     const before = Number(await slider.getAttribute("aria-valuenow"));

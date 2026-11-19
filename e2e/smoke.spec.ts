@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stageReady } from "./helpers/stage";
 
 // Home opens on a lock screen; unlock it the way a visitor would.
 async function unlock(page: import("@playwright/test").Page) {
@@ -227,10 +228,8 @@ test("Off hours: every piece opens full screen from the keyboard and Escape brin
     const tile = page.getByRole("button", { name: new RegExp(`^Play ${name}`) });
     await tile.focus();
     await page.keyboard.press("Enter");
-    const stage = page.getByRole("dialog");
-    await expect(stage).toBeVisible(SLOW_3D);
-    // focus moves into the stage
-    await expect.poll(() => stage.evaluate((el) => el.contains(document.activeElement)), SLOW_3D).toBe(true);
+    // the grow has ended and focus has moved into the stage
+    const stage = await stageReady(page, SLOW_3D.timeout);
     await page.keyboard.press("Escape");
     await expect(stage).toHaveCount(0, SLOW_3D);
     await expect(tile).toBeFocused(SLOW_3D);

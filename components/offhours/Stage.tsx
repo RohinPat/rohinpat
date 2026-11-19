@@ -6,6 +6,7 @@ import { isMuted, onMuteChange, setMuted } from "./audio";
 import PairChip from "@/components/link/PairChip";
 import SoundPrompt from "./SoundPrompt";
 import { forTouch } from "./hints";
+import { StagePhaseContext } from "./stagePhase";
 
 // Full-screen stage a piece opens into. It grows out of the tile you clicked
 // (a clip-path from the tile's rect to the whole window) and shrinks back on
@@ -76,14 +77,16 @@ export default function Stage({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
-  // the focus hand-off to the piece; cancelled on close, or it lands after the stage has started to close
-  const focusTimer = useRef(0);
+  // set when the stage starts to close: a focus hand-off that comes after this must not land on a stage that is going away
+  const closingRef = useRef(false);
   const [shown, setShown] = useState(false);
   const [closing, setClosing] = useState(false);
   const muted = useMuted();
   const [label, setLabel] = useState<StageLabel | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // reduced motion has no grow to wait for
+  const [settled, setSettled] = useState(reduce);
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const title = label?.title ?? meta.title;
   const hints = label?.how ?? meta.how;
@@ -91,7 +94,8 @@ export default function Stage({
 
   const close = () => {
     if (closing) return;
-    window.clearTimeout(focusTimer.current);
+    // a hand-off still waiting on the opening must not land now: the shrink ends later
+    closingRef.current = true;
     setClosing(true);
     window.setTimeout(onClose, reduce ? 0 : MS - 40);
   };
@@ -115,11 +119,6 @@ export default function Stage({
     body.style.top = `-${y}px`;
     body.style.width = "100%";
     const id = requestAnimationFrame(() => setShown(true));
-    // focus the piece once it has grown in
-    focusTimer.current = window.setTimeout(
-      () => (root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? closeBtn.current)?.focus({ preventScroll: true }),
-      reduce ? 0 : MS,
-    );
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // the pairing card is open: Escape closes that (PairChip), not the game
@@ -196,7 +195,6 @@ export default function Stage({
       [html.style.overflow, body.style.position, body.style.top, body.style.width] = prev;
       window.scrollTo({ top: y, behavior: "instant" });
       cancelAnimationFrame(id);
-      window.clearTimeout(focusTimer.current);
       window.removeEventListener("keydown", onKey, true);
       el?.removeEventListener("touchmove", onTouchMove);
       el?.removeEventListener("gesturestart", noGesture);
@@ -213,6 +211,54 @@ export default function Stage({
     ? `inset(${origin.top}px ${vw - origin.right}px ${vh - origin.bottom}px ${origin.left}px round 4px)`
     : "inset(0px 0px 0px 0px round 0px)";
   const open = shown && !closing;
+  const phase = closing ? "closing" : settled ? "open" : "opening";
+
+  // The piece gets focus when the grow has actually ended, not after a guessed delay. The grow is the root's own
+  // animation, so wait on its `finished` (a cancel or a replacement settles it too), and re-check on each frame for
+  // one started or replaced meanwhile. No animation at the next frame means no grow to wait for (no origin rect,
+  // zero duration, reduced motion). Nothing here is a timer, and a close never settles it.
+  useEffect(() => {
+    if (!shown || settled) return;
+    const el = root.current;
+    let raf = 0;
+    let dead = false;
+    const running = () => (el?.getAnimations?.() ?? []).filter((a) => a.playState !== "finished" && a.playState !== "idle");
+    const check = () => {
+      if (dead || closingRef.current) return;
+      const list = running();
+      if (!list.length) return setSettled(true);
+      void Promise.allSettled(list.map((a) => a.finished)).then(() => {
+        if (!dead) raf = requestAnimationFrame(check);
+      });
+    };
+    raf = requestAnimationFrame(check);
+    return () => {
+      dead = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [shown, settled]);
+  useEffect(() => {
+    if (!settled || closingRef.current) return;
+    (root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? closeBtn.current)?.focus({ preventScroll: true });
+  }, [settled]);
+  // a hidden tab runs no animation frames, so the stage would never show and never settle: hand focus over at once
+  useEffect(() => {
+    if (document.hidden) setSettled(true);
+  }, []);
+  // the grow ends, or the browser cancels it: either way the piece can take focus. A child's transition, or the shrink
+  // on close, does not count. Native listeners: React has no onTransitionCancel.
+  useEffect(() => {
+    const el = root.current;
+    const settle = (e: Event) => {
+      if (e.target === el && (e as TransitionEvent).propertyName === "clip-path" && !closingRef.current) setSettled(true);
+    };
+    el?.addEventListener("transitionend", settle);
+    el?.addEventListener("transitioncancel", settle);
+    return () => {
+      el?.removeEventListener("transitionend", settle);
+      el?.removeEventListener("transitioncancel", settle);
+    };
+  }, []);
 
   return createPortal(
     <div
@@ -220,6 +266,7 @@ export default function Stage({
       role="dialog"
       aria-modal="true"
       aria-labelledby="stage-title"
+      data-stage={phase}
       className="fixed inset-0 z-[90] flex flex-col bg-[var(--ink)] text-[var(--paper)]"
       style={{
         clipPath: open || reduce ? "inset(0px 0px 0px 0px round 0px)" : from,
@@ -282,9 +329,11 @@ export default function Stage({
         ))}
       </ul>
       <div className="relative flex-1 min-h-0 mx-2 mb-2 md:mx-4 md:mb-4 [@media(max-height:500px)]:!mx-1.5 [@media(max-height:500px)]:!mb-1.5 rounded-[14px] overflow-hidden border border-white/10">
-        <StageLabelContext.Provider value={setLabel}>
-          <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
-        </StageLabelContext.Provider>
+        <StagePhaseContext.Provider value={phase}>
+          <StageLabelContext.Provider value={setLabel}>
+            <StageSlotContext.Provider value={slot}>{children}</StageSlotContext.Provider>
+          </StageLabelContext.Provider>
+        </StagePhaseContext.Provider>
       </div>
     </div>,
     document.body,

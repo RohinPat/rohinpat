@@ -2,6 +2,7 @@ import { test, expect, type Browser, type BrowserContext, type Page } from "@pla
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { pairCode } from "./pair-code";
+import { openPiece, stageReady } from "./helpers/stage";
 
 // The phone as the keyboard board's keyboard and the music board's turntable,
 // end to end, on the BroadcastChannel mock session (run the dev server with
@@ -50,9 +51,9 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: path.join(SHOTS, name) });
 }
 
-async function openPiece(host: Page, phone: Page, id: string, controller: string, hint: string) {
+async function openPairedPiece(host: Page, phone: Page, id: string, controller: string, hint: string) {
   await phone.locator(`[data-piece="${id}"]`).click();
-  await expect(stage(host)).toBeVisible(SLOW);
+  await stageReady(host);
   await expect(phone.getByTestId(controller)).toBeVisible(SLOW);
   await expect(host.getByTestId(hint)).toBeVisible(SLOW);
 }
@@ -61,7 +62,7 @@ test.describe("phone controllers: keyboards", () => {
   test("typing on the phone's field types on the laptop's board, and the hint shows", async ({ browser, baseURL }) => {
     test.setTimeout(120_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "keyboard", "keyboard-controller", "keyboard-phone-hint");
+    await openPairedPiece(host, phone, "keyboard", "keyboard-controller", "keyboard-phone-hint");
     await expect(host.getByTestId("keyboard-phone-hint")).toHaveText(/type on your phone/i);
     await expect(phone.getByText("Tap here to type")).toBeVisible();
     await shot(phone, "keys-phone-idle.png");
@@ -99,7 +100,7 @@ test.describe("phone controllers: keyboards", () => {
   test("an IME-style composition sends each character once, and the Done button closes the keyboard", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "keyboard", "keyboard-controller", "keyboard-phone-hint");
+    await openPairedPiece(host, phone, "keyboard", "keyboard-controller", "keyboard-phone-hint");
     await phone.getByTestId("keyboard-toggle").click();
     await expect(phone.getByTestId("keyboard-controller")).toHaveAttribute("data-focused", "true");
     await expect(phone.getByTestId("keyboard-toggle")).toHaveText("Done typing");
@@ -122,8 +123,7 @@ test.describe("no phone linked: the keyboard board is exactly as it was", () => 
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="keyboard"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "keyboard");
     await expect(page.getByTestId("keyboard-phone-hint")).toHaveCount(0);
     await stage(page).locator('[role="application"]').focus();
     await page.keyboard.type("abc");
@@ -155,7 +155,7 @@ test.describe("phone controllers: music", () => {
   test("Play starts the laptop's deck, and the laptop's space bar comes back to the phone", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
+    await openPairedPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
     await expect(host.getByTestId("decks-phone-hint")).toHaveText(/scratch on your phone/i);
     await expect(phone.getByTestId("decks-controller")).toHaveAttribute("data-running", "false");
     await shot(phone, "decks-phone-idle.png");
@@ -175,7 +175,7 @@ test.describe("phone controllers: music", () => {
   test("going round the phone's record scratches the laptop's, backwards too, and letting go releases it", async ({ browser, baseURL }) => {
     test.setTimeout(75_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
+    await openPairedPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
     await phone.getByTestId("decks-play").click();
     await expect(stage(host).getByRole("button", { name: "Stop" })).toBeVisible(SLOW);
     await expect.poll(() => rate(host), { timeout: 10_000 }).toBeGreaterThan(50);
@@ -216,7 +216,7 @@ test.describe("phone controllers: music", () => {
   test("twist: hold the record, turn the phone, and the laptop's record turns", async ({ browser, baseURL }) => {
     test.setTimeout(75_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
+    await openPairedPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
     await phone.getByTestId("decks-play").click();
     await expect(stage(host).getByRole("button", { name: "Stop" })).toBeVisible(SLOW);
     await phone.locator('[data-mode-btn="twist"]').click();
@@ -242,7 +242,7 @@ test.describe("phone controllers: music", () => {
   test("with no motion allowed, Twist is off and the finger still works", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
+    await openPairedPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
     await phone.locator('[data-mode-btn="twist"]').click();
     // no samples arrive: after a couple of seconds it says so and goes back to the finger
     await expect(phone.getByText(/isn't sending motion data/i)).toBeVisible({ timeout: 8000 });
@@ -257,7 +257,7 @@ test.describe("phone controllers: music", () => {
   test("Cut: holding the phone's button is the fader", async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const { context, host, phone } = await onTheGrid(browser, baseURL);
-    await openPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
+    await openPairedPiece(host, phone, "decks", "decks-controller", "decks-phone-hint");
     const btn = phone.getByTestId("decks-cut");
     await phone.waitForTimeout(800); // let the layout settle before aiming at it
     const b = (await btn.boundingBox())!;
@@ -277,8 +277,7 @@ test.describe("no phone linked: the music board is exactly as it was", () => {
     const context = await browser.newContext({ baseURL, viewport: LAPTOP });
     const page = await context.newPage();
     await page.goto("/interests");
-    await page.locator('[data-piece="decks"]').click();
-    await expect(stage(page)).toBeVisible(SLOW);
+    await openPiece(page, "decks");
     await expect(page.getByTestId("decks-phone-hint")).toHaveCount(0);
     const canvas = stage(page).locator("canvas").first();
     const box = (await canvas.boundingBox())!;
