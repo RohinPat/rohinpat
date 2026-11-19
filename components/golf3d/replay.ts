@@ -1,7 +1,7 @@
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { at } from "@/components/offhours/golf/flight";
 import type { Replay } from "@/components/offhours/golf/play";
-import { terrainOf } from "@/components/offhours/golf/terrain";
+import { reliefOf } from "./relief";
 import type { View } from "./flyover";
 
 // A great shot played again (play.ts decides which): the camera stands low just
@@ -19,7 +19,9 @@ export function replayBall(r: Replay): [number, number, number] {
 
 export function replayView(hole: BuiltHole, r: Replay, w: number, h: number): View {
   const s = r.shot;
-  const G = terrainOf(hole).y;
+  // the drawn ground (the green is drawn exaggerated, relief.ts): the camera stands on that, and the ball is lifted to it
+  const rel = reliefOf(hole);
+  const G = rel.y;
   const n = s.n - 1;
   const ex = s.ox + s.pts[n * 4 + 1], ez = s.oz + s.pts[n * 4 + 3];
   // along the shot and to its right
@@ -31,7 +33,8 @@ export function replayView(hole: BuiltHole, r: Replay, w: number, h: number): Vi
   const cx = ex + ux * back + rx * side, cz = ez + uz * back + rz * side;
   const cy = Math.max(G(cx, cz), G(ex, ez)) + (r.why === "long" ? 3 : 1.5);
   // look at the ball, held a little toward where it ends, so a ball high in the air does not tip the camera over
-  const [bx, by, bz] = replayBall(r);
+  const [bx, by0, bz] = replayBall(r);
+  const by = by0 + rel.lift(bx, bz);
   const k = 0.3;
   const tx = bx + (ex - bx) * k, tz = bz + (ez - bz) * k;
   const ty = Math.min(by + (G(ex, ez) - by) * k, cy + Math.hypot(tx - cx, tz - cz) * 0.6);

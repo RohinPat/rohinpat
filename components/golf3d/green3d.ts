@@ -19,14 +19,17 @@ const SINK = 0.08;
  * fine mesh meets the terrain where it ends. Never under a pond, whose cells the mesh leaves out.
  */
 export function greenSink(hole: BuiltHole) {
+  const lift = reliefOf(hole).lift;
   return (x: number, z: number) => {
+    // where the drawn green dips below the true ground (its low side, and the apron past it), the terrain sinks with it
+    const dip = Math.max(0, -lift(x, z));
     const [gx, gy] = hole.toGreen(x, z);
-    if (gx < -GPAD || gx > GW + GPAD || gy < -GPAD || gy > GH + GPAD) return 0;
+    if (gx < -GPAD || gx > GW + GPAD || gy < -GPAD || gy > GH + GPAD) return dip;
     const o = outsideGreen(hole, gx, gy);
-    if (o >= HOLD + BANK) return 0;
+    if (o >= HOLD + BANK) return dip;
     if (hole.surfaceAt(x, z) === "water") return 0;
     const u = Math.max(0, Math.min(1, (o - HOLD) / BANK));
-    return SINK * (1 - u * u * (3 - 2 * u));
+    return dip + SINK * (1 - u * u * (3 - 2 * u));
   };
 }
 
@@ -52,6 +55,12 @@ const PASS = 1.25;
 const PASS_ANGLE = 0.6;
 /** the cleanup lap round the edge, m */
 const LAP = 0.6;
+
+/**
+ * The hillshade's knee on the drawn gradient, soft on purpose: the geometry carries the tilt now (relief.ts draws about 8% on every
+ * green), so the shade only grades it. At 8% the shade is about a third of full strength, with no edge where the slope turns.
+ */
+const SHADE_KNEE = 4;
 
 /**
  * The light for the hillshade, in the course's frame: from the left of the line the putt camera looks down (the last
@@ -192,13 +201,14 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
         const a = j * nx + i;
         const gx = (Hy[j * nx + Math.min(nx - 1, i + 1)] - Hy[j * nx + Math.max(0, i - 1)]) / (g * (Math.min(nx - 1, i + 1) - Math.max(0, i - 1)));
         const gz = (Hy[Math.min(nz - 1, j + 1) * nx + i] - Hy[Math.max(0, j - 1) * nx + i]) / (g * (Math.min(nz - 1, j + 1) - Math.max(0, j - 1)));
-        // the slope toward the light: positive where the ground faces it, so it is lit. A steep knee (30 on the gradient)
+        // the slope toward the light: positive where the ground faces it, so it is lit. A steep knee (SHADE_KNEE on the gradient)
         // so a one per cent break is a faint tone and six per cent is a clear face of light or shade
-        const sh = Math.tanh(-(gx * lx + gz * lz) * 30);
+        const sh = Math.tanh(-(gx * lx + gz * lz) * SHADE_KNEE);
         const hgt = Rz[a] === Rz[a] ? Math.max(-1, Math.min(1, ((Rz[a] - lo) / span) * 2 - 1)) : 0;
         let r: number, gg: number, b: number, al: number;
-        if (sh >= 0) [r, gg, b, al] = [255, 255, 200, sh * 0.42];
-        else [r, gg, b, al] = [8, 50, 78, -sh * 0.55];
+        // (low contrast: a dark side reads as the ground turning away, not as a stain)
+        if (sh >= 0) [r, gg, b, al] = [255, 255, 200, sh * 0.22];
+        else [r, gg, b, al] = [8, 50, 78, -sh * 0.3];
         // the height tint: a soft warm wash high up, a soft cool one low down
         const ta = Math.abs(hgt) * 0.2;
         GX[a] = gx;
@@ -276,7 +286,8 @@ export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X
       const [gx, gy] = hole.toGreen(x, z);
       R[j * nx + i] = relief.rise(gx, gy);
     }
-  const EX = 3;
+  // the normals of the drawn surface: its own slopes now (relief.ts draws them EXAG times the true), so no extra exaggeration
+  const EX = 1;
   const pos: number[] = [], nor: number[] = [], uv: number[] = [];
   const idx = new Map<number, number>();
   const tri: number[] = [];
