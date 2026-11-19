@@ -8,6 +8,8 @@ import { bakeCost, terrainOf } from "@/components/offhours/golf/terrain";
 // number of full() evaluations and fine tiles it takes to answer a fixed set of queries a visitor makes (a tee shot's
 // flight, the ground either side of the line, the green). A timed budget hides a regression on a fast machine and fails
 // on a slow one; these counts do not move with the machine. Each ceiling is today's count plus about 25%.
+// (the tiles now count the lake tiles too, which the bank reads near a shore. Holes 2, 6 and 8 had 33, 0, 0 counted, so their tile
+// ceilings moved to the measured 72, 83 and 61 plus 25%. Their full() ceilings stay: all three full() counts fell)
 
 // (the queries bake up to 33k ground points: hole 9 takes about 5 s in a full run, so the repo's standard 20 s. The count is the guard, not the time)
 vi.setConfig({ testTimeout: 20_000 });
@@ -15,13 +17,13 @@ vi.setConfig({ testTimeout: 20_000 });
 /** the ceilings, per hole (n): full() calls and fine tiles, for the queries below (today's counts + about 25%) */
 const CEILING: Record<number, { full: number; tiles: number }> = {
   1: { full: 1933, tiles: 0 },
-  2: { full: 10405, tiles: 33 },
+  2: { full: 10405, tiles: 90 },
   3: { full: 41589, tiles: 142 },
   4: { full: 2269, tiles: 0 },
   5: { full: 1950, tiles: 0 },
-  6: { full: 2190, tiles: 0 },
+  6: { full: 2190, tiles: 104 },
   7: { full: 1960, tiles: 0 },
-  8: { full: 2410, tiles: 0 },
+  8: { full: 2410, tiles: 77 },
   9: { full: 34297, tiles: 115 },
 };
 

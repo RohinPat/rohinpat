@@ -54,6 +54,9 @@ export type Terrain = {
   pad: number;
   /** the green's own rise above its pad at a point of the green, m (0 off its raised ground) */
   rise: (gx: number, gy: number) => number;
+  /** the green's bank: its width, m (BANK, or wider where the rim rises more), and how far its relief reaches past its box, m */
+  greenBank: number;
+  greenReach: number;
   /** the hole's features (features.ts), for the 3D mesh to refine round */
   fx: Compiled;
   /** the ground round the green is shaped by the hole (a short ease, a tilted pad or a feature near): the mesh is refined there */
@@ -278,6 +281,33 @@ export function terrainOf(hole: BuiltHole): Terrain {
     return y;
   };
 
+  // the green's bank: BANK m, or wider where the green rises more at its rim. The bank is a smoothstep, which peaks at 1.5 times
+  // its average slope, and the green's own slope adds to it: 1 in 3 needs a run of 1.5 times the rise over (1 in 3 less that
+  // slope). Read from the green's own height, not a per-hole width (a rim 0.6 m above its surround banked 2.5 m was 1 in 2.5)
+  const H = hole.green;
+  const greenRim = (w: number, withSlope: boolean) => {
+    let low = Infinity, hi = -Infinity, slope = 0;
+    const P = Math.max(PAD, HOLD + w + 0.5);
+    for (let gy = -P; gy <= GH + P; gy += 0.25)
+      for (let gx = -P; gx <= GW + P; gx += 0.25) {
+        const o = outsideGreen(hole, gx, gy);
+        if (o >= HOLD + w) continue;
+        low = Math.min(low, greenHeight(H, gx, gy));
+        if (o > HOLD - 0.5) hi = Math.max(hi, greenHeight(H, gx, gy));
+        if (!withSlope) continue;
+        const e = 0.05;
+        const sx = (greenHeight(H, gx + e, gy) - greenHeight(H, gx - e, gy)) / (2 * e);
+        const sy = (greenHeight(H, gx, gy + e) - greenHeight(H, gx, gy - e)) / (2 * e);
+        slope = Math.max(slope, Math.hypot(sx, sy));
+      }
+    return { low: Number.isFinite(low) ? low : 0, hi: Number.isFinite(hi) ? hi : 0, slope };
+  };
+  const r0 = greenRim(BANK, true);
+  const bankW = Math.max(BANK, (1.5 * (r0.hi - r0.low + 0.03)) / (1 / 3 - r0.slope));
+  const low = greenRim(bankW, false).low;
+  // the relief's reach past the green's box: out to where the bank has run out, so no step at its edge
+  const reach = Math.max(PAD, HOLD + bankW + 0.5);
+
   // levelled: the tee, the green's pad
   const teeY = line(0, 0) + fx.y(0, 0);
   const [gcx, gcz] = hole.fromGreen(GW / 2, GH / 2);
@@ -287,7 +317,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
   const onPad = (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
     if (gx < -40 || gx > GW + 40 || gy < -40 || gy > GH + 40) return 0;
-    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + BANK + 0.5)) / EASE);
+    return 1 - smooth((outsideGreen(hole, gx, gy) - (HOLD + bankW + 0.5)) / EASE);
   };
   const levelled = (x: number, z: number) => {
     const y = lerp(raw(x, z), teeY, 1 - smooth((Math.hypot(x, z) - T_FLAT) / T_EASE));
@@ -460,6 +490,7 @@ export function terrainOf(hole: BuiltHole): Terrain {
     if (!g) {
       // (nodes are baked as a read first reaches them, as the grid's are: a NaN is a node not yet baked)
       g = new Float32Array((LAKE_TN + 1) * (LAKE_TN + 1)).fill(NaN);
+      bakeCost.tiles++;
       lakeTiles.set(key, g);
     }
     const node = (i: number, j: number) => {
@@ -472,8 +503,10 @@ export function terrainOf(hole: BuiltHole): Terrain {
     const u = ui - i, v = uj - j;
     return lerp(lerp(node(i, j), node(i + 1, j), u), lerp(node(i, j + 1), node(i + 1, j + 1), u), v);
   };
+  // (checked once: a hole whose only water is the sea pays nothing per read)
+  const lakeLive = lakes.some((l) => !l.sea);
   const base = (x: number, z: number) => {
-    if (lakes.some((l) => !l.sea)) {
+    if (lakeLive) {
       const ti = Math.floor(x / LAKE_TILE), tj = Math.floor(z / LAKE_TILE), key = tileKey(ti, tj);
       let near = lakeMode.get(key);
       if (near === undefined) (near = nearTile(ti, tj)), lakeMode.set(key, near);
@@ -504,15 +537,12 @@ export function terrainOf(hole: BuiltHole): Terrain {
   };
 
   // the green: the putt's height field raised on the pad, held past the fringe, then banked down
-  const H = hole.green;
-  const fade = (gx: number, gy: number) => 1 - smooth((outsideGreen(hole, gx, gy) - HOLD) / BANK);
-  let low = Infinity;
-  for (let gy = -PAD; gy <= GH + PAD; gy += 0.25) for (let gx = -PAD; gx <= GW + PAD; gx += 0.25) if (fade(gx, gy) > 0) low = Math.min(low, greenHeight(H, gx, gy));
-  if (!Number.isFinite(low)) low = 0;
+  // (cut off where the bank has run out, measured from the green's outline: the outline can reach past its box, so a box
+  // cut would leave a step there)
   const relief = (gx: number, gy: number) => {
-    if (gx < -PAD || gx > GW + PAD || gy < -PAD || gy > GH + PAD) return 0;
-    const f = fade(gx, gy);
-    return f > 0 ? f * (greenHeight(H, gx, gy) - low + 0.03) : 0;
+    const o = outsideGreen(hole, gx, gy);
+    if (o >= HOLD + bankW) return 0;
+    return (1 - smooth((o - HOLD) / bankW)) * (greenHeight(H, gx, gy) - low + 0.03);
   };
 
   const anyPot = potted.some(Boolean);
@@ -536,6 +566,8 @@ export function terrainOf(hole: BuiltHole): Terrain {
       return wet(x, z) - POND_LIP;
     },
     pad,
+    greenBank: bankW,
+    greenReach: reach,
     rise: relief,
     fx,
     greenShaped: G.greenEase !== undefined || !!G.padTilt || fx.near(gcx, gcz, 30),

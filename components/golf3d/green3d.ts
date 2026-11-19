@@ -2,8 +2,8 @@ import * as THREE from "three";
 import { seeded } from "@/components/offhours/useCanvas";
 import type { BuiltHole } from "@/components/offhours/golf/course";
 import { GH, GW, shapeR } from "@/components/offhours/golf/green";
-import { BANK, HOLD, outsideGreen } from "@/components/offhours/golf/terrain";
-import { PAD as GPAD, reliefOf } from "./relief";
+import { HOLD, outsideGreen, terrainOf } from "@/components/offhours/golf/terrain";
+import { reliefOf } from "./relief";
 
 // The green as the hole's scene draws it: a fine mesh (buildGreen) over a coarse terrain that is sunk beneath it
 // (greenSink), a texture painted pixel by pixel from the green's own outline (the collar, the cleanup lap, the mown
@@ -19,13 +19,13 @@ const SINK = 0.08;
  * fine mesh meets the terrain where it ends. Never under a pond, whose cells the mesh leaves out.
  */
 export function greenSink(hole: BuiltHole) {
+  const { greenBank: bank } = terrainOf(hole);
   return (x: number, z: number) => {
     const [gx, gy] = hole.toGreen(x, z);
-    if (gx < -GPAD || gx > GW + GPAD || gy < -GPAD || gy > GH + GPAD) return 0;
     const o = outsideGreen(hole, gx, gy);
-    if (o >= HOLD + BANK) return 0;
+    if (o >= HOLD + bank) return 0;
     if (hole.surfaceAt(x, z) === "water") return 0;
-    const u = Math.max(0, Math.min(1, (o - HOLD) / BANK));
+    const u = Math.max(0, Math.min(1, (o - HOLD) / bank));
     return SINK * (1 - u * u * (3 - 2 * u));
   };
 }
@@ -81,8 +81,9 @@ function lightOf(hole: BuiltHole): [number, number] {
  */
 export function buildGreen(hole: BuiltHole, canvas: HTMLCanvasElement, main: { X0: number; Z0: number; s: number }, tier: { gcell: number; gtex: number }, disposables: { dispose: () => void }[], move = false) {
   const relief = reliefOf(hole);
-  const [ax, az] = hole.fromGreen(-GPAD, GH + GPAD);
-  const [bx, bz] = hole.fromGreen(GW + GPAD, -GPAD);
+  const reach = terrainOf(hole).greenReach;
+  const [ax, az] = hole.fromGreen(-reach, GH + reach);
+  const [bx, bz] = hole.fromGreen(GW + reach, -reach);
   const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), z0 = Math.min(az, bz), z1 = Math.max(az, bz);
   const W = x1 - x0, L = z1 - z0;
 

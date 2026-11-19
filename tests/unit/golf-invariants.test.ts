@@ -125,9 +125,9 @@ describe("the play ground is walkable", () => {
   // - a cliff's own face (features.ts cliff), and a bunker's surface (its sand, and a pot's sod face): dug or built, not a bank;
   // - a steep spot the hole's declared landforms make (mounds, ridges, bowls, hollows, shelves, faces, terraces): the test
   //   removes them, and the spot is exempt only if the ground without them is walkable (so a bank the landforms did not make is not);
-  // - the green's own surround, which the terrain eases down to the pad over greenEase (default GREEN_EASE, 14 m)
+  // - a green's rim the hole declares with its own greenEase (a punchbowl's rim, a false front): within that ease only.
+  //   An undeclared ease is not an exemption: the green's bank is held to the same rule as any bank
   const IN_PLAY = ["fairway", "rough", "fescue", "waste", "green", "fringe"];
-  const GREEN_EASE_DEFAULT = 14;
   for (const d of DEFS) {
     it(`hole ${d.n} (${d.name}): the slope of the ground in play is at most 1 in 3, off the exempt faces and landforms`, () => {
       const h = hole(d.n);
@@ -135,7 +135,7 @@ describe("the play ground is walkable", () => {
       // the same hole without its declared landforms: the ground the steep spots are judged against
       const bare = buildHole({ ...d, features: undefined, ground: d.ground && { ...d.ground, mounds: undefined } });
       const gBare = terrainOf(bare);
-      const ease = d.ground?.greenEase ?? GREEN_EASE_DEFAULT;
+      const ease = d.ground?.greenEase;
       const b = h.shape.box;
       let worst = 0, at = "";
       for (let x = b.x0; x <= b.x1; x += 1)
@@ -147,7 +147,7 @@ describe("the play ground is walkable", () => {
             return q.along > -0.5 && q.along < 1.5 && q.c > -c.run * 4 - 4 && q.c < c.run + c.talus + 4;
           })) continue;
           const [gx, gy] = h.toGreen(x, z);
-          if (sf !== "green" && sf !== "fringe" && outsideGreen(h, gx, gy) < ease) continue;
+          if (ease !== undefined && sf !== "green" && sf !== "fringe" && outsideGreen(h, gx, gy) < ease) continue;
           const s = Math.hypot(...g.slope(x, z));
           if (s <= 1 / 3) continue;
           if (Math.hypot(...gBare.slope(x, z)) <= 1 / 3) continue;
