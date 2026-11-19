@@ -93,11 +93,13 @@ test.describe("Drag strip: a set is three runs", () => {
     const summary = results.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length} node(s) — ${v.help}`);
     expect(summary, summary.join("\n")).toEqual([]);
 
-    // Enter straight after the line does not skip the card; a moment later it starts the next set
+    // Enter straight after the line does not skip the card: the card holds for a second of the car's clock, so the hold is put on it and Enter is pressed inside it; once the card reads ready, Enter starts the next set
+    await expect(live(page)).toContainText(/^Set done\./);
+    await page.evaluate(() => ((window as unknown as { __drag: DragHook }).__drag.car.doneT = 0));
+    await expect(stage(page).locator("[data-card='hold']")).toHaveCount(1);
     await page.keyboard.press("Enter");
     expect((await snap(page)).phase).toBe("done");
-    await expect(live(page)).toContainText(/^Set done\./);
-    await page.waitForTimeout(1100);
+    await expect(stage(page).locator("[data-card='ready']")).toHaveCount(1, SLOW);
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await snap(page)).phase, SLOW).toBe("idle");
     const next = await snap(page);
@@ -130,8 +132,8 @@ test.describe("Drag strip: a set is three runs", () => {
     await runIt(page, 300);
     expect((await snap(page)).runs).toBe(3);
 
-    // the button (a tap) on the set card starts the next set, which races the best run of the visit until it has a run of its own
-    await page.waitForTimeout(1100);
+    // the button (a tap) on the set card starts the next set once the card reads ready (the hold is on the car's clock, not the wall's)
+    await expect(stage(page).locator("[data-card='ready']")).toHaveCount(1, SLOW);
     await stage(page).getByRole("button", { name: /new set/i }).click();
     await expect.poll(async () => (await snap(page)).phase, SLOW).toBe("idle");
     const c = await snap(page);

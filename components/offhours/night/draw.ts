@@ -5,7 +5,8 @@ import { fontFamilies } from "../font";
 import { MARK_N, SMOKE_N, SPARK_N } from "./fx";
 import { BRIDGE, ROCK_L, ROCK_R, TUNNEL, heightAt, pointAt, type Point } from "./road";
 import type { Scene } from "./scene";
-import { BOULDER, HOUSE, LAMP, PINE, getScenery, type Scenery } from "./scenery";
+import { HOUSE, LAMP, PINE, getScenery, type Scenery } from "./scenery";
+import { planRoadside, type Shown } from "./roadside";
 import { P, newView, project, type View } from "./view";
 
 // The road, in the classic arcade way but properly projected: every node of the
@@ -53,6 +54,9 @@ const view: View = newView();
 const tmp: Point = { x: 0, y: 0, z: 0, phi: 0 };
 const tmp2 = { x: 0, y: 0, z: 0 };
 let nVis = 0;
+/** what of the roadside shows this frame (roadside.ts decides; the painter draws it), and how many */
+const plan: Shown[] = [];
+let nPlan = 0;
 
 /** where a station of node k lands: written to SX/SY. Depth is clamped just ahead of the camera (what is behind never shows) */
 function station(si: number, k: number, lat: number, yo: number, f: number, w2: number, hy: number) {
@@ -204,6 +208,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
       maxY = YC[k + 1];
     }
   }
+  // what of the roadside shows: nothing behind a crest or a cliff, and it fades out at the end of the drawn road
+  nPlan = planRoadside(road, sty, v, carS, i0, N, decor, plan);
 
   const get = (si: number, k: number) => SX[si * MAXN + k];
   const gety = (si: number, k: number) => SY[si * MAXN + k];
@@ -373,10 +379,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
   if (!sc.reduce) drawMarks(ctx, sc, v, carS - 10, carS + 140);
 
   // ---- the roadside beyond the rail, far to near: pines, houses, boulders, lamps and the landmarks (the nearest are drawn after the rail)
-  const sFar = carS + N * seg;
-  const sFar0 = sFar;
-  drawProps(ctx, a, sc, v, i0, sty, false, decor);
-  if (decor < 3) drawLandmarks(ctx, a, sc, v, sty, carS, decor > 1 ? Math.min(sFar, carS + 170) : sFar, false, decor);
+  const sFar0 = carS + N * seg;
+  drawProps(ctx, a, sc, v, sty, false, decor);
+  if (decor < 3) drawLandmarks(ctx, a, sc, v, sty, false, decor);
 
   // ---- the guardrail (a solid parapet on the bridge, walls in the tunnel)
   cur = -1;
@@ -591,52 +596,35 @@ export function drawScene(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, q
   }
 
   // ---- the nearest of the roadside, over the rail
-  drawProps(ctx, a, sc, v, i0, sty, true, decor);
-  if (decor < 3) drawLandmarks(ctx, a, sc, v, sty, carS, decor > 1 ? Math.min(sFar, carS + 170) : sFar, true, decor);
+  drawProps(ctx, a, sc, v, sty, true, decor);
+  if (decor < 3) drawLandmarks(ctx, a, sc, v, sty, true, decor);
 
-  // ---- chevron boards on the outside of the corners
-  for (const sign of road.signs) {
-    if (sign.s < carS - 6 || sign.s > sFar) continue;
-    const lat = sign.side * (rail + 1.0);
-    pointAt(road, sign.s, lat, tmp);
-    const b = bucketOf(Math.max(0, (tmp.x - cam.x) * v.sinG + (tmp.z - cam.z) * v.cosG));
-    // the pole, the board
-    const y0 = tmp.y;
-    const nx = Math.cos(tmp.phi);
-    const nz = -Math.sin(tmp.phi);
-    if (!project(v, tmp.x, y0, tmp.z)) continue;
-    const bx = P.x, by = P.y, z = P.z;
-    const half = 0.95;
-    if (!project(v, tmp.x - nx * half, y0 + 2.5, tmp.z - nz * half)) continue;
-    const x0 = P.x, yT = P.y;
-    if (!project(v, tmp.x + nx * half, y0 + 1.15, tmp.z + nz * half)) continue;
-    const x1 = P.x, yB = P.y;
-    ctx.fillStyle = a.pal.post[b];
-    const pw = Math.max(1, (0.14 * f) / z);
-    ctx.fillRect(bx - pw / 2, yT, pw, by - yT);
-    ctx.fillStyle = pal.board[b];
-    ctx.fillRect(Math.min(x0, x1), yT, Math.abs(x1 - x0), yB - yT);
-    // the arrow points the way the road turns
-    const cx = (x0 + x1) / 2;
-    const cy = (yT + yB) / 2;
-    const ww = Math.abs(x1 - x0) * 0.26;
-    const hh = (yB - yT) * 0.3;
-    const d = sign.dir;
-    ctx.strokeStyle = pal.edge[b];
-    ctx.lineWidth = Math.max(1.2, (0.17 * f) / z);
-    ctx.lineJoin = "miter";
-    ctx.beginPath();
-    ctx.moveTo(cx - d * ww, cy - hh);
-    ctx.lineTo(cx + d * ww, cy);
-    ctx.lineTo(cx - d * ww, cy + hh);
-    ctx.stroke();
-  }
-
-  // ---- the gates
-  for (let g = 0; g < road.checks.length; g++) {
-    const gs = road.checks[g];
-    if (gs < carS - 3 || gs > sFar) continue;
-    drawGate(ctx, a, sc, v, gs, g === road.checks.length - 1, g < sc.cp, g + 1);
+  // ---- chevron boards on the outside of the corners, and the gates (each cut and faded as the plan says)
+  for (let t = 0; t < nPlan; t++) {
+    const it = plan[t];
+    if (it.what === "sign") {
+      const sign = road.signs[it.i];
+      const cut = it.clip < Infinity;
+      if (cut) {
+        ctx.save();
+        clipAbove(ctx, v, it.clip);
+      }
+      ctx.globalAlpha = it.fade;
+      paintSign(ctx, a, road, v, sign, rail);
+      if (cut) ctx.restore();
+      else ctx.globalAlpha = 1;
+    } else if (it.what === "gate") {
+      const g = it.i;
+      const cut = it.clip < Infinity;
+      if (cut) {
+        ctx.save();
+        clipAbove(ctx, v, it.clip);
+      }
+      ctx.globalAlpha = it.fade;
+      drawGate(ctx, a, sc, v, road.checks[g], g === road.checks.length - 1, g < sc.cp, g + 1);
+      if (cut) ctx.restore();
+      else ctx.globalAlpha = 1;
+    }
   }
 
   // ---- the headlights: a warm pool on the road ahead, as an additive gradient
@@ -692,73 +680,69 @@ function nodeProj(k: number, lat: number, yo: number, v: View): boolean {
 /** nearer than this the roadside is drawn after the rail (it can stand in front of it), farther before it */
 const NEAR_Z = 42;
 
-/** the pines, houses and boulders beside the road, and its lamps, far to near */
-function drawProps(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, i0: number, sty: Scenery, near: boolean, decor: number) {
+/** the pines, houses and boulders beside the road, and its lamps, far to near (roadside.ts has said what shows and where it is cut) */
+function drawProps(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, sty: Scenery, near: boolean, decor: number) {
   const road = sc.road;
   const rail = road.railHalf;
-  const f = v.f;
-  const maxZ = decor === 0 ? 330 : decor === 1 ? 190 : 100;
-  const sp = a.sprites;
   let alpha = 1;
-  for (let t = nVis - 1; t >= 0; t--) {
-    const k = VIS[t];
-    const z0 = NCZ[k];
-    if (z0 < NEAR_Z !== near || z0 > maxZ) continue;
-    const i = i0 + k;
-    for (let slot = 0; slot < 4; slot++) {
-      const kd = sty.kind[i * 4 + slot];
-      if (kd === 0) continue;
-      const side = slot < 2 ? -1 : 1;
-      if (kd === LAMP) {
-        drawLamp(ctx, a, v, k, side, decor, rail);
-        alpha = 1;
-        continue;
-      }
-      if (decor > 2) continue;
-      // far ones thin out: every other tree beyond 140 m
-      if ((z0 > 140 || decor > 1) && (i & 1) && kd === PINE) continue;
-      if (z0 < 12 && kd !== LAMP) continue;
-      if (kd === BOULDER && z0 > 150) continue;
-      if (!nodeProj(k, side * (rail + sty.out[i * 4 + slot] * 0.25), 0, v)) continue;
-      const z = P.z;
-      const sz = sty.size[i * 4 + slot] / 255;
-      let img: HTMLCanvasElement;
-      let wm: number;
-      if (kd === PINE) {
-        img = sp.pine[(sty.size[i * 4 + slot] >> 2) % 3];
-        wm = 3.6 + 3.8 * sz;
-      } else if (kd === HOUSE) {
-        if (decor > 0 || z0 < 26) continue;
-        img = sp.house[sty.size[i * 4 + slot] & 1];
-        wm = 7 + 4 * sz;
+  for (let t = 0; t < nPlan; t++) {
+    const it = plan[t];
+    if (it.what !== "prop" || (it.z < NEAR_Z) !== near) continue;
+    const i = it.i;
+    const slot = it.slot;
+    const kd = sty.kind[i * 4 + slot];
+    const side = slot < 2 ? -1 : 1;
+    const cut = it.clip < Infinity;
+    if (kd === LAMP) {
+      if (cut) {
+        ctx.save();
+        clipAbove(ctx, v, it.clip);
+        drawLamp(ctx, a, v, it.k, side, decor, rail, it.fade);
+        ctx.restore();
       } else {
-        if (decor > 0) continue;
-        img = sp.rock;
-        wm = 1.4 + 3 * sz;
+        drawLamp(ctx, a, v, it.k, side, decor, rail, it.fade);
+        alpha = 1;
       }
-      const pw = (wm * f) / z;
-      const ph = (pw * img.height) / img.width;
-      if (ph < 2 || P.x + pw / 2 < 0 || P.x - pw / 2 > v.w || P.y - ph > v.h) continue;
-      const al = z < 110 ? 1 : Math.max(0, 1 - (z - 110) / (maxZ + 30 - 110));
-      if (al !== alpha) {
-        ctx.globalAlpha = al;
-        alpha = al;
-      }
-      ctx.drawImage(img, P.x - pw / 2, P.y - ph * 0.98, pw, ph);
+      continue;
     }
+    // the same sprite the plan measured: its base on the ground and its width
+    nodeProj(it.k, side * (rail + sty.out[i * 4 + slot] * 0.25), 0, v);
+    const sz = sty.size[i * 4 + slot] / 255;
+    const img = kd === PINE ? a.sprites.pine[(sty.size[i * 4 + slot] >> 2) % 3] : kd === HOUSE ? a.sprites.house[sty.size[i * 4 + slot] & 1] : a.sprites.rock;
+    const wm = kd === PINE ? 3.6 + 3.8 * sz : kd === HOUSE ? 7 + 4 * sz : 1.4 + 3 * sz;
+    const pw = (wm * v.f) / P.z;
+    const ph = (pw * img.height) / img.width;
+    if (cut) {
+      ctx.save();
+      clipAbove(ctx, v, it.clip);
+      ctx.globalAlpha = it.fade;
+      ctx.drawImage(img, P.x - pw / 2, P.y - ph * 0.98, pw, ph);
+      ctx.restore();
+      continue;
+    }
+    if (it.fade !== alpha) {
+      ctx.globalAlpha = it.fade;
+      alpha = it.fade;
+    }
+    ctx.drawImage(img, P.x - pw / 2, P.y - ph * 0.98, pw, ph);
   }
   ctx.globalAlpha = 1;
+}
+
+/** the picture above the screen line `y` only: what stands behind a crest or a cliff is cut there */
+function clipAbove(ctx: CanvasRenderingContext2D, v: View, y: number) {
+  ctx.beginPath();
+  ctx.rect(-1e4, -1e4, v.w + 2e4, y + 1e4);
+  ctx.clip();
 }
 
 const tmpB: Point = { x: 0, y: 0, z: 0, phi: 0 };
 
 /** a sodium lamp on a pole with an arm over the road: its glow, the pool of light it throws down, and its reflection in the asphalt */
-function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, side: number, decor: number, rail: number) {
+function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, side: number, decor: number, rail: number, fade: number) {
   const f = v.f;
   if (!nodeProj(k, side * (rail + 1.1), 0, v)) return;
   const bx = P.x, by = P.y, z = P.z;
-  // a lamp wholly off to the side of the picture is not drawn
-  if (bx < -300 || bx > v.w + 300) return;
   const b = bucketOf(z);
   if (!nodeProj(k, side * (rail + 1.1), 7.6, v)) return;
   const tx = P.x, ty = P.y;
@@ -766,6 +750,8 @@ function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, 
   if (!nodeProj(k, side * (rail - 0.9), 8.0, v)) return;
   const hx = P.x, hyy = P.y;
   const pw = Math.max(1, (0.22 * f) / z);
+  // the pole and arm share the glow's fade, haze and cut
+  ctx.globalAlpha = fade;
   ctx.fillStyle = a.pal.post[b];
   ctx.fillRect(bx - pw / 2, ty, pw, by - ty);
   ctx.strokeStyle = a.pal.post[b];
@@ -776,14 +762,14 @@ function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, 
   ctx.stroke();
   ctx.globalCompositeOperation = "lighter";
   const g = Math.min(decor > 1 ? 110 : 240, Math.max(9, (10 * f) / z));
-  ctx.globalAlpha = 0.95;
+  ctx.globalAlpha = 0.95 * fade;
   ctx.drawImage(a.sprites.sodium, hx - g / 2, hyy - g / 2, g, g);
   if (decor < 1 && z < 190 && nodeProj(k, side * (rail - 0.9), 0, v)) {
     // the pool on the road under it, and the lamp upside down in the wet
     const gx = P.x, gy = P.y;
     const rw = Math.min(520, (15 * f) / z);
     const fall = Math.min(1, 70 / z);
-    ctx.globalAlpha = 0.5 * fall;
+    ctx.globalAlpha = 0.5 * fall * fade;
     ctx.drawImage(a.sprites.sodium, gx - rw / 2, gy - rw * 0.06, rw, rw * 0.12);
     const len = gy - hyy;
     if (len > 3 && z < 150) {
@@ -796,19 +782,27 @@ function drawLamp(ctx: CanvasRenderingContext2D, a: Assets, v: View, k: number, 
 }
 
 /** the things the canyon is told by: each is drawn on the pass its distance belongs to */
-function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, sty: Scenery, carS: number, sFar: number, near: boolean, decor: number) {
+function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: View, sty: Scenery, near: boolean, decor: number) {
   const road = sc.road;
   const rail = road.railHalf;
   const f = v.f;
   const sp = a.sprites;
-  for (const lm of sty.landmarks) {
-    if (lm.s < carS - 10 || lm.s > sFar) continue;
+  for (let t = 0; t < nPlan; t++) {
+    const it = plan[t];
+    if (it.what !== "landmark" || (it.z < NEAR_Z) !== near) continue;
+    const lm = sty.landmarks[it.i];
+    // cut at the crest or cliff in front of it, and faded at the end of the drawn road (roadside.ts)
+    const fade = it.fade;
+    ctx.save();
+    if (it.clip < Infinity) clipAbove(ctx, v, it.clip);
+    ctx.globalAlpha = fade;
     const lat = lm.side * (rail + lm.out);
     pointAt(road, lm.s, lat, tmp);
-    if (!project(v, tmp.x, tmp.y, tmp.z)) continue;
+    if (!project(v, tmp.x, tmp.y, tmp.z)) {
+      ctx.restore();
+      continue;
+    }
     const bx = P.x, by = P.y, z = P.z;
-    if (z < NEAR_Z !== near) continue;
-    if (z > 700 || bx < -v.w * 0.6 || bx > v.w * 1.6) continue;
     const phi = tmp.phi;
     const y0 = tmp.y;
     const nx = Math.cos(phi);
@@ -853,12 +847,12 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
         }
         ctx.stroke();
         ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = 0.95;
+        ctx.globalAlpha = 0.95 * fade;
         for (const hh of [1, 0.78, 0.5]) {
           const g = Math.max(7, (6 * f) / z);
           ctx.drawImage(sp.red, bx - g / 2, by + (ty - by) * hh - g / 2, g, g);
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = fade;
         ctx.globalCompositeOperation = "source-over";
         break;
       }
@@ -873,15 +867,15 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
         ctx.fillRect(tx - bw / 2, ty - bw * 0.3, bw, bw * 0.34);
         ctx.globalCompositeOperation = "lighter";
         const g = Math.min(420, Math.max(18, (20 * f) / z));
-        ctx.globalAlpha = 0.9;
+        ctx.globalAlpha = 0.9 * fade;
         ctx.drawImage(sp.white, tx - g / 2, ty - g / 2, g, g);
         pointAt(road, lm.s, lm.side * (rail - 3), tmpB);
         if (decor < 2 && project(v, tmpB.x, tmpB.y, tmpB.z)) {
           const rw = Math.min(900, (30 * f) / P.z);
-          ctx.globalAlpha = 0.38 * Math.min(1, 90 / P.z);
+          ctx.globalAlpha = 0.38 * Math.min(1, 90 / P.z) * fade;
           ctx.drawImage(sp.white, P.x - rw / 2, P.y - rw * 0.06, rw, rw * 0.12);
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = fade;
         ctx.globalCompositeOperation = "source-over";
         break;
       }
@@ -978,7 +972,44 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, a: Assets, sc: Scene, v: V
         break;
       }
     }
+    ctx.restore();
   }
+}
+
+/** a chevron board on the outside of a corner: its pole, the board, and an arrow the way the road turns */
+function paintSign(ctx: CanvasRenderingContext2D, a: Assets, road: Scene["road"], v: View, sign: Scene["road"]["signs"][number], rail: number) {
+  const f = v.f;
+  pointAt(road, sign.s, sign.side * (rail + 1.0), tmp);
+  const b = bucketOf(Math.max(0, (tmp.x - v.camX) * v.sinG + (tmp.z - v.camZ) * v.cosG));
+  const y0 = tmp.y;
+  const nx = Math.cos(tmp.phi);
+  const nz = -Math.sin(tmp.phi);
+  if (!project(v, tmp.x, y0, tmp.z)) return;
+  const bx = P.x, by = P.y, z = P.z;
+  const half = 0.95;
+  if (!project(v, tmp.x - nx * half, y0 + 2.5, tmp.z - nz * half)) return;
+  const x0 = P.x, yT = P.y;
+  if (!project(v, tmp.x + nx * half, y0 + 1.15, tmp.z + nz * half)) return;
+  const x1 = P.x, yB = P.y;
+  ctx.fillStyle = a.pal.post[b];
+  const pw = Math.max(1, (0.14 * f) / z);
+  ctx.fillRect(bx - pw / 2, yT, pw, by - yT);
+  ctx.fillStyle = a.pal.board[b];
+  ctx.fillRect(Math.min(x0, x1), yT, Math.abs(x1 - x0), yB - yT);
+  // the arrow points the way the road turns
+  const cx = (x0 + x1) / 2;
+  const cy = (yT + yB) / 2;
+  const ww = Math.abs(x1 - x0) * 0.26;
+  const hh = (yB - yT) * 0.3;
+  const d = sign.dir;
+  ctx.strokeStyle = a.pal.edge[b];
+  ctx.lineWidth = Math.max(1.2, (0.17 * f) / z);
+  ctx.lineJoin = "miter";
+  ctx.beginPath();
+  ctx.moveTo(cx - d * ww, cy - hh);
+  ctx.lineTo(cx + d * ww, cy);
+  ctx.lineTo(cx - d * ww, cy + hh);
+  ctx.stroke();
 }
 
 /** a tunnel mouth: a concrete frame round the opening with a reflective rim, and the lamps' light spilling out of it */
