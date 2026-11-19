@@ -92,6 +92,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
   const [latched, setLatched] = useState(false);
   // the key holding the throttle (Space or Enter): its keyup releases it wherever focus has gone by then (the Stage can move focus to the dash mid-hold)
   const keyHold = useRef<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const mouse = useRef(false);
   const phone = useRef({ target: 0, smooth: 0 });
   const told = useRef({ at: -Infinity, key: "" });
@@ -253,6 +254,13 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
     ({ ctx, w, h, t, dt, reduce }) => {
       clock.current = t;
       const c = car.current;
+      // the set card: "hold" while Enter and the button are not yet accepted (the hold runs on the car's clock), then "ready"
+      const card = cardRef.current;
+      if (card) {
+        const onCard = play && c.phase === "done" && (sref.current?.runs.length ?? 0) >= SET_RUNS;
+        if (onCard) card.dataset.card = c.doneT < SET_CARD_HOLD_S ? "hold" : "ready";
+        else delete card.dataset.card;
+      }
       if (!play) autopilot(c, dt);
       if (play) {
         // keys and the button are a flat-out pedal; a phone's is smoothed and can be part way
@@ -1004,7 +1012,7 @@ export default function DragStrip({ mode, paused, remote, bus }: DragProps) {
         />
       </div>
       {play && (
-        <div className="flex items-stretch gap-2 p-3">
+        <div ref={cardRef} className="flex items-stretch gap-2 p-3">
           <button
             type="button"
             aria-pressed={done ? undefined : latched}
